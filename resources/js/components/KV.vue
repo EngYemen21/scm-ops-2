@@ -13,6 +13,6 @@ defineProps({
 <template>
   <div class="kv">
     <div class="kv-k">{{ bi(k) }}</div>
-    <div class="kv-v" :class="{ 'ltr text-start': ltr }"><slot>{{ v ?? '—' }}</slot></div>
+    <div class="kv-v" :class="{ 'ltr num text-start': ltr }"><slot>{{ v ?? '—' }}</slot></div>
   </div>
 </template>

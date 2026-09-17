@@ -23,8 +23,9 @@ const id = useId();
 <template>
   <Field :class="fieldClass" :label="label" :required="required" :error="error" :hint="hint" :full="full" :for="id">
     <select :id="id" v-bind="$attrs" class="inp" :class="{ sm: small, err: !!error }" :value="modelValue ?? ''" :disabled="disabled" @change="emit('update:modelValue', $event.target.value)">
-      <option v-if="placeholder != null" value="">{{ bi(placeholder) }}</option>
-      <option v-for="o in options" :key="optV(o)" :value="optV(o)" :disabled="!Array.isArray(o) && o.disabled">{{ optL(o) }}</option>
+      <!-- `selected` per option (not only `value` on the select): a value whose option arrives later still shows once it exists -->
+      <option v-if="placeholder != null" value="" :selected="!modelValue">{{ bi(placeholder) }}</option>
+      <option v-for="o in options" :key="optV(o)" :value="optV(o)" :selected="optV(o) === modelValue" :disabled="!Array.isArray(o) && o.disabled">{{ optL(o) }}</option>
     </select>
   </Field>
 </template>
