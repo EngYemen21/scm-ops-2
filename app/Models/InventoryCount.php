@@ -13,6 +13,7 @@ class InventoryCount extends BaseModel
     use HasUlids;
 
     protected $table = 'inventory_counts';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -27,16 +28,16 @@ class InventoryCount extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function zone(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Zone::class, 'zone_id', 'id');
+        return $this->belongsTo(Zone::class, 'zone_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\CountLine::class, 'count_id', 'id');
+        return $this->hasMany(CountLine::class, 'count_id', 'id');
     }
 }

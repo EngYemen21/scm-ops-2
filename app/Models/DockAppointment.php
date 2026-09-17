@@ -12,6 +12,7 @@ class DockAppointment extends BaseModel
     use HasUlids;
 
     protected $table = 'dock_appointments';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class DockAppointment extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 }

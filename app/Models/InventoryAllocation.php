@@ -12,6 +12,7 @@ class InventoryAllocation extends BaseModel
     use HasUlids;
 
     protected $table = 'inventory_allocations';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -24,31 +25,31 @@ class InventoryAllocation extends BaseModel
 
     public function reservation(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\InventoryReservation::class, 'reservation_id', 'id');
+        return $this->belongsTo(InventoryReservation::class, 'reservation_id', 'id');
     }
 
     public function soLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrderLine::class, 'so_line_id', 'id');
+        return $this->belongsTo(SalesOrderLine::class, 'so_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function bin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'bin_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 }

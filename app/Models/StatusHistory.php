@@ -11,6 +11,7 @@ class StatusHistory extends BaseModel
     use HasUlids;
 
     protected $table = 'status_history';
+
     public $timestamps = false;
 
     protected function casts(): array

@@ -12,6 +12,7 @@ class DispatchRecord extends BaseModel
     use HasUlids;
 
     protected $table = 'dispatch_records';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,16 +27,16 @@ class DispatchRecord extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 }

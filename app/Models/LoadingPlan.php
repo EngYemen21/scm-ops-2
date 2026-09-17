@@ -13,6 +13,7 @@ class LoadingPlan extends BaseModel
     use HasUlids;
 
     protected $table = 'loading_plans';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -27,16 +28,16 @@ class LoadingPlan extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\LoadingLine::class, 'loading_plan_id', 'id');
+        return $this->hasMany(LoadingLine::class, 'loading_plan_id', 'id');
     }
 }

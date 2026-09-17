@@ -11,6 +11,7 @@ class IdempotencyKey extends BaseModel
     use HasUlids;
 
     protected $table = 'idempotency_keys';
+
     const UPDATED_AT = null;
 
     protected function casts(): array

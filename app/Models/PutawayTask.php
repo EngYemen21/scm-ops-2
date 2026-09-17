@@ -12,6 +12,7 @@ class PutawayTask extends BaseModel
     use HasUlids;
 
     protected $table = 'putaway_tasks';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,41 +26,41 @@ class PutawayTask extends BaseModel
 
     public function grn(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\GoodsReceipt::class, 'grn_id', 'id');
+        return $this->belongsTo(GoodsReceipt::class, 'grn_id', 'id');
     }
 
     public function grnLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\GrnLine::class, 'grn_line_id', 'id');
+        return $this->belongsTo(GrnLine::class, 'grn_line_id', 'id');
     }
 
     public function shipment(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\InboundShipment::class, 'shipment_id', 'id');
+        return $this->belongsTo(InboundShipment::class, 'shipment_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function suggestedBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'suggested_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'suggested_bin_id', 'id');
     }
 
     public function actualBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'actual_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'actual_bin_id', 'id');
     }
 }

@@ -35,131 +35,131 @@ class Product extends BaseModel
 
     public function category(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ProductCategory::class, 'category_id', 'id');
+        return $this->belongsTo(ProductCategory::class, 'category_id', 'id');
     }
 
     public function baseUom(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Uom::class, 'base_uom_id', 'id');
+        return $this->belongsTo(Uom::class, 'base_uom_id', 'id');
     }
 
     public function homeWarehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'home_warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'home_warehouse_id', 'id');
     }
 
     public function barcodes(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductBarcode::class, 'product_id', 'id');
+        return $this->hasMany(ProductBarcode::class, 'product_id', 'id');
     }
 
     public function suppliers(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductSupplier::class, 'product_id', 'id');
+        return $this->hasMany(ProductSupplier::class, 'product_id', 'id');
     }
 
     public function storageReq(): HasOne
     {
-        return $this->hasOne(\App\Models\ProductStorageRequirement::class, 'product_id', 'id');
+        return $this->hasOne(ProductStorageRequirement::class, 'product_id', 'id');
     }
 
     public function batches(): HasMany
     {
-        return $this->hasMany(\App\Models\Batch::class, 'product_id', 'id');
+        return $this->hasMany(Batch::class, 'product_id', 'id');
     }
 
     public function balances(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryBalance::class, 'product_id', 'id');
+        return $this->hasMany(InventoryBalance::class, 'product_id', 'id');
     }
 
     public function movements(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryMovement::class, 'product_id', 'id');
+        return $this->hasMany(InventoryMovement::class, 'product_id', 'id');
     }
 
     public function prLines(): HasMany
     {
-        return $this->hasMany(\App\Models\PrLine::class, 'product_id', 'id');
+        return $this->hasMany(PrLine::class, 'product_id', 'id');
     }
 
     public function rfqLines(): HasMany
     {
-        return $this->hasMany(\App\Models\RfqLine::class, 'product_id', 'id');
+        return $this->hasMany(RfqLine::class, 'product_id', 'id');
     }
 
     public function sqLines(): HasMany
     {
-        return $this->hasMany(\App\Models\SupplierQuotationLine::class, 'product_id', 'id');
+        return $this->hasMany(SupplierQuotationLine::class, 'product_id', 'id');
     }
 
     public function poLines(): HasMany
     {
-        return $this->hasMany(\App\Models\PoLine::class, 'product_id', 'id');
+        return $this->hasMany(PoLine::class, 'product_id', 'id');
     }
 
     public function shipmentLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ShipmentLine::class, 'product_id', 'id');
+        return $this->hasMany(ShipmentLine::class, 'product_id', 'id');
     }
 
     public function grnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\GrnLine::class, 'product_id', 'id');
+        return $this->hasMany(GrnLine::class, 'product_id', 'id');
     }
 
     public function putawayTasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'product_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'product_id', 'id');
     }
 
     public function quotationLines(): HasMany
     {
-        return $this->hasMany(\App\Models\QuotationLine::class, 'product_id', 'id');
+        return $this->hasMany(QuotationLine::class, 'product_id', 'id');
     }
 
     public function soLines(): HasMany
     {
-        return $this->hasMany(\App\Models\SalesOrderLine::class, 'product_id', 'id');
+        return $this->hasMany(SalesOrderLine::class, 'product_id', 'id');
     }
 
     public function foLines(): HasMany
     {
-        return $this->hasMany(\App\Models\FoLine::class, 'product_id', 'id');
+        return $this->hasMany(FoLine::class, 'product_id', 'id');
     }
 
     public function pickTasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PickTask::class, 'product_id', 'id');
+        return $this->hasMany(PickTask::class, 'product_id', 'id');
     }
 
     public function reservations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryReservation::class, 'product_id', 'id');
+        return $this->hasMany(InventoryReservation::class, 'product_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'product_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'product_id', 'id');
     }
 
     public function transferLines(): HasMany
     {
-        return $this->hasMany(\App\Models\TransferLine::class, 'product_id', 'id');
+        return $this->hasMany(TransferLine::class, 'product_id', 'id');
     }
 
     public function countLines(): HasMany
     {
-        return $this->hasMany(\App\Models\CountLine::class, 'product_id', 'id');
+        return $this->hasMany(CountLine::class, 'product_id', 'id');
     }
 
     public function returnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnLine::class, 'product_id', 'id');
+        return $this->hasMany(ReturnLine::class, 'product_id', 'id');
     }
 
     public function fixedBins(): HasMany
     {
-        return $this->hasMany(\App\Models\Bin::class, 'fixed_product_id', 'id');
+        return $this->hasMany(Bin::class, 'fixed_product_id', 'id');
     }
 }

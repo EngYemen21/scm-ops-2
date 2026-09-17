@@ -12,6 +12,7 @@ class Warehouse extends BaseModel
     use HasUlids;
 
     protected $table = 'warehouses';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -26,126 +27,126 @@ class Warehouse extends BaseModel
 
     public function zones(): HasMany
     {
-        return $this->hasMany(\App\Models\Zone::class, 'warehouse_id', 'id');
+        return $this->hasMany(Zone::class, 'warehouse_id', 'id');
     }
 
     public function bins(): HasMany
     {
-        return $this->hasMany(\App\Models\Bin::class, 'warehouse_id', 'id');
+        return $this->hasMany(Bin::class, 'warehouse_id', 'id');
     }
 
     public function users(): HasMany
     {
-        return $this->hasMany(\App\Models\UserWarehouse::class, 'warehouse_id', 'id');
+        return $this->hasMany(UserWarehouse::class, 'warehouse_id', 'id');
     }
 
     public function products(): HasMany
     {
-        return $this->hasMany(\App\Models\Product::class, 'home_warehouse_id', 'id');
+        return $this->hasMany(Product::class, 'home_warehouse_id', 'id');
     }
 
     public function balances(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryBalance::class, 'warehouse_id', 'id');
+        return $this->hasMany(InventoryBalance::class, 'warehouse_id', 'id');
     }
 
     public function vehicles(): HasMany
     {
-        return $this->hasMany(\App\Models\Vehicle::class, 'warehouse_id', 'id');
+        return $this->hasMany(Vehicle::class, 'warehouse_id', 'id');
     }
 
     public function prs(): HasMany
     {
-        return $this->hasMany(\App\Models\PurchaseRequisition::class, 'warehouse_id', 'id');
+        return $this->hasMany(PurchaseRequisition::class, 'warehouse_id', 'id');
     }
 
     public function pos(): HasMany
     {
-        return $this->hasMany(\App\Models\PurchaseOrder::class, 'warehouse_id', 'id');
+        return $this->hasMany(PurchaseOrder::class, 'warehouse_id', 'id');
     }
 
     public function rfqs(): HasMany
     {
-        return $this->hasMany(\App\Models\Rfq::class, 'delivery_warehouse_id', 'id');
+        return $this->hasMany(Rfq::class, 'delivery_warehouse_id', 'id');
     }
 
     public function shipments(): HasMany
     {
-        return $this->hasMany(\App\Models\InboundShipment::class, 'warehouse_id', 'id');
+        return $this->hasMany(InboundShipment::class, 'warehouse_id', 'id');
     }
 
     public function grns(): HasMany
     {
-        return $this->hasMany(\App\Models\GoodsReceipt::class, 'warehouse_id', 'id');
+        return $this->hasMany(GoodsReceipt::class, 'warehouse_id', 'id');
     }
 
     public function putaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'warehouse_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'warehouse_id', 'id');
     }
 
     public function salesOrders(): HasMany
     {
-        return $this->hasMany(\App\Models\SalesOrder::class, 'warehouse_id', 'id');
+        return $this->hasMany(SalesOrder::class, 'warehouse_id', 'id');
     }
 
     public function fos(): HasMany
     {
-        return $this->hasMany(\App\Models\FulfillmentOrder::class, 'warehouse_id', 'id');
+        return $this->hasMany(FulfillmentOrder::class, 'warehouse_id', 'id');
     }
 
     public function pickLists(): HasMany
     {
-        return $this->hasMany(\App\Models\PickList::class, 'warehouse_id', 'id');
+        return $this->hasMany(PickList::class, 'warehouse_id', 'id');
     }
 
     public function transfersOut(): HasMany
     {
-        return $this->hasMany(\App\Models\WarehouseTransfer::class, 'from_warehouse_id', 'id');
+        return $this->hasMany(WarehouseTransfer::class, 'from_warehouse_id', 'id');
     }
 
     public function transfersIn(): HasMany
     {
-        return $this->hasMany(\App\Models\WarehouseTransfer::class, 'to_warehouse_id', 'id');
+        return $this->hasMany(WarehouseTransfer::class, 'to_warehouse_id', 'id');
     }
 
     public function counts(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryCount::class, 'warehouse_id', 'id');
+        return $this->hasMany(InventoryCount::class, 'warehouse_id', 'id');
     }
 
     public function trips(): HasMany
     {
-        return $this->hasMany(\App\Models\Trip::class, 'warehouse_id', 'id');
+        return $this->hasMany(Trip::class, 'warehouse_id', 'id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnOrder::class, 'warehouse_id', 'id');
+        return $this->hasMany(ReturnOrder::class, 'warehouse_id', 'id');
     }
 
     public function consolidations(): HasMany
     {
-        return $this->hasMany(\App\Models\OrderConsolidation::class, 'warehouse_id', 'id');
+        return $this->hasMany(OrderConsolidation::class, 'warehouse_id', 'id');
     }
 
     public function reservations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryReservation::class, 'warehouse_id', 'id');
+        return $this->hasMany(InventoryReservation::class, 'warehouse_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'warehouse_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'warehouse_id', 'id');
     }
 
     public function docks_(): HasMany
     {
-        return $this->hasMany(\App\Models\DockAppointment::class, 'warehouse_id', 'id');
+        return $this->hasMany(DockAppointment::class, 'warehouse_id', 'id');
     }
 
     public function staff(): HasMany
     {
-        return $this->hasMany(\App\Models\StaffAssignment::class, 'warehouse_id', 'id');
+        return $this->hasMany(StaffAssignment::class, 'warehouse_id', 'id');
     }
 }

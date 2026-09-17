@@ -11,6 +11,7 @@ class Attachment extends BaseModel
     use HasUlids;
 
     protected $table = 'attachments';
+
     const UPDATED_AT = null;
 
     protected function casts(): array

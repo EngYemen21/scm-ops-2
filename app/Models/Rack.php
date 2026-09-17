@@ -13,6 +13,7 @@ class Rack extends BaseModel
     use HasUlids;
 
     protected $table = 'racks';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -27,11 +28,11 @@ class Rack extends BaseModel
 
     public function zone(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Zone::class, 'zone_id', 'id');
+        return $this->belongsTo(Zone::class, 'zone_id', 'id');
     }
 
     public function bins(): HasMany
     {
-        return $this->hasMany(\App\Models\Bin::class, 'rack_id', 'id');
+        return $this->hasMany(Bin::class, 'rack_id', 'id');
     }
 }

@@ -13,6 +13,7 @@ class InventoryReservation extends BaseModel
     use HasUlids;
 
     protected $table = 'inventory_reservations';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,26 +26,26 @@ class InventoryReservation extends BaseModel
 
     public function so(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrder::class, 'so_id', 'id');
+        return $this->belongsTo(SalesOrder::class, 'so_id', 'id');
     }
 
     public function soLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrderLine::class, 'so_line_id', 'id');
+        return $this->belongsTo(SalesOrderLine::class, 'so_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'reservation_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'reservation_id', 'id');
     }
 }

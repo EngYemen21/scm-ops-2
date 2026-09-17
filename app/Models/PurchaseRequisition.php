@@ -25,21 +25,21 @@ class PurchaseRequisition extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\PrLine::class, 'pr_id', 'id');
+        return $this->hasMany(PrLine::class, 'pr_id', 'id');
     }
 
     public function approvals(): HasMany
     {
-        return $this->hasMany(\App\Models\PrApproval::class, 'pr_id', 'id');
+        return $this->hasMany(PrApproval::class, 'pr_id', 'id');
     }
 
     public function rfqs(): HasMany
     {
-        return $this->hasMany(\App\Models\Rfq::class, 'pr_id', 'id');
+        return $this->hasMany(Rfq::class, 'pr_id', 'id');
     }
 }

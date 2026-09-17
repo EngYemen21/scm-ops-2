@@ -13,6 +13,7 @@ class Batch extends BaseModel
     use HasUlids;
 
     protected $table = 'batches';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,56 +26,56 @@ class Batch extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function balances(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryBalance::class, 'batch_id', 'id');
+        return $this->hasMany(InventoryBalance::class, 'batch_id', 'id');
     }
 
     public function movements(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryMovement::class, 'batch_id', 'id');
+        return $this->hasMany(InventoryMovement::class, 'batch_id', 'id');
     }
 
     public function grnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\GrnLine::class, 'batch_id', 'id');
+        return $this->hasMany(GrnLine::class, 'batch_id', 'id');
     }
 
     public function putaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'batch_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'batch_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'batch_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'batch_id', 'id');
     }
 
     public function pickTasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PickTask::class, 'batch_id', 'id');
+        return $this->hasMany(PickTask::class, 'batch_id', 'id');
     }
 
     public function transferLines(): HasMany
     {
-        return $this->hasMany(\App\Models\TransferLine::class, 'batch_id', 'id');
+        return $this->hasMany(TransferLine::class, 'batch_id', 'id');
     }
 
     public function countLines(): HasMany
     {
-        return $this->hasMany(\App\Models\CountLine::class, 'batch_id', 'id');
+        return $this->hasMany(CountLine::class, 'batch_id', 'id');
     }
 
     public function returnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnLine::class, 'batch_id', 'id');
+        return $this->hasMany(ReturnLine::class, 'batch_id', 'id');
     }
 }

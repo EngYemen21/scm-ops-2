@@ -11,6 +11,7 @@ class IntegrationEvent extends BaseModel
     use HasUlids;
 
     protected $table = 'integration_events';
+
     const UPDATED_AT = null;
 
     protected function casts(): array

@@ -13,6 +13,7 @@ class Quotation extends BaseModel
     use HasUlids;
 
     protected $table = 'quotations';
+
     protected $attributes = ['attachments' => '[]'];
 
     protected function casts(): array
@@ -26,16 +27,16 @@ class Quotation extends BaseModel
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\QuotationLine::class, 'quotation_id', 'id');
+        return $this->hasMany(QuotationLine::class, 'quotation_id', 'id');
     }
 
     public function so(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrder::class, 'so_id', 'id');
+        return $this->belongsTo(SalesOrder::class, 'so_id', 'id');
     }
 }

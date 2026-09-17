@@ -12,6 +12,7 @@ class Package extends BaseModel
     use HasUlids;
 
     protected $table = 'packages';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,6 +27,6 @@ class Package extends BaseModel
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 }

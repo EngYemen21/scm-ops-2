@@ -14,6 +14,7 @@ class TripStop extends BaseModel
     use HasUlids;
 
     protected $table = 'trip_stops';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -31,36 +32,36 @@ class TripStop extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function so(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrder::class, 'so_id', 'id');
+        return $this->belongsTo(SalesOrder::class, 'so_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function tripOrders(): HasMany
     {
-        return $this->hasMany(\App\Models\TripOrder::class, 'stop_id', 'id');
+        return $this->hasMany(TripOrder::class, 'stop_id', 'id');
     }
 
     public function delivery(): HasOne
     {
-        return $this->hasOne(\App\Models\DeliveryRecord::class, 'stop_id', 'id');
+        return $this->hasOne(DeliveryRecord::class, 'stop_id', 'id');
     }
 
     public function pod(): HasOne
     {
-        return $this->hasOne(\App\Models\ProofOfDelivery::class, 'stop_id', 'id');
+        return $this->hasOne(ProofOfDelivery::class, 'stop_id', 'id');
     }
 }

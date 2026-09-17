@@ -12,6 +12,7 @@ class InventoryBalance extends BaseModel
     use HasUlids;
 
     protected $table = 'inventory_balances';
+
     const CREATED_AT = null;
 
     protected function casts(): array
@@ -28,21 +29,21 @@ class InventoryBalance extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function bin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'bin_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 }

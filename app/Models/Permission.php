@@ -12,6 +12,7 @@ class Permission extends BaseModel
     use HasUlids;
 
     protected $table = 'permissions';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -21,6 +22,6 @@ class Permission extends BaseModel
 
     public function roles(): HasMany
     {
-        return $this->hasMany(\App\Models\RolePermission::class, 'permission_id', 'id');
+        return $this->hasMany(RolePermission::class, 'permission_id', 'id');
     }
 }

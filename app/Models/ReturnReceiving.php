@@ -9,9 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ReturnReceiving extends BaseModel
 {
     protected $table = 'return_receiving';
+
     protected $primaryKey = 'return_id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,6 +27,6 @@ class ReturnReceiving extends BaseModel
 
     public function ret(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ReturnOrder::class, 'return_id', 'id');
+        return $this->belongsTo(ReturnOrder::class, 'return_id', 'id');
     }
 }

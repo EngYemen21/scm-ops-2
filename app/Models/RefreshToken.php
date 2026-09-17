@@ -12,7 +12,9 @@ class RefreshToken extends BaseModel
     use HasUlids;
 
     protected $table = 'refresh_tokens';
+
     const UPDATED_AT = null;
+
     protected $hidden = ['token_hash'];
 
     protected function casts(): array
@@ -25,6 +27,6 @@ class RefreshToken extends BaseModel
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }

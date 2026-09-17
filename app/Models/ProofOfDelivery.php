@@ -13,6 +13,7 @@ class ProofOfDelivery extends BaseModel
     use HasUlids;
 
     protected $table = 'proof_of_delivery';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -29,41 +30,41 @@ class ProofOfDelivery extends BaseModel
 
     public function delivery(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\DeliveryRecord::class, 'delivery_id', 'id');
+        return $this->belongsTo(DeliveryRecord::class, 'delivery_id', 'id');
     }
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function stop(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\TripStop::class, 'stop_id', 'id');
+        return $this->belongsTo(TripStop::class, 'stop_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function attachments(): HasMany
     {
-        return $this->hasMany(\App\Models\PodAttachment::class, 'pod_id', 'id');
+        return $this->hasMany(PodAttachment::class, 'pod_id', 'id');
     }
 }

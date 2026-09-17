@@ -12,6 +12,7 @@ class ProductBarcode extends BaseModel
     use HasUlids;
 
     protected $table = 'product_barcodes';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,11 +24,11 @@ class ProductBarcode extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function uom(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Uom::class, 'uom_id', 'id');
+        return $this->belongsTo(Uom::class, 'uom_id', 'id');
     }
 }

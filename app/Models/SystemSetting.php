@@ -7,9 +7,13 @@ namespace App\Models;
 class SystemSetting extends BaseModel
 {
     protected $table = 'system_settings';
+
     protected $primaryKey = 'key';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     const CREATED_AT = null;
 
     protected function casts(): array

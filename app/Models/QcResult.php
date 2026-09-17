@@ -12,6 +12,7 @@ class QcResult extends BaseModel
     use HasUlids;
 
     protected $table = 'qc_results';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,6 +25,6 @@ class QcResult extends BaseModel
 
     public function grnLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\GrnLine::class, 'grn_line_id', 'id');
+        return $this->belongsTo(GrnLine::class, 'grn_line_id', 'id');
     }
 }

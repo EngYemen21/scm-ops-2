@@ -11,6 +11,7 @@ class Route extends BaseModel
     use HasUlids;
 
     protected $table = 'routes';
+
     public $timestamps = false;
 
     protected function casts(): array

@@ -13,6 +13,7 @@ class Bin extends BaseModel
     use HasUlids;
 
     protected $table = 'bins';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,86 +27,86 @@ class Bin extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function zone(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Zone::class, 'zone_id', 'id');
+        return $this->belongsTo(Zone::class, 'zone_id', 'id');
     }
 
     public function rack(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Rack::class, 'rack_id', 'id');
+        return $this->belongsTo(Rack::class, 'rack_id', 'id');
     }
 
     public function fixedProduct(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'fixed_product_id', 'id');
+        return $this->belongsTo(Product::class, 'fixed_product_id', 'id');
     }
 
     public function balances(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryBalance::class, 'bin_id', 'id');
+        return $this->hasMany(InventoryBalance::class, 'bin_id', 'id');
     }
 
     public function srcMovements(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryMovement::class, 'src_bin_id', 'id');
+        return $this->hasMany(InventoryMovement::class, 'src_bin_id', 'id');
     }
 
     public function dstMovements(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryMovement::class, 'dst_bin_id', 'id');
+        return $this->hasMany(InventoryMovement::class, 'dst_bin_id', 'id');
     }
 
     public function suggestedPutaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'suggested_bin_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'suggested_bin_id', 'id');
     }
 
     public function actualPutaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'actual_bin_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'actual_bin_id', 'id');
     }
 
     public function shipmentLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ShipmentLine::class, 'suggested_bin_id', 'id');
+        return $this->hasMany(ShipmentLine::class, 'suggested_bin_id', 'id');
     }
 
     public function pickTasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PickTask::class, 'bin_id', 'id');
+        return $this->hasMany(PickTask::class, 'bin_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'bin_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'bin_id', 'id');
     }
 
     public function transferFrom(): HasMany
     {
-        return $this->hasMany(\App\Models\TransferLine::class, 'from_bin_id', 'id');
+        return $this->hasMany(TransferLine::class, 'from_bin_id', 'id');
     }
 
     public function transferTo(): HasMany
     {
-        return $this->hasMany(\App\Models\TransferLine::class, 'to_bin_id', 'id');
+        return $this->hasMany(TransferLine::class, 'to_bin_id', 'id');
     }
 
     public function countLines(): HasMany
     {
-        return $this->hasMany(\App\Models\CountLine::class, 'bin_id', 'id');
+        return $this->hasMany(CountLine::class, 'bin_id', 'id');
     }
 
     public function returnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnLine::class, 'bin_id', 'id');
+        return $this->hasMany(ReturnLine::class, 'bin_id', 'id');
     }
 
     public function stagingEntries(): HasMany
     {
-        return $this->hasMany(\App\Models\StagingEntry::class, 'bin_id', 'id');
+        return $this->hasMany(StagingEntry::class, 'bin_id', 'id');
     }
 }

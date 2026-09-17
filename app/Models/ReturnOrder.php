@@ -14,6 +14,7 @@ class ReturnOrder extends BaseModel
     use HasUlids;
 
     protected $table = 'returns';
+
     protected $attributes = ['attachments' => '[]'];
 
     protected function casts(): array
@@ -30,46 +31,46 @@ class ReturnOrder extends BaseModel
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnLine::class, 'return_id', 'id');
+        return $this->hasMany(ReturnLine::class, 'return_id', 'id');
     }
 
     public function receiving(): HasOne
     {
-        return $this->hasOne(\App\Models\ReturnReceiving::class, 'return_id', 'id');
+        return $this->hasOne(ReturnReceiving::class, 'return_id', 'id');
     }
 
     public function inspection(): HasOne
     {
-        return $this->hasOne(\App\Models\ReturnInspection::class, 'return_id', 'id');
+        return $this->hasOne(ReturnInspection::class, 'return_id', 'id');
     }
 
     public function decisions(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnDecision::class, 'return_id', 'id');
+        return $this->hasMany(ReturnDecision::class, 'return_id', 'id');
     }
 }

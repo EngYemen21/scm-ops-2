@@ -12,6 +12,7 @@ class OpsException extends BaseModel
     use HasUlids;
 
     protected $table = 'exceptions';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,6 +26,6 @@ class OpsException extends BaseModel
 
     public function events(): HasMany
     {
-        return $this->hasMany(\App\Models\ExceptionEvent::class, 'exception_id', 'id');
+        return $this->hasMany(ExceptionEvent::class, 'exception_id', 'id');
     }
 }

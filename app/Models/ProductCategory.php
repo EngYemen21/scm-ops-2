@@ -13,6 +13,7 @@ class ProductCategory extends BaseModel
     use HasUlids;
 
     protected $table = 'product_categories';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,16 +25,16 @@ class ProductCategory extends BaseModel
 
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ProductCategory::class, 'parent_id', 'id');
+        return $this->belongsTo(ProductCategory::class, 'parent_id', 'id');
     }
 
     public function children(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductCategory::class, 'parent_id', 'id');
+        return $this->hasMany(ProductCategory::class, 'parent_id', 'id');
     }
 
     public function products(): HasMany
     {
-        return $this->hasMany(\App\Models\Product::class, 'category_id', 'id');
+        return $this->hasMany(Product::class, 'category_id', 'id');
     }
 }

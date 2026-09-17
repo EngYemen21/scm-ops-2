@@ -21,16 +21,16 @@ class OrderConsolidation extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function orders(): HasMany
     {
-        return $this->hasMany(\App\Models\SalesOrder::class, 'consolidation_id', 'id');
+        return $this->hasMany(SalesOrder::class, 'consolidation_id', 'id');
     }
 
     public function trips(): HasMany
     {
-        return $this->hasMany(\App\Models\Trip::class, 'consolidation_id', 'id');
+        return $this->hasMany(Trip::class, 'consolidation_id', 'id');
     }
 }

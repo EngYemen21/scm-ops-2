@@ -12,6 +12,7 @@ class StagingEntry extends BaseModel
     use HasUlids;
 
     protected $table = 'staging_entries';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -24,6 +25,6 @@ class StagingEntry extends BaseModel
 
     public function bin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'bin_id', 'id');
     }
 }

@@ -12,6 +12,7 @@ class Uom extends BaseModel
     use HasUlids;
 
     protected $table = 'uoms';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -21,11 +22,11 @@ class Uom extends BaseModel
 
     public function products(): HasMany
     {
-        return $this->hasMany(\App\Models\Product::class, 'base_uom_id', 'id');
+        return $this->hasMany(Product::class, 'base_uom_id', 'id');
     }
 
     public function barcodes(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductBarcode::class, 'uom_id', 'id');
+        return $this->hasMany(ProductBarcode::class, 'uom_id', 'id');
     }
 }

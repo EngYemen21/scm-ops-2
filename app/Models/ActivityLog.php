@@ -11,6 +11,7 @@ class ActivityLog extends BaseModel
     use HasUlids;
 
     protected $table = 'activity_logs';
+
     public $timestamps = false;
 
     protected function casts(): array

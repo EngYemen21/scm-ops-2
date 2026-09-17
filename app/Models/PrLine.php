@@ -12,6 +12,7 @@ class PrLine extends BaseModel
     use HasUlids;
 
     protected $table = 'pr_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -25,11 +26,11 @@ class PrLine extends BaseModel
 
     public function pr(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseRequisition::class, 'pr_id', 'id');
+        return $this->belongsTo(PurchaseRequisition::class, 'pr_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 }

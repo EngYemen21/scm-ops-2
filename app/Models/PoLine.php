@@ -13,6 +13,7 @@ class PoLine extends BaseModel
     use HasUlids;
 
     protected $table = 'po_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -29,21 +30,21 @@ class PoLine extends BaseModel
 
     public function po(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseOrder::class, 'po_id', 'id');
+        return $this->belongsTo(PurchaseOrder::class, 'po_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function shipmentLines(): HasMany
     {
-        return $this->hasMany(\App\Models\ShipmentLine::class, 'po_line_id', 'id');
+        return $this->hasMany(ShipmentLine::class, 'po_line_id', 'id');
     }
 
     public function grnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\GrnLine::class, 'po_line_id', 'id');
+        return $this->hasMany(GrnLine::class, 'po_line_id', 'id');
     }
 }

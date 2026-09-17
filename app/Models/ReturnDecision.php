@@ -12,6 +12,7 @@ class ReturnDecision extends BaseModel
     use HasUlids;
 
     protected $table = 'return_decisions';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,6 +25,6 @@ class ReturnDecision extends BaseModel
 
     public function ret(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ReturnOrder::class, 'return_id', 'id');
+        return $this->belongsTo(ReturnOrder::class, 'return_id', 'id');
     }
 }

@@ -12,6 +12,7 @@ class LoadingLine extends BaseModel
     use HasUlids;
 
     protected $table = 'loading_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,11 +27,11 @@ class LoadingLine extends BaseModel
 
     public function plan(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\LoadingPlan::class, 'loading_plan_id', 'id');
+        return $this->belongsTo(LoadingPlan::class, 'loading_plan_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 }

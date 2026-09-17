@@ -13,6 +13,7 @@ class Zone extends BaseModel
     use HasUlids;
 
     protected $table = 'zones';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -28,21 +29,21 @@ class Zone extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function racks(): HasMany
     {
-        return $this->hasMany(\App\Models\Rack::class, 'zone_id', 'id');
+        return $this->hasMany(Rack::class, 'zone_id', 'id');
     }
 
     public function bins(): HasMany
     {
-        return $this->hasMany(\App\Models\Bin::class, 'zone_id', 'id');
+        return $this->hasMany(Bin::class, 'zone_id', 'id');
     }
 
     public function counts(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryCount::class, 'zone_id', 'id');
+        return $this->hasMany(InventoryCount::class, 'zone_id', 'id');
     }
 }

@@ -12,6 +12,7 @@ class Customer extends BaseModel
     use HasUlids;
 
     protected $table = 'customers';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -27,31 +28,31 @@ class Customer extends BaseModel
 
     public function quotations(): HasMany
     {
-        return $this->hasMany(\App\Models\Quotation::class, 'customer_id', 'id');
+        return $this->hasMany(Quotation::class, 'customer_id', 'id');
     }
 
     public function orders(): HasMany
     {
-        return $this->hasMany(\App\Models\SalesOrder::class, 'customer_id', 'id');
+        return $this->hasMany(SalesOrder::class, 'customer_id', 'id');
     }
 
     public function fos(): HasMany
     {
-        return $this->hasMany(\App\Models\FulfillmentOrder::class, 'customer_id', 'id');
+        return $this->hasMany(FulfillmentOrder::class, 'customer_id', 'id');
     }
 
     public function stops(): HasMany
     {
-        return $this->hasMany(\App\Models\TripStop::class, 'customer_id', 'id');
+        return $this->hasMany(TripStop::class, 'customer_id', 'id');
     }
 
     public function pods(): HasMany
     {
-        return $this->hasMany(\App\Models\ProofOfDelivery::class, 'customer_id', 'id');
+        return $this->hasMany(ProofOfDelivery::class, 'customer_id', 'id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnOrder::class, 'customer_id', 'id');
+        return $this->hasMany(ReturnOrder::class, 'customer_id', 'id');
     }
 }

@@ -7,9 +7,13 @@ namespace App\Models;
 class NumberSequence extends BaseModel
 {
     protected $table = 'number_sequences';
+
     protected $primaryKey = 'key';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     public $timestamps = false;
 
     protected function casts(): array

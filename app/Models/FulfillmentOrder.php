@@ -32,66 +32,66 @@ class FulfillmentOrder extends BaseModel
 
     public function so(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrder::class, 'so_id', 'id');
+        return $this->belongsTo(SalesOrder::class, 'so_id', 'id');
     }
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\FoLine::class, 'fo_id', 'id');
+        return $this->hasMany(FoLine::class, 'fo_id', 'id');
     }
 
     public function pickLists(): HasMany
     {
-        return $this->hasMany(\App\Models\PickList::class, 'fo_id', 'id');
+        return $this->hasMany(PickList::class, 'fo_id', 'id');
     }
 
     public function packages(): HasMany
     {
-        return $this->hasMany(\App\Models\Package::class, 'fo_id', 'id');
+        return $this->hasMany(Package::class, 'fo_id', 'id');
     }
 
     public function tripOrders(): HasMany
     {
-        return $this->hasMany(\App\Models\TripOrder::class, 'fo_id', 'id');
+        return $this->hasMany(TripOrder::class, 'fo_id', 'id');
     }
 
     public function loadingLines(): HasMany
     {
-        return $this->hasMany(\App\Models\LoadingLine::class, 'fo_id', 'id');
+        return $this->hasMany(LoadingLine::class, 'fo_id', 'id');
     }
 
     public function stops(): HasMany
     {
-        return $this->hasMany(\App\Models\TripStop::class, 'fo_id', 'id');
+        return $this->hasMany(TripStop::class, 'fo_id', 'id');
     }
 
     public function deliveries(): HasMany
     {
-        return $this->hasMany(\App\Models\DeliveryRecord::class, 'fo_id', 'id');
+        return $this->hasMany(DeliveryRecord::class, 'fo_id', 'id');
     }
 
     public function pods(): HasMany
     {
-        return $this->hasMany(\App\Models\ProofOfDelivery::class, 'fo_id', 'id');
+        return $this->hasMany(ProofOfDelivery::class, 'fo_id', 'id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnOrder::class, 'fo_id', 'id');
+        return $this->hasMany(ReturnOrder::class, 'fo_id', 'id');
     }
 }

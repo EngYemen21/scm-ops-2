@@ -9,9 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserWarehouse extends BaseModel
 {
     protected $table = 'user_warehouses';
+
     /** Composite key (user_id, warehouse_id): write through the query builder or relations, not save(). */
     protected $primaryKey = null;
+
     public $incrementing = false;
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -21,11 +24,11 @@ class UserWarehouse extends BaseModel
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 }

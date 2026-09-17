@@ -11,6 +11,7 @@ class FleetAlert extends BaseModel
     use HasUlids;
 
     protected $table = 'fleet_alerts';
+
     const UPDATED_AT = null;
 
     protected function casts(): array

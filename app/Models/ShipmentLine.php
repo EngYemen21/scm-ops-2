@@ -13,6 +13,7 @@ class ShipmentLine extends BaseModel
     use HasUlids;
 
     protected $table = 'shipment_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -30,26 +31,26 @@ class ShipmentLine extends BaseModel
 
     public function shipment(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\InboundShipment::class, 'shipment_id', 'id');
+        return $this->belongsTo(InboundShipment::class, 'shipment_id', 'id');
     }
 
     public function poLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PoLine::class, 'po_line_id', 'id');
+        return $this->belongsTo(PoLine::class, 'po_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function suggestedBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'suggested_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'suggested_bin_id', 'id');
     }
 
     public function grnLines(): HasMany
     {
-        return $this->hasMany(\App\Models\GrnLine::class, 'shipment_line_id', 'id');
+        return $this->hasMany(GrnLine::class, 'shipment_line_id', 'id');
     }
 }

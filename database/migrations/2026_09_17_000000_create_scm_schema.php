@@ -216,7 +216,7 @@ return new class extends Migration
             $table->string('vat')->nullable();
             $table->string('contact')->nullable();
             $table->string('email')->nullable();
-            $table->string('terms')->nullable();
+            $table->text('terms')->nullable();
             $table->string('iban')->nullable();
             $table->decimal('min_order', 14, 2)->nullable();
             $table->text('notes')->nullable();
@@ -232,7 +232,7 @@ return new class extends Migration
             $table->string('name_en');
             $table->string('city')->nullable();
             $table->string('zone')->nullable();
-            $table->string('terms')->nullable();
+            $table->text('terms')->nullable();
             $table->decimal('credit_limit', 14, 2)->default(0);
             $table->decimal('balance', 14, 2)->default(0);
             $table->string('contact')->nullable();
@@ -292,7 +292,7 @@ return new class extends Migration
             $table->ulid('pr_id')->nullable();
             $table->dateTime('close_date', 3)->nullable();
             $table->string('invited_rule')->nullable();
-            $table->string('terms')->nullable();
+            $table->text('terms')->nullable();
             $table->ulid('delivery_warehouse_id')->nullable();
             $table->text('notes')->nullable();
             $table->string('status')->default('open');
@@ -325,8 +325,8 @@ return new class extends Migration
             $table->string('supplier_ref')->nullable();
             $table->dateTime('date', 3)->useCurrent();
             $table->dateTime('valid_until', 3)->nullable();
-            $table->string('payment_terms')->nullable();
-            $table->string('delivery_terms')->nullable();
+            $table->text('payment_terms')->nullable();
+            $table->text('delivery_terms')->nullable();
             $table->integer('min_order')->default(0);
             $table->integer('lead_days')->default(0);
             $table->text('notes')->nullable();
@@ -357,7 +357,7 @@ return new class extends Migration
             $table->string('status')->default('pending');
             $table->decimal('total', 16, 2)->default(0);
             $table->dateTime('due_date', 3)->nullable();
-            $table->string('payment_terms')->nullable();
+            $table->text('payment_terms')->nullable();
             $table->string('reference')->nullable();
             $table->text('notes')->nullable();
             $table->integer('approval_step')->default(0);
@@ -432,8 +432,8 @@ return new class extends Migration
             $table->dateTime('mfg_date', 3)->nullable();
             $table->dateTime('expiry_date', 3)->nullable();
             $table->ulid('suggested_bin_id')->nullable();
-            $table->string('suggestion_ar')->nullable();
-            $table->string('suggestion_en')->nullable();
+            $table->text('suggestion_ar')->nullable();
+            $table->text('suggestion_en')->nullable();
             $table->unique(['shipment_id', 'line_no'], 'shipment_lines_shipment_id_line_no_uq');
         });
 
@@ -447,8 +447,8 @@ return new class extends Migration
             $table->string('posted_by_id')->nullable();
             $table->string('posted_by')->nullable();
             $table->dateTime('posted_at', 3)->useCurrent();
-            $table->string('summary_ar')->nullable();
-            $table->string('summary_en')->nullable();
+            $table->text('summary_ar')->nullable();
+            $table->text('summary_en')->nullable();
             $table->string('transaction_id')->nullable();
         });
 
@@ -499,8 +499,8 @@ return new class extends Migration
             $table->integer('qty');
             $table->ulid('warehouse_id');
             $table->ulid('suggested_bin_id')->nullable();
-            $table->string('suggestion_ar')->nullable();
-            $table->string('suggestion_en')->nullable();
+            $table->text('suggestion_ar')->nullable();
+            $table->text('suggestion_en')->nullable();
             $table->ulid('actual_bin_id')->nullable();
             $table->string('status')->default('open');
             $table->string('confirmed_by_id')->nullable();
@@ -606,8 +606,8 @@ return new class extends Migration
             $table->ulid('to_warehouse_id');
             $table->string('status')->default('draft');
             $table->string('reason_code')->nullable();
-            $table->string('reason_ar')->nullable();
-            $table->string('reason_en')->nullable();
+            $table->text('reason_ar')->nullable();
+            $table->text('reason_en')->nullable();
             $table->text('notes')->nullable();
             $table->string('requested_by_id')->nullable();
             $table->string('requested_by')->nullable();
@@ -684,8 +684,8 @@ return new class extends Migration
             $table->dateTime('date', 3)->useCurrent();
             $table->dateTime('valid_until', 3)->nullable();
             $table->string('status')->default('draft');
-            $table->string('terms')->nullable();
-            $table->string('delivery')->nullable();
+            $table->text('terms')->nullable();
+            $table->text('delivery')->nullable();
             $table->text('notes')->nullable();
             $table->string('created_by_id')->nullable();
             $table->string('created_by')->nullable();
@@ -893,7 +893,7 @@ return new class extends Migration
             $table->dateTime('license_expiry', 3)->nullable();
             $table->dateTime('iqama_expiry', 3)->nullable();
             $table->dateTime('medical_expiry', 3)->nullable();
-            $table->string('training')->nullable();
+            $table->text('training')->nullable();
             $table->dateTime('join_date', 3)->nullable();
             $table->string('shift')->nullable();
             $table->string('shift_en')->nullable();
@@ -991,8 +991,8 @@ return new class extends Migration
             $table->ulid('trip_id');
             $table->dateTime('at', 3)->useCurrent();
             $table->string('label')->nullable();
-            $table->string('text_ar');
-            $table->string('text_en')->nullable();
+            $table->text('text_ar');
+            $table->text('text_en')->nullable();
         });
 
         Schema::create('trip_costs', function (Blueprint $table) {
@@ -1108,7 +1108,7 @@ return new class extends Migration
             $table->string('mime')->nullable();
             $table->integer('size')->nullable();
             $table->string('storage_key')->nullable();
-            $table->string('url')->nullable();
+            $table->text('url')->nullable();
             $table->string('status')->default('integration_pending');
             $table->dateTime('created_at', 3)->useCurrent();
         });
@@ -1117,8 +1117,8 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('number')->unique();
             $table->string('type');
-            $table->string('source_ar')->nullable();
-            $table->string('source_en')->nullable();
+            $table->text('source_ar')->nullable();
+            $table->text('source_en')->nullable();
             $table->string('reference')->nullable();
             $table->ulid('customer_id')->nullable();
             $table->ulid('supplier_id')->nullable();
@@ -1127,8 +1127,8 @@ return new class extends Migration
             $table->ulid('warehouse_id');
             $table->string('status')->default('pending');
             $table->string('reason_code')->nullable();
-            $table->string('reason_ar')->nullable();
-            $table->string('reason_en')->nullable();
+            $table->text('reason_ar')->nullable();
+            $table->text('reason_en')->nullable();
             $table->text('notes')->nullable();
             $table->json('attachments');
             $table->string('decision')->nullable();
@@ -1175,7 +1175,7 @@ return new class extends Migration
             $table->string('inspector_id')->nullable();
             $table->string('inspector')->nullable();
             $table->dateTime('started_at', 3)->useCurrent();
-            $table->string('findings')->nullable();
+            $table->text('findings')->nullable();
         });
 
         Schema::create('return_decisions', function (Blueprint $table) {
@@ -1198,8 +1198,8 @@ return new class extends Migration
             $table->string('type_ar')->nullable();
             $table->string('type_en')->nullable();
             $table->string('kind')->default('corrective');
-            $table->string('desc_ar')->nullable();
-            $table->string('desc_en')->nullable();
+            $table->text('desc_ar')->nullable();
+            $table->text('desc_en')->nullable();
             $table->string('shop')->nullable();
             $table->dateTime('start_date', 3)->nullable();
             $table->dateTime('end_date', 3)->nullable();
@@ -1240,12 +1240,12 @@ return new class extends Migration
             $table->string('entity_type')->nullable();
             $table->string('entity_id')->nullable();
             $table->string('entity_code')->nullable();
-            $table->string('text_ar');
-            $table->string('text_en')->nullable();
+            $table->text('text_ar');
+            $table->text('text_en')->nullable();
             $table->string('due_date')->nullable();
             $table->string('owner')->nullable();
-            $table->string('recommend_ar')->nullable();
-            $table->string('recommend_en')->nullable();
+            $table->text('recommend_ar')->nullable();
+            $table->text('recommend_en')->nullable();
             $table->string('status')->default('open');
             $table->dateTime('snoozed_until', 3)->nullable();
             $table->dateTime('resolved_at', 3)->nullable();
@@ -1258,7 +1258,7 @@ return new class extends Migration
             $table->ulid('driver_id');
             $table->string('type');
             $table->dateTime('date', 3);
-            $table->string('desc');
+            $table->text('desc');
             $table->string('severity')->default('low');
             $table->dateTime('created_at', 3)->useCurrent();
         });
@@ -1272,7 +1272,7 @@ return new class extends Migration
             $table->string('vehicle_code')->nullable();
             $table->string('trip_number')->nullable();
             $table->double('amount')->default(0);
-            $table->string('desc');
+            $table->text('desc');
             $table->string('location')->nullable();
             $table->string('attachment')->nullable();
             $table->string('status')->default('submitted');
@@ -1320,8 +1320,8 @@ return new class extends Migration
             $table->string('document_type')->nullable();
             $table->string('document_id')->nullable();
             $table->string('document_number')->nullable();
-            $table->string('text_ar');
-            $table->string('text_en')->nullable();
+            $table->text('text_ar');
+            $table->text('text_en')->nullable();
             $table->text('resolution')->nullable();
             $table->string('created_by_id')->nullable();
             $table->string('created_by')->nullable();
@@ -1352,8 +1352,8 @@ return new class extends Migration
             $table->string('entity_id')->nullable();
             $table->string('entity_number')->nullable();
             $table->string('field')->nullable();
-            $table->string('old_value')->nullable();
-            $table->string('new_value')->nullable();
+            $table->text('old_value')->nullable();
+            $table->text('new_value')->nullable();
             $table->string('request_id')->nullable();
             $table->string('transaction_id')->nullable();
             $table->string('ip')->nullable();
@@ -1367,8 +1367,8 @@ return new class extends Migration
             $table->string('entity_type')->nullable();
             $table->string('entity_id')->nullable();
             $table->string('entity_number')->nullable();
-            $table->string('text_ar');
-            $table->string('text_en')->nullable();
+            $table->text('text_ar');
+            $table->text('text_en')->nullable();
             $table->string('user_id')->nullable();
             $table->string('username')->nullable();
             $table->dateTime('at', 3)->useCurrent();
@@ -1379,8 +1379,8 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('role_key')->nullable();
             $table->string('user_id')->nullable();
-            $table->string('text_ar');
-            $table->string('text_en')->nullable();
+            $table->text('text_ar');
+            $table->text('text_en')->nullable();
             $table->string('entity_type')->nullable();
             $table->string('entity_id')->nullable();
             $table->string('entity_number')->nullable();
@@ -1397,7 +1397,7 @@ return new class extends Migration
             $table->string('mime')->nullable();
             $table->integer('size')->nullable();
             $table->string('storage_key')->nullable();
-            $table->string('url')->nullable();
+            $table->text('url')->nullable();
             $table->string('status')->default('integration_pending');
             $table->dateTime('created_at', 3)->useCurrent();
             $table->index(['entity_type', 'entity_id'], 'attachments_entity_type_entity_id_ix');

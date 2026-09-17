@@ -12,6 +12,7 @@ class AuditLog extends BaseModel
     use HasUlids;
 
     protected $table = 'audit_logs';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class AuditLog extends BaseModel
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }

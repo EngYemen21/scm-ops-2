@@ -28,16 +28,16 @@ class WarehouseTransfer extends BaseModel
 
     public function fromWarehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'from_warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'from_warehouse_id', 'id');
     }
 
     public function toWarehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'to_warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'to_warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\TransferLine::class, 'transfer_id', 'id');
+        return $this->hasMany(TransferLine::class, 'transfer_id', 'id');
     }
 }

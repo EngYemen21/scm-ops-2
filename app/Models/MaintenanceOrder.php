@@ -12,6 +12,7 @@ class MaintenanceOrder extends BaseModel
     use HasUlids;
 
     protected $table = 'maintenance_orders';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -30,6 +31,6 @@ class MaintenanceOrder extends BaseModel
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 }

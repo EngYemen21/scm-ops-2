@@ -11,6 +11,7 @@ class Notification extends BaseModel
     use HasUlids;
 
     protected $table = 'notifications';
+
     public $timestamps = false;
 
     protected function casts(): array

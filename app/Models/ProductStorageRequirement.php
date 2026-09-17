@@ -9,9 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ProductStorageRequirement extends BaseModel
 {
     protected $table = 'product_storage_requirements';
+
     protected $primaryKey = 'product_id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -25,6 +29,6 @@ class ProductStorageRequirement extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 }

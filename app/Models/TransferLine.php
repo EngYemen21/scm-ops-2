@@ -12,6 +12,7 @@ class TransferLine extends BaseModel
     use HasUlids;
 
     protected $table = 'transfer_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -25,26 +26,26 @@ class TransferLine extends BaseModel
 
     public function transfer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\WarehouseTransfer::class, 'transfer_id', 'id');
+        return $this->belongsTo(WarehouseTransfer::class, 'transfer_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 
     public function fromBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'from_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'from_bin_id', 'id');
     }
 
     public function toBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'to_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'to_bin_id', 'id');
     }
 }

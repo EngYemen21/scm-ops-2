@@ -12,6 +12,7 @@ class Supplier extends BaseModel
     use HasUlids;
 
     protected $table = 'suppliers';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -31,41 +32,41 @@ class Supplier extends BaseModel
 
     public function products(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductSupplier::class, 'supplier_id', 'id');
+        return $this->hasMany(ProductSupplier::class, 'supplier_id', 'id');
     }
 
     public function quotations(): HasMany
     {
-        return $this->hasMany(\App\Models\SupplierQuotation::class, 'supplier_id', 'id');
+        return $this->hasMany(SupplierQuotation::class, 'supplier_id', 'id');
     }
 
     public function rfqs(): HasMany
     {
-        return $this->hasMany(\App\Models\RfqSupplier::class, 'supplier_id', 'id');
+        return $this->hasMany(RfqSupplier::class, 'supplier_id', 'id');
     }
 
     public function pos(): HasMany
     {
-        return $this->hasMany(\App\Models\PurchaseOrder::class, 'supplier_id', 'id');
+        return $this->hasMany(PurchaseOrder::class, 'supplier_id', 'id');
     }
 
     public function shipments(): HasMany
     {
-        return $this->hasMany(\App\Models\InboundShipment::class, 'supplier_id', 'id');
+        return $this->hasMany(InboundShipment::class, 'supplier_id', 'id');
     }
 
     public function grns(): HasMany
     {
-        return $this->hasMany(\App\Models\GoodsReceipt::class, 'supplier_id', 'id');
+        return $this->hasMany(GoodsReceipt::class, 'supplier_id', 'id');
     }
 
     public function batches(): HasMany
     {
-        return $this->hasMany(\App\Models\Batch::class, 'supplier_id', 'id');
+        return $this->hasMany(Batch::class, 'supplier_id', 'id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnOrder::class, 'supplier_id', 'id');
+        return $this->hasMany(ReturnOrder::class, 'supplier_id', 'id');
     }
 }

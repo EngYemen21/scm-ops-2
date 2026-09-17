@@ -4,16 +4,18 @@
 
 namespace App\Models;
 
+use Illuminate\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends BaseModel implements \Illuminate\Contracts\Auth\Authenticatable
 {
+    use Authenticatable;
     use HasUlids;
-    use \Illuminate\Auth\Authenticatable;
 
     protected $table = 'users';
+
     protected $hidden = ['password_hash'];
 
     public function getAuthPasswordName()
@@ -32,26 +34,26 @@ class User extends BaseModel implements \Illuminate\Contracts\Auth\Authenticatab
 
     public function roles(): HasMany
     {
-        return $this->hasMany(\App\Models\UserRole::class, 'user_id', 'id');
+        return $this->hasMany(UserRole::class, 'user_id', 'id');
     }
 
     public function warehouses(): HasMany
     {
-        return $this->hasMany(\App\Models\UserWarehouse::class, 'user_id', 'id');
+        return $this->hasMany(UserWarehouse::class, 'user_id', 'id');
     }
 
     public function refreshTokens(): HasMany
     {
-        return $this->hasMany(\App\Models\RefreshToken::class, 'user_id', 'id');
+        return $this->hasMany(RefreshToken::class, 'user_id', 'id');
     }
 
     public function driver(): HasOne
     {
-        return $this->hasOne(\App\Models\Driver::class, 'user_id', 'id');
+        return $this->hasOne(Driver::class, 'user_id', 'id');
     }
 
     public function auditLogs(): HasMany
     {
-        return $this->hasMany(\App\Models\AuditLog::class, 'user_id', 'id');
+        return $this->hasMany(AuditLog::class, 'user_id', 'id');
     }
 }

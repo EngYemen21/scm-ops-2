@@ -12,6 +12,7 @@ class PickTask extends BaseModel
     use HasUlids;
 
     protected $table = 'pick_tasks';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,26 +27,26 @@ class PickTask extends BaseModel
 
     public function pickList(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PickList::class, 'pick_list_id', 'id');
+        return $this->belongsTo(PickList::class, 'pick_list_id', 'id');
     }
 
     public function foLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FoLine::class, 'fo_line_id', 'id');
+        return $this->belongsTo(FoLine::class, 'fo_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function bin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'bin_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 }

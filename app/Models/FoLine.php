@@ -13,6 +13,7 @@ class FoLine extends BaseModel
     use HasUlids;
 
     protected $table = 'fo_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -29,21 +30,21 @@ class FoLine extends BaseModel
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function soLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrderLine::class, 'so_line_id', 'id');
+        return $this->belongsTo(SalesOrderLine::class, 'so_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function pickTasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PickTask::class, 'fo_line_id', 'id');
+        return $this->hasMany(PickTask::class, 'fo_line_id', 'id');
     }
 }

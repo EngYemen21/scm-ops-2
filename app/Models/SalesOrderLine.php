@@ -13,6 +13,7 @@ class SalesOrderLine extends BaseModel
     use HasUlids;
 
     protected $table = 'sales_order_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -32,26 +33,26 @@ class SalesOrderLine extends BaseModel
 
     public function so(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SalesOrder::class, 'so_id', 'id');
+        return $this->belongsTo(SalesOrder::class, 'so_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function reservations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryReservation::class, 'so_line_id', 'id');
+        return $this->hasMany(InventoryReservation::class, 'so_line_id', 'id');
     }
 
     public function allocations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryAllocation::class, 'so_line_id', 'id');
+        return $this->hasMany(InventoryAllocation::class, 'so_line_id', 'id');
     }
 
     public function foLines(): HasMany
     {
-        return $this->hasMany(\App\Models\FoLine::class, 'so_line_id', 'id');
+        return $this->hasMany(FoLine::class, 'so_line_id', 'id');
     }
 }

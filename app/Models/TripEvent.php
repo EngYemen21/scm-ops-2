@@ -12,6 +12,7 @@ class TripEvent extends BaseModel
     use HasUlids;
 
     protected $table = 'trip_events';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class TripEvent extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 }

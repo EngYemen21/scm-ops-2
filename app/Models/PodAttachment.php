@@ -12,6 +12,7 @@ class PodAttachment extends BaseModel
     use HasUlids;
 
     protected $table = 'pod_attachments';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class PodAttachment extends BaseModel
 
     public function pod(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ProofOfDelivery::class, 'pod_id', 'id');
+        return $this->belongsTo(ProofOfDelivery::class, 'pod_id', 'id');
     }
 }

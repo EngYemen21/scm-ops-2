@@ -12,6 +12,7 @@ class PrApproval extends BaseModel
     use HasUlids;
 
     protected $table = 'pr_approvals';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,6 +25,6 @@ class PrApproval extends BaseModel
 
     public function pr(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseRequisition::class, 'pr_id', 'id');
+        return $this->belongsTo(PurchaseRequisition::class, 'pr_id', 'id');
     }
 }

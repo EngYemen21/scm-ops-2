@@ -30,36 +30,36 @@ class PurchaseOrder extends BaseModel
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function rfq(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Rfq::class, 'rfq_id', 'id');
+        return $this->belongsTo(Rfq::class, 'rfq_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\PoLine::class, 'po_id', 'id');
+        return $this->hasMany(PoLine::class, 'po_id', 'id');
     }
 
     public function approvals(): HasMany
     {
-        return $this->hasMany(\App\Models\PoApproval::class, 'po_id', 'id');
+        return $this->hasMany(PoApproval::class, 'po_id', 'id');
     }
 
     public function shipments(): HasMany
     {
-        return $this->hasMany(\App\Models\InboundShipment::class, 'po_id', 'id');
+        return $this->hasMany(InboundShipment::class, 'po_id', 'id');
     }
 
     public function grns(): HasMany
     {
-        return $this->hasMany(\App\Models\GoodsReceipt::class, 'po_id', 'id');
+        return $this->hasMany(GoodsReceipt::class, 'po_id', 'id');
     }
 }

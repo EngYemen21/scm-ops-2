@@ -9,9 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class RfqSupplier extends BaseModel
 {
     protected $table = 'rfq_suppliers';
+
     /** Composite key (rfq_id, supplier_id): write through the query builder or relations, not save(). */
     protected $primaryKey = null;
+
     public $incrementing = false;
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,11 +26,11 @@ class RfqSupplier extends BaseModel
 
     public function rfq(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Rfq::class, 'rfq_id', 'id');
+        return $this->belongsTo(Rfq::class, 'rfq_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 }

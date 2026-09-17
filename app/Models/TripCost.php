@@ -9,9 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class TripCost extends BaseModel
 {
     protected $table = 'trip_costs';
+
     protected $primaryKey = 'trip_id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -31,6 +35,6 @@ class TripCost extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 }

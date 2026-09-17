@@ -12,6 +12,7 @@ class InventoryMovement extends BaseModel
     use HasUlids;
 
     protected $table = 'inventory_movements';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,21 +26,21 @@ class InventoryMovement extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 
     public function srcBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'src_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'src_bin_id', 'id');
     }
 
     public function dstBin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'dst_bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'dst_bin_id', 'id');
     }
 }

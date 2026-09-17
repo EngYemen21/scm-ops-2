@@ -13,6 +13,7 @@ class PickList extends BaseModel
     use HasUlids;
 
     protected $table = 'pick_lists';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -24,16 +25,16 @@ class PickList extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function tasks(): HasMany
     {
-        return $this->hasMany(\App\Models\PickTask::class, 'pick_list_id', 'id');
+        return $this->hasMany(PickTask::class, 'pick_list_id', 'id');
     }
 }

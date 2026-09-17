@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Batch;
+use App\Models\Bin;
 use App\Models\Customer;
 use App\Models\InventoryBalance;
 use App\Models\Product;
@@ -131,7 +132,7 @@ class InventoryEngineTest extends ApiTestCase
 
     // ───────────── fixtures ─────────────
 
-    /** @return array{0:Product, 1:Warehouse, 2:\App\Models\Bin} */
+    /** @return array{0:Product, 1:Warehouse, 2:Bin} */
     private function stockedProduct(string $prefix, int $qty): array
     {
         $wh = Warehouse::where('code', 'RYD')->firstOrFail();

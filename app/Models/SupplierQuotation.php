@@ -14,6 +14,7 @@ class SupplierQuotation extends BaseModel
     use HasUlids;
 
     protected $table = 'supplier_quotations';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -30,21 +31,21 @@ class SupplierQuotation extends BaseModel
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function rfq(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Rfq::class, 'rfq_id', 'id');
+        return $this->belongsTo(Rfq::class, 'rfq_id', 'id');
     }
 
     public function awardedFor(): HasOne
     {
-        return $this->hasOne(\App\Models\Rfq::class, 'awarded_quotation_id', 'id');
+        return $this->hasOne(Rfq::class, 'awarded_quotation_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\SupplierQuotationLine::class, 'quotation_id', 'id');
+        return $this->hasMany(SupplierQuotationLine::class, 'quotation_id', 'id');
     }
 }

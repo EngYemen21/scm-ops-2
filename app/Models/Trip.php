@@ -33,71 +33,71 @@ class Trip extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 
     public function consolidation(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\OrderConsolidation::class, 'consolidation_id', 'id');
+        return $this->belongsTo(OrderConsolidation::class, 'consolidation_id', 'id');
     }
 
     public function stops(): HasMany
     {
-        return $this->hasMany(\App\Models\TripStop::class, 'trip_id', 'id');
+        return $this->hasMany(TripStop::class, 'trip_id', 'id');
     }
 
     public function orders(): HasMany
     {
-        return $this->hasMany(\App\Models\TripOrder::class, 'trip_id', 'id');
+        return $this->hasMany(TripOrder::class, 'trip_id', 'id');
     }
 
     public function fos(): HasMany
     {
-        return $this->hasMany(\App\Models\FulfillmentOrder::class, 'trip_id', 'id');
+        return $this->hasMany(FulfillmentOrder::class, 'trip_id', 'id');
     }
 
     public function events(): HasMany
     {
-        return $this->hasMany(\App\Models\TripEvent::class, 'trip_id', 'id');
+        return $this->hasMany(TripEvent::class, 'trip_id', 'id');
     }
 
     public function cost(): HasOne
     {
-        return $this->hasOne(\App\Models\TripCost::class, 'trip_id', 'id');
+        return $this->hasOne(TripCost::class, 'trip_id', 'id');
     }
 
     public function loadingPlans(): HasMany
     {
-        return $this->hasMany(\App\Models\LoadingPlan::class, 'trip_id', 'id');
+        return $this->hasMany(LoadingPlan::class, 'trip_id', 'id');
     }
 
     public function dispatch(): HasOne
     {
-        return $this->hasOne(\App\Models\DispatchRecord::class, 'trip_id', 'id');
+        return $this->hasOne(DispatchRecord::class, 'trip_id', 'id');
     }
 
     public function deliveries(): HasMany
     {
-        return $this->hasMany(\App\Models\DeliveryRecord::class, 'trip_id', 'id');
+        return $this->hasMany(DeliveryRecord::class, 'trip_id', 'id');
     }
 
     public function pods(): HasMany
     {
-        return $this->hasMany(\App\Models\ProofOfDelivery::class, 'trip_id', 'id');
+        return $this->hasMany(ProofOfDelivery::class, 'trip_id', 'id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(\App\Models\ReturnOrder::class, 'trip_id', 'id');
+        return $this->hasMany(ReturnOrder::class, 'trip_id', 'id');
     }
 }

@@ -12,6 +12,7 @@ class ProductSupplier extends BaseModel
     use HasUlids;
 
     protected $table = 'product_suppliers';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -25,11 +26,11 @@ class ProductSupplier extends BaseModel
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 }

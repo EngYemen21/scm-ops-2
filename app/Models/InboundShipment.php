@@ -27,31 +27,31 @@ class InboundShipment extends BaseModel
 
     public function po(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseOrder::class, 'po_id', 'id');
+        return $this->belongsTo(PurchaseOrder::class, 'po_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\ShipmentLine::class, 'shipment_id', 'id');
+        return $this->hasMany(ShipmentLine::class, 'shipment_id', 'id');
     }
 
     public function grns(): HasMany
     {
-        return $this->hasMany(\App\Models\GoodsReceipt::class, 'shipment_id', 'id');
+        return $this->hasMany(GoodsReceipt::class, 'shipment_id', 'id');
     }
 
     public function putaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'shipment_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'shipment_id', 'id');
     }
 }

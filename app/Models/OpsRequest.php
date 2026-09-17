@@ -12,6 +12,7 @@ class OpsRequest extends BaseModel
     use HasUlids;
 
     protected $table = 'ops_requests';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class OpsRequest extends BaseModel
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 }

@@ -46,46 +46,46 @@ class Vehicle extends BaseModel
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function trips(): HasMany
     {
-        return $this->hasMany(\App\Models\Trip::class, 'vehicle_id', 'id');
+        return $this->hasMany(Trip::class, 'vehicle_id', 'id');
     }
 
     public function drivers(): HasMany
     {
-        return $this->hasMany(\App\Models\Driver::class, 'default_vehicle_id', 'id');
+        return $this->hasMany(Driver::class, 'default_vehicle_id', 'id');
     }
 
     public function maintenance(): HasMany
     {
-        return $this->hasMany(\App\Models\MaintenanceOrder::class, 'vehicle_id', 'id');
+        return $this->hasMany(MaintenanceOrder::class, 'vehicle_id', 'id');
     }
 
     public function fuel(): HasMany
     {
-        return $this->hasMany(\App\Models\FuelRecord::class, 'vehicle_id', 'id');
+        return $this->hasMany(FuelRecord::class, 'vehicle_id', 'id');
     }
 
     public function loadingPlans(): HasMany
     {
-        return $this->hasMany(\App\Models\LoadingPlan::class, 'vehicle_id', 'id');
+        return $this->hasMany(LoadingPlan::class, 'vehicle_id', 'id');
     }
 
     public function dispatches(): HasMany
     {
-        return $this->hasMany(\App\Models\DispatchRecord::class, 'vehicle_id', 'id');
+        return $this->hasMany(DispatchRecord::class, 'vehicle_id', 'id');
     }
 
     public function pods(): HasMany
     {
-        return $this->hasMany(\App\Models\ProofOfDelivery::class, 'vehicle_id', 'id');
+        return $this->hasMany(ProofOfDelivery::class, 'vehicle_id', 'id');
     }
 
     public function deliveries(): HasMany
     {
-        return $this->hasMany(\App\Models\DeliveryRecord::class, 'vehicle_id', 'id');
+        return $this->hasMany(DeliveryRecord::class, 'vehicle_id', 'id');
     }
 }

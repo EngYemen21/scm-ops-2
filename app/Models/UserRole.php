@@ -9,9 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserRole extends BaseModel
 {
     protected $table = 'user_roles';
+
     /** Composite key (user_id, role_id): write through the query builder or relations, not save(). */
     protected $primaryKey = null;
+
     public $incrementing = false;
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -21,11 +24,11 @@ class UserRole extends BaseModel
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     public function role(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Role::class, 'role_id', 'id');
+        return $this->belongsTo(Role::class, 'role_id', 'id');
     }
 }

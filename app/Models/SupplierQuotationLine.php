@@ -12,6 +12,7 @@ class SupplierQuotationLine extends BaseModel
     use HasUlids;
 
     protected $table = 'supplier_quotation_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -26,11 +27,11 @@ class SupplierQuotationLine extends BaseModel
 
     public function quotation(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SupplierQuotation::class, 'quotation_id', 'id');
+        return $this->belongsTo(SupplierQuotation::class, 'quotation_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 }

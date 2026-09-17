@@ -12,6 +12,7 @@ class ExceptionEvent extends BaseModel
     use HasUlids;
 
     protected $table = 'exception_events';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class ExceptionEvent extends BaseModel
 
     public function exception(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\OpsException::class, 'exception_id', 'id');
+        return $this->belongsTo(OpsException::class, 'exception_id', 'id');
     }
 }

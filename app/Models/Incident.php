@@ -12,6 +12,7 @@ class Incident extends BaseModel
     use HasUlids;
 
     protected $table = 'incidents';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -23,6 +24,6 @@ class Incident extends BaseModel
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 }

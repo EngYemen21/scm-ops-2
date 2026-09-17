@@ -13,6 +13,7 @@ class GoodsReceipt extends BaseModel
     use HasUlids;
 
     protected $table = 'goods_receipts';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,31 +25,31 @@ class GoodsReceipt extends BaseModel
 
     public function shipment(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\InboundShipment::class, 'shipment_id', 'id');
+        return $this->belongsTo(InboundShipment::class, 'shipment_id', 'id');
     }
 
     public function po(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseOrder::class, 'po_id', 'id');
+        return $this->belongsTo(PurchaseOrder::class, 'po_id', 'id');
     }
 
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supplier::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\GrnLine::class, 'grn_id', 'id');
+        return $this->hasMany(GrnLine::class, 'grn_id', 'id');
     }
 
     public function putaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'grn_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'grn_id', 'id');
     }
 }

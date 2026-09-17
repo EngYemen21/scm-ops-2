@@ -12,6 +12,7 @@ class CountLine extends BaseModel
     use HasUlids;
 
     protected $table = 'count_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,21 +25,21 @@ class CountLine extends BaseModel
 
     public function count(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\InventoryCount::class, 'count_id', 'id');
+        return $this->belongsTo(InventoryCount::class, 'count_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function bin(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Bin::class, 'bin_id', 'id');
+        return $this->belongsTo(Bin::class, 'bin_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 }

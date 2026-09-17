@@ -12,6 +12,7 @@ class FuelRecord extends BaseModel
     use HasUlids;
 
     protected $table = 'fuel_records';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -30,11 +31,11 @@ class FuelRecord extends BaseModel
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 }

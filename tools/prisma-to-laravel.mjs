@@ -11,7 +11,8 @@ const src = fs.readFileSync(path.join(ROOT, 'docs/reference/schema.prisma'), 'ut
 // ---------- helpers (snake/camel identical to Illuminate\Support\Str) ----------
 const snake = (s) => s.replace(/(.)(?=[A-Z])/g, '$1_').toLowerCase();
 const camel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
-const TEXTY = /(note|notes|message|description|reason|details|comment|address|body|summary|instructions|justification|error|remarks|condition|resolution|cause|text)$/i;
+// String fields that can exceed 255 characters become TEXT (Prisma/PostgreSQL strings were unbounded).
+const TEXTY = /^(address|condition|desc|description|findings|justification|lastError|newValue|oldValue|note|notes|qcNote|resolution|url|training|terms|paymentTerms|deliveryTerms|delivery)$|^(desc|reason|recommend|suggestion|summary|text|source)(Ar|En)$|(note|notes|message|description|reason|details|comment|remarks|error)$/i;
 
 // ---------- parse ----------
 const enums = {};
@@ -98,7 +99,7 @@ function columnLine(mo, f) {
   let t;
   if (f.list) t = '$table->json(' + c + ')';
   else if (ulid.has(mo.name + '.' + f.name)) t = '$table->ulid(' + c + ')';
-  else if (f.type === 'String') t = (TEXTY.test(f.name) && f.default == null && !f.unique && !f.isId) ? '$table->text(' + c + ')' : '$table->string(' + c + ')';
+  else if (f.type === 'String') t = (TEXTY.test(f.name) && f.default == null && !f.unique && !f.isId && !mo.indexes.concat(mo.uniques).flat().includes(f.name)) ? '$table->text(' + c + ')' : '$table->string(' + c + ')';
   else if (f.type === 'Int') t = '$table->integer(' + c + ')';
   else if (f.type === 'BigInt') t = '$table->bigInteger(' + c + ')';
   else if (f.type === 'Float') t = '$table->double(' + c + ')';

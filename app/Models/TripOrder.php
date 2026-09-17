@@ -12,6 +12,7 @@ class TripOrder extends BaseModel
     use HasUlids;
 
     protected $table = 'trip_orders';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -25,16 +26,16 @@ class TripOrder extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function stop(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\TripStop::class, 'stop_id', 'id');
+        return $this->belongsTo(TripStop::class, 'stop_id', 'id');
     }
 }

@@ -12,6 +12,7 @@ class Role extends BaseModel
     use HasUlids;
 
     protected $table = 'roles';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -23,11 +24,11 @@ class Role extends BaseModel
 
     public function users(): HasMany
     {
-        return $this->hasMany(\App\Models\UserRole::class, 'role_id', 'id');
+        return $this->hasMany(UserRole::class, 'role_id', 'id');
     }
 
     public function permissions(): HasMany
     {
-        return $this->hasMany(\App\Models\RolePermission::class, 'role_id', 'id');
+        return $this->hasMany(RolePermission::class, 'role_id', 'id');
     }
 }

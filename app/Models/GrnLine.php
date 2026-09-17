@@ -13,6 +13,7 @@ class GrnLine extends BaseModel
     use HasUlids;
 
     protected $table = 'grn_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -32,36 +33,36 @@ class GrnLine extends BaseModel
 
     public function grn(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\GoodsReceipt::class, 'grn_id', 'id');
+        return $this->belongsTo(GoodsReceipt::class, 'grn_id', 'id');
     }
 
     public function shipmentLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\ShipmentLine::class, 'shipment_line_id', 'id');
+        return $this->belongsTo(ShipmentLine::class, 'shipment_line_id', 'id');
     }
 
     public function poLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PoLine::class, 'po_line_id', 'id');
+        return $this->belongsTo(PoLine::class, 'po_line_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 
     public function batch(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Batch::class, 'batch_id', 'id');
+        return $this->belongsTo(Batch::class, 'batch_id', 'id');
     }
 
     public function qcResults(): HasMany
     {
-        return $this->hasMany(\App\Models\QcResult::class, 'grn_line_id', 'id');
+        return $this->hasMany(QcResult::class, 'grn_line_id', 'id');
     }
 
     public function putaways(): HasMany
     {
-        return $this->hasMany(\App\Models\PutawayTask::class, 'grn_line_id', 'id');
+        return $this->hasMany(PutawayTask::class, 'grn_line_id', 'id');
     }
 }

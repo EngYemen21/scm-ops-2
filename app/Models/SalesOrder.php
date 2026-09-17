@@ -27,41 +27,41 @@ class SalesOrder extends BaseModel
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Customer::class, 'customer_id', 'id');
+        return $this->belongsTo(Customer::class, 'customer_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
     }
 
     public function consolidation(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\OrderConsolidation::class, 'consolidation_id', 'id');
+        return $this->belongsTo(OrderConsolidation::class, 'consolidation_id', 'id');
     }
 
     public function quotation(): HasOne
     {
-        return $this->hasOne(\App\Models\Quotation::class, 'so_id', 'id');
+        return $this->hasOne(Quotation::class, 'so_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\SalesOrderLine::class, 'so_id', 'id');
+        return $this->hasMany(SalesOrderLine::class, 'so_id', 'id');
     }
 
     public function reservations(): HasMany
     {
-        return $this->hasMany(\App\Models\InventoryReservation::class, 'so_id', 'id');
+        return $this->hasMany(InventoryReservation::class, 'so_id', 'id');
     }
 
     public function fos(): HasMany
     {
-        return $this->hasMany(\App\Models\FulfillmentOrder::class, 'so_id', 'id');
+        return $this->hasMany(FulfillmentOrder::class, 'so_id', 'id');
     }
 
     public function stops(): HasMany
     {
-        return $this->hasMany(\App\Models\TripStop::class, 'so_id', 'id');
+        return $this->hasMany(TripStop::class, 'so_id', 'id');
     }
 }

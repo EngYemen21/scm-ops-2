@@ -13,6 +13,7 @@ class DeliveryRecord extends BaseModel
     use HasUlids;
 
     protected $table = 'delivery_records';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -27,31 +28,31 @@ class DeliveryRecord extends BaseModel
 
     public function trip(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Trip::class, 'trip_id', 'id');
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
     }
 
     public function stop(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\TripStop::class, 'stop_id', 'id');
+        return $this->belongsTo(TripStop::class, 'stop_id', 'id');
     }
 
     public function fo(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\FulfillmentOrder::class, 'fo_id', 'id');
+        return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
     }
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Driver::class, 'driver_id', 'id');
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
     }
 
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
     }
 
     public function pod(): HasOne
     {
-        return $this->hasOne(\App\Models\ProofOfDelivery::class, 'delivery_id', 'id');
+        return $this->hasOne(ProofOfDelivery::class, 'delivery_id', 'id');
     }
 }

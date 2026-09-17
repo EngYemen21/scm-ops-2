@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Warehouse;
 use App\Services\Inventory\InventoryService;
 use App\Support\SnapshotImporter;
 use Illuminate\Support\Facades\Artisan;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Artisan;
 Artisan::command('scm:reconcile {warehouse? : warehouse code, e.g. RYD}', function (InventoryService $inventory) {
     $warehouseId = null;
     if ($code = $this->argument('warehouse')) {
-        $warehouseId = App\Models\Warehouse::where('code', $code)->value('id');
+        $warehouseId = Warehouse::where('code', $code)->value('id');
         if (! $warehouseId) {
             $this->error("warehouse {$code} not found");
 

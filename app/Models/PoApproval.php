@@ -12,6 +12,7 @@ class PoApproval extends BaseModel
     use HasUlids;
 
     protected $table = 'po_approvals';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,6 +25,6 @@ class PoApproval extends BaseModel
 
     public function po(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseOrder::class, 'po_id', 'id');
+        return $this->belongsTo(PurchaseOrder::class, 'po_id', 'id');
     }
 }

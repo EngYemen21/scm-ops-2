@@ -40,46 +40,46 @@ class Driver extends BaseModel
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     public function defaultVehicle(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vehicle::class, 'default_vehicle_id', 'id');
+        return $this->belongsTo(Vehicle::class, 'default_vehicle_id', 'id');
     }
 
     public function tripsList(): HasMany
     {
-        return $this->hasMany(\App\Models\Trip::class, 'driver_id', 'id');
+        return $this->hasMany(Trip::class, 'driver_id', 'id');
     }
 
     public function fuel(): HasMany
     {
-        return $this->hasMany(\App\Models\FuelRecord::class, 'driver_id', 'id');
+        return $this->hasMany(FuelRecord::class, 'driver_id', 'id');
     }
 
     public function dispatches(): HasMany
     {
-        return $this->hasMany(\App\Models\DispatchRecord::class, 'driver_id', 'id');
+        return $this->hasMany(DispatchRecord::class, 'driver_id', 'id');
     }
 
     public function pods(): HasMany
     {
-        return $this->hasMany(\App\Models\ProofOfDelivery::class, 'driver_id', 'id');
+        return $this->hasMany(ProofOfDelivery::class, 'driver_id', 'id');
     }
 
     public function deliveryRecords(): HasMany
     {
-        return $this->hasMany(\App\Models\DeliveryRecord::class, 'driver_id', 'id');
+        return $this->hasMany(DeliveryRecord::class, 'driver_id', 'id');
     }
 
     public function incidentsList(): HasMany
     {
-        return $this->hasMany(\App\Models\Incident::class, 'driver_id', 'id');
+        return $this->hasMany(Incident::class, 'driver_id', 'id');
     }
 
     public function opsRequests(): HasMany
     {
-        return $this->hasMany(\App\Models\OpsRequest::class, 'driver_id', 'id');
+        return $this->hasMany(OpsRequest::class, 'driver_id', 'id');
     }
 }

@@ -13,6 +13,7 @@ class Rfq extends BaseModel
     use HasUlids;
 
     protected $table = 'rfqs';
+
     const UPDATED_AT = null;
 
     protected function casts(): array
@@ -25,36 +26,36 @@ class Rfq extends BaseModel
 
     public function pr(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseRequisition::class, 'pr_id', 'id');
+        return $this->belongsTo(PurchaseRequisition::class, 'pr_id', 'id');
     }
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'delivery_warehouse_id', 'id');
+        return $this->belongsTo(Warehouse::class, 'delivery_warehouse_id', 'id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(\App\Models\RfqLine::class, 'rfq_id', 'id');
+        return $this->hasMany(RfqLine::class, 'rfq_id', 'id');
     }
 
     public function suppliers(): HasMany
     {
-        return $this->hasMany(\App\Models\RfqSupplier::class, 'rfq_id', 'id');
+        return $this->hasMany(RfqSupplier::class, 'rfq_id', 'id');
     }
 
     public function quotations(): HasMany
     {
-        return $this->hasMany(\App\Models\SupplierQuotation::class, 'rfq_id', 'id');
+        return $this->hasMany(SupplierQuotation::class, 'rfq_id', 'id');
     }
 
     public function awarded(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\SupplierQuotation::class, 'awarded_quotation_id', 'id');
+        return $this->belongsTo(SupplierQuotation::class, 'awarded_quotation_id', 'id');
     }
 
     public function pos(): HasMany
     {
-        return $this->hasMany(\App\Models\PurchaseOrder::class, 'rfq_id', 'id');
+        return $this->hasMany(PurchaseOrder::class, 'rfq_id', 'id');
     }
 }

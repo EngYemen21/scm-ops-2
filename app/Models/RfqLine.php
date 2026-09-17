@@ -12,6 +12,7 @@ class RfqLine extends BaseModel
     use HasUlids;
 
     protected $table = 'rfq_lines';
+
     public $timestamps = false;
 
     protected function casts(): array
@@ -24,11 +25,11 @@ class RfqLine extends BaseModel
 
     public function rfq(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Rfq::class, 'rfq_id', 'id');
+        return $this->belongsTo(Rfq::class, 'rfq_id', 'id');
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id', 'id');
+        return $this->belongsTo(Product::class, 'product_id', 'id');
     }
 }
