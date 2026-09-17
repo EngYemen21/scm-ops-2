@@ -1,0 +1,1 @@
+import{Ft as e,Jt as t,Nt as n,wt as r}from"./app-VOErIiWz.js";var i={__name:`KpiGrid`,props:{compact:{type:Boolean,default:!1}},setup(i){return(a,o)=>(n(),r(`div`,{class:t([`kpi-grid`,{compact:i.compact}])},[e(a.$slots,`default`)],2))}};export{i as t};

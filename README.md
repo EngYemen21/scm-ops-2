@@ -14,20 +14,27 @@ permissions, error codes) and the same screens. Reference material lives in `doc
 
 ## Quick start
 
-Requirements: PHP 8.3 (extensions: pdo_mysql, mbstring, openssl, intl, curl, fileinfo, zip, gd, sodium), Composer 2,
-Node 20+, MySQL 8.
+**دليل الفريق بالعربية: [docs/TEAM-START.ar.md](docs/TEAM-START.ar.md)**
+
+Requirements: PHP 8.3 (extensions: pdo_mysql, mbstring, openssl, intl, curl, fileinfo, zip, gd, sodium), Composer 2, and
+either Docker or a MySQL 8 server. Node 20+ only when you change the client (`public/build` is committed).
 
 ```bash
-composer install
-npm install
-cp .env.example .env                 # then fill DB_*, JWT_ACCESS_SECRET, SEED_PASSWORD
-php artisan key:generate
-php artisan migrate --seed           # schema + demo data (users get SEED_PASSWORD)
-npm run build                        # or `npm run dev` for hot reload
+git clone https://github.com/salem-cell/scm-ops-laravel.git && cd scm-ops-laravel
+php tools/setup.php --docker         # or, with your own MySQL: fill DB_* in .env, then `php tools/setup.php`
 php artisan serve --port=8000        # open http://127.0.0.1:8000
 ```
 
-Demo logins (password = `SEED_PASSWORD`): `admin`, `sales`, `wm`, `inv`, `proc`, `disp`, `worker`, `driver`, `gm`, `finance`.
+`tools/setup.php` installs the packages, creates `.env`, **generates every secret locally** (APP_KEY, JWT_ACCESS_SECRET,
+the Docker database password, SEED_PASSWORD), starts MySQL, migrates, loads the demo data and prints the demo password.
+It is safe to re-run; only `--fresh` drops data. `.env` is never committed.
+
+Demo logins (password = `SEED_PASSWORD` in your `.env`): `admin`, `sales`, `wm`, `inv`, `proc`, `disp`, `worker`,
+`driver`, `gm`, `finance`.
+
+After changing `resources/js` or `resources/css`, run `npm run build` and commit `public/build` with the change.
+CI (`.github/workflows/ci.yml`) runs the backend suite on MySQL 8.4, checks and builds the client, and rehearses this
+quick start from scratch on every push and pull request.
 
 ## Everyday commands
 

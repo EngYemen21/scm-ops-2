@@ -1,0 +1,31 @@
+# Local MySQL for development and tests. Start it through the setup script, which generates DB_PASSWORD into .env:
+#     php tools/setup.php --docker
+# Afterwards: `docker compose up -d` / `docker compose down` (add `-v` to delete the data volume as well).
+# Values come from .env — there is no password in this file.
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --default-time-zone=+00:00          # the application stores and reads UTC
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-scm_ops}
+      MYSQL_USER: ${DB_USERNAME:-scm}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is empty - run "php tools/setup.php --docker"}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    ports:
+      - "127.0.0.1:${DB_PORT:-3306}:3306"   # reachable from this machine only
+    volumes:
+      - scm-mysql:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  scm-mysql:
