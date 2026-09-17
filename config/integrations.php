@@ -1,0 +1,35 @@
+<?php
+
+// External providers. Everything is optional: while a provider's variables are empty the system uses the honest
+// "pending" adapter for it — nothing is sent and every status reads `integration_pending`.
+// Code reads these through config('integrations.KEY'), never env(), so `php artisan config:cache` is safe.
+
+return [
+    // Object storage (S3-compatible) for POD photos / signatures and document attachments
+    'OBJECT_STORAGE_ENDPOINT' => env('OBJECT_STORAGE_ENDPOINT'),
+    'OBJECT_STORAGE_BUCKET' => env('OBJECT_STORAGE_BUCKET'),
+    'OBJECT_STORAGE_ACCESS_KEY' => env('OBJECT_STORAGE_ACCESS_KEY'),
+    'OBJECT_STORAGE_SECRET_KEY' => env('OBJECT_STORAGE_SECRET_KEY'),
+    'OBJECT_STORAGE_REGION' => env('OBJECT_STORAGE_REGION'),
+    'OBJECT_STORAGE_PUBLIC_URL' => env('OBJECT_STORAGE_PUBLIC_URL'),
+
+    // Vehicle tracking / telematics
+    'GPS_PROVIDER_URL' => env('GPS_PROVIDER_URL'),
+    'GPS_PROVIDER_TOKEN' => env('GPS_PROVIDER_TOKEN'),
+
+    // Maps / ETA
+    'MAPS_API_KEY' => env('MAPS_API_KEY'),
+
+    // Customer messaging
+    'WHATSAPP_API_URL' => env('WHATSAPP_API_URL'),
+    'WHATSAPP_API_TOKEN' => env('WHATSAPP_API_TOKEN'),
+    'WHATSAPP_TEMPLATE_LANG' => env('WHATSAPP_TEMPLATE_LANG'),
+    'SMTP_URL' => env('SMTP_URL'),
+    'SMTP_FROM' => env('SMTP_FROM'),
+
+    // ERP / accounting and the B2B ordering platform
+    'ERP_BASE_URL' => env('ERP_BASE_URL'),
+    'ERP_TOKEN' => env('ERP_TOKEN'),
+    'B2B_WEBHOOK_URL' => env('B2B_WEBHOOK_URL'),
+    'B2B_WEBHOOK_TOKEN' => env('B2B_WEBHOOK_TOKEN'),
+];

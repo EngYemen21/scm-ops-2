@@ -31,7 +31,7 @@ Artisan::command('scm:reconcile {warehouse? : warehouse code, e.g. RYD}', functi
 })->purpose('Verify that the inventory ledger equals the balances');
 
 Artisan::command('scm:import-snapshot {file} {--keep-passwords : keep imported password hashes (live migration)} {--append : do not truncate tables first}', function (SnapshotImporter $importer) {
-    $password = $this->option('keep-passwords') ? null : env('SEED_PASSWORD');
+    $password = $this->option('keep-passwords') ? null : config('scm_auth.seed_password');
     if (! $this->option('keep-passwords') && ! $password) {
         $this->error('Set SEED_PASSWORD in .env, or pass --keep-passwords.');
 

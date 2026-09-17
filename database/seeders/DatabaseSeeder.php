@@ -24,7 +24,7 @@ class DatabaseSeeder extends Seeder
 
             return;
         }
-        $password = env('SEED_PASSWORD');
+        $password = config('scm_auth.seed_password');
         if (! $password) {
             throw new RuntimeException('Set SEED_PASSWORD in .env before seeding (the demo users need a password).');
         }

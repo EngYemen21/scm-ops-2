@@ -15,7 +15,15 @@ use PHPUnit\Framework\Assert;
  */
 abstract class ApiTestCase extends TestCase
 {
+    /**
+     * Set to true in a test class that asserts the exact figures of the demo data (dashboard KPIs, report totals):
+     * the database is then rebuilt and reseeded before that class, whatever ran before it.
+     */
+    protected const PRISTINE_SEED = false;
+
     private static bool $databaseReady = false;
+
+    private static ?string $pristineFor = null;
 
     /** @var array<string,string> username => access token */
     private static array $tokens = [];
@@ -23,9 +31,11 @@ abstract class ApiTestCase extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        if (! self::$databaseReady) {
+        $needsPristine = static::PRISTINE_SEED && self::$pristineFor !== static::class;
+        if (! self::$databaseReady || $needsPristine) {
             Artisan::call('migrate:fresh', ['--seed' => true, '--force' => true]);
             self::$databaseReady = true;
+            self::$pristineFor = static::PRISTINE_SEED ? static::class : null;
             self::$tokens = [];
         }
         $this->app->make(SettingsService::class)->flush();
