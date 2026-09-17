@@ -205,6 +205,7 @@ class InventoryService
     /** Blocks/unblocks balance rows (count freeze). Blocked rows are excluded from allocation and manual moves. */
     public function setBlocked(array $rowIds, bool $blocked): int
     {
+        $this->requireTransaction();
         if (! $rowIds) {
             return 0;
         }
@@ -324,6 +325,21 @@ class InventoryService
         }
 
         return $reservations->count();
+    }
+
+    /**
+     * Gives back part of a reservation on ONE balance row (short pick: the goods are not where the allocation says).
+     * Only reserved / allocated change — on-hand and the ledger are untouched, so ledger = balance still holds. The
+     * caller marks the matching allocation `released`, which keeps reserved = Σ open allocations.
+     */
+    public function unreserve(string $productId, string $binId, ?string $batchId, int $qty): void
+    {
+        $this->requireTransaction();
+        if ($qty <= 0) {
+            throw AppError::validation('BAD_QTY', 'الكمية يجب أن تكون عددًا صحيحًا أكبر من صفر', 'Quantity must be a positive integer');
+        }
+        $row = $this->lockRow($productId, $binId, $batchId, false);
+        $row?->update(['reserved' => max(0, $row->reserved - $qty), 'allocated' => max(0, $row->allocated - $qty), 'version' => $row->version + 1]);
     }
 
     // ───────────── reconciliation ─────────────
