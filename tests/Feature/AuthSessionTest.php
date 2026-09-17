@@ -67,6 +67,18 @@ class AuthSessionTest extends ApiTestCase
         $this->expectRejected($this->postJson('/api/auth/refresh', ['refreshToken' => $login['refreshToken']]), 'REFRESH_INVALID', [401]);
     }
 
+    public function test_repeated_failed_logins_are_throttled_per_username(): void
+    {
+        $name = 'ghost-'.self::uid();
+        for ($i = 0; $i < 10; $i++) {
+            $this->expectRejected($this->postJson('/api/auth/login', ['username' => $name, 'password' => 'wrong']), 'BAD_CREDENTIALS', [401]);
+        }
+        $blocked = $this->expectRejected($this->postJson('/api/auth/login', ['username' => $name, 'password' => 'wrong']), 'TOO_MANY_ATTEMPTS', [429]);
+        $this->assertNotEmpty($blocked['messageEn']);
+        // another user from the same address is not affected
+        $this->expectOk($this->postJson('/api/auth/login', ['username' => 'admin', 'password' => config('scm_auth.seed_password')]));
+    }
+
     public function test_unknown_route_uses_the_error_contract(): void
     {
         $body = $this->expectRejected($this->getAs('admin', '/api/does-not-exist'), 'HTTP_404', [404]);

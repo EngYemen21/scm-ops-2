@@ -1,58 +1,72 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# B2B ops — Supply Chain Operations (Laravel + Vue)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Procurement · WMS · Inventory · Sales fulfillment · TMS · Fleet · Driver app · POD · Returns · Exceptions.
+Arabic-first (RTL) with English, multi-user, role-based.
 
-## About Laravel
+| Layer | Technology |
+|---|---|
+| API | Laravel 13 (PHP 8.3), MySQL 8, JWT access tokens + rotating refresh tokens |
+| Client | Vue 3 (`<script setup>`), Vue Router, Pinia, TanStack Query, Tailwind CSS 4, Vite |
+| Tests | PHPUnit feature tests against a real MySQL database |
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This is a port of the validated NestJS/React reference system with the **same HTTP contract** (paths, payloads,
+permissions, error codes) and the same screens. Reference material lives in `docs/reference/`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Quick start
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Requirements: PHP 8.3 (extensions: pdo_mysql, mbstring, openssl, intl, curl, fileinfo, zip, gd, sodium), Composer 2,
+Node 20+, MySQL 8.
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+npm install
+cp .env.example .env                 # then fill DB_*, JWT_ACCESS_SECRET, SEED_PASSWORD
+php artisan key:generate
+php artisan migrate --seed           # schema + demo data (users get SEED_PASSWORD)
+npm run build                        # or `npm run dev` for hot reload
+php artisan serve --port=8000        # open http://127.0.0.1:8000
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Demo logins (password = `SEED_PASSWORD`): `admin`, `sales`, `wm`, `inv`, `proc`, `disp`, `worker`, `driver`, `gm`, `finance`.
 
-## Contributing
+## Everyday commands
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+php artisan test                                   # whole suite (database scm_ops_test, rebuilt + seeded per run)
+php artisan test tests/Feature/Sales               # one domain
+php artisan scm:reconcile [RYD]                    # inventory ledger = balances? (exit 1 on mismatch)
+php artisan migrate:fresh --seed                   # reset the dev database to the demo data
+vendor/bin/pint                                    # PHP code style
+node tools/check-vue.mjs resources/js/pages/sales  # static check of Vue files (imports, exports, templates)
+```
 
-## Code of Conduct
+## Where things are
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```
+app/Http/Controllers/Api/<Domain>/   thin controllers: validate → service → return
+app/Services/<Domain>/               business logic (transactions, state machines, audit)
+app/Services/Inventory/InventoryService.php   the ONLY code that changes stock (ledger + row locks + FEFO)
+app/Services/Core/                   audit trail, document numbering, settings, activity/notifications/outbox
+app/Support/                         AppError (error contract), AuthUser, Paging, state machines
+app/Models/                          93 Eloquent models (generated; snake_case columns, camelCase JSON)
+routes/api/<domain>.php              routes + permissions of each domain
+config/scm.php                       statuses, state machines, labels, permission catalogue
+resources/js/                        Vue client (pages/<domain>, components, layout, api, stores, router)
+tests/Feature/                       feature tests per domain + AcceptanceTest (the full from-scratch story)
+docs/                                CONVENTIONS.md (backend) · FRONTEND.md (client) · RUNBOOK.md (run / deploy / migrate data)
+tools/                               generators and checkers
+```
 
-## Security Vulnerabilities
+## Principles the code keeps
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- **Server is the authority**: permissions (`perm:` middleware → 403 + audit row, nothing changed), validation, state
+  machines and business rules are enforced by the API; the client only hides what a user cannot do.
+- **Stock integrity**: every quantity change is an append-only ledger movement posted by `InventoryService` inside a
+  transaction with row locks — no negative stock, no overselling under concurrency, FEFO that never picks expired or
+  quarantined batches. `scm:reconcile` proves ledger = balances.
+- **Idempotency**: mutations sent with `Idempotency-Key` are replayed, not repeated (double clicks, retries).
+- **Honest integrations**: storage, GPS, maps, messaging, ERP and the B2B webhook report `integration_pending` until a
+  provider is configured in `.env`; nothing ever claims to be sent, uploaded or live when it is not.
+- **Traceability**: audit log, status history and activity feed for every document; deep links between them.
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Read `docs/CONVENTIONS.md` before changing the API and `docs/FRONTEND.md` before changing the client.

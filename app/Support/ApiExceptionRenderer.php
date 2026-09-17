@@ -4,18 +4,24 @@ namespace App\Support;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 /** Maps every exception raised under /api to the single error contract of the API. */
 final class ApiExceptionRenderer
 {
-    public static function render(Throwable $e, Request $request): JsonResponse
+    public static function render(Throwable $e, Request $request): Response
     {
+        // A response somebody already built (e.g. the sign-in rate limiter) passes through untouched.
+        if ($e instanceof HttpResponseException) {
+            return $e->getResponse();
+        }
+
         $requestId = $request->attributes->get('requestId');
         $status = 500;
         $body = ['category' => 'SYSTEM', 'code' => 'INTERNAL', 'message' => 'خطأ غير متوقع في النظام', 'messageEn' => 'Unexpected system error', 'requestId' => $requestId];
