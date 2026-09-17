@@ -11,7 +11,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REF = process.argv[2] || 'http://127.0.0.1:3000/api';
 const NEW = process.argv[3] || 'http://127.0.0.1:8000/api';
 const USER = process.env.CONTRACT_USER || 'admin';
-const PASS = process.env.SEED_PASSWORD || 'Scm@2026';
+const PASS = process.env.SEED_PASSWORD;
+if (!PASS) { console.error('set SEED_PASSWORD (the demo password both systems were seeded with)'); process.exit(2); }
 
 async function login(base) {
   const r = await fetch(base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ username: USER, password: PASS }) });

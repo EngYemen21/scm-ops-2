@@ -47,6 +47,15 @@ for (const model of Prisma.dmmf.datamodel.models) {
   rows += data.length;
 }
 await prisma.$disconnect();
+
+// The committed demo snapshot never carries password hashes (the seeder sets SEED_PASSWORD on every user anyway).
+// A LIVE migration needs them: write to another file, or set KEEP_PASSWORD_HASHES=1.
+const isDemoFile = path.resolve(out) === path.join(ROOT, 'database/seed-data/snapshot.json');
+if (isDemoFile && process.env.KEEP_PASSWORD_HASHES !== '1') {
+  for (const t of Object.values(tables)) if (t.model === 'User') t.rows.forEach((r) => { r.passwordHash = '!'; });
+  console.log('password hashes removed from the demo snapshot');
+}
+
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, JSON.stringify({ takenAt: new Date().toISOString(), source: 'reference NestJS/PostgreSQL system', tables }));
 console.log('snapshot: ' + Object.keys(tables).length + ' tables, ' + rows + ' rows -> ' + out + ' (' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
