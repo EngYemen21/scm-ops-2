@@ -1,0 +1,43 @@
+{
+  "StorageClass": [
+    "ambient",
+    "chilled",
+    "frozen"
+  ],
+  "ZoneType": [
+    "ambient",
+    "chilled",
+    "frozen",
+    "hazmat",
+    "quarantine",
+    "staging",
+    "damaged",
+    "returns"
+  ],
+  "BinStatus": [
+    "active",
+    "blocked",
+    "full",
+    "inactive"
+  ],
+  "MovementType": [
+    "opening",
+    "grn",
+    "stg",
+    "putaway",
+    "alloc",
+    "pick",
+    "pack",
+    "load",
+    "trf",
+    "transit",
+    "move",
+    "ret",
+    "restock",
+    "adj",
+    "dmg",
+    "scrap",
+    "qtn",
+    "supret"
+  ]
+}
