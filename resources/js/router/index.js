@@ -20,8 +20,10 @@ const routes = [
       ...ALL_ROUTE_META.map((r) => ({ path: r.path.slice(1), name: r.key, component: pageOf(r.key), meta: { key: r.key, title: r.title, permission: r.permission, param: r.param } })),
       // UI kit: the worked example of the page pattern (not in the sidebar).
       { path: 'kit', name: 'kit', component: () => import('../pages/dev/KitPage.vue'), meta: { key: 'kit', title: { ar: 'UI Kit', en: 'UI kit' } } },
-      { path: '', name: 'home', redirect: () => useAuth().homePath },
-      { path: ':pathMatch(.*)*', name: 'fallback', redirect: () => useAuth().homePath },
+      // No `redirect` here: a redirect is resolved before the guard has booted the session, so every role would land
+      // on /dash (which a worker or driver may not open). The guard below sends them to their own home page instead.
+      { path: '', name: 'home', component: ComingSoon },
+      { path: ':pathMatch(.*)*', name: 'fallback', component: ComingSoon },
     ],
   },
 ];
@@ -33,5 +35,6 @@ router.beforeEach(async (to) => {
   await auth.boot();
   if (to.meta.public) return auth.user && to.name === 'login' ? (typeof to.query.from === 'string' ? to.query.from : auth.homePath) : true;
   if (!auth.user) return { name: 'login', query: to.fullPath && to.fullPath !== '/' ? { from: to.fullPath } : {} };
+  if (to.name === 'home' || to.name === 'fallback') return auth.homePath;
   return true;
 });

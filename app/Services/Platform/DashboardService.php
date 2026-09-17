@@ -180,7 +180,7 @@ class DashboardService
         $out = [];
 
         $exceptions = DB::select(
-            'SELECT e.number, e.kind, e.severity, e.owner_role, e.text_ar, e.text_en, ('.self::SLA_DUE.' < ?) AS breached
+            'SELECT e.number, e.kind, e.severity, e.status, e.owner_role, e.text_ar, e.text_en, ('.self::SLA_DUE.' < ?) AS breached
              FROM exceptions e WHERE e.status <> \'resolved\' AND (e.severity = \'c\' OR '.self::SLA_DUE.' < ?)
              ORDER BY (e.severity = \'c\') DESC, e.created_at ASC, e.id ASC LIMIT 6',
             [$now, $now],
@@ -192,6 +192,7 @@ class DashboardService
                 'textAr' => ($breached ? 'خرق SLA — ' : 'استثناء حرج — ').$e->text_ar,
                 'textEn' => ($breached ? 'SLA breached — ' : 'Critical — ').($e->text_en ?: $e->text_ar),
                 'owner' => $e->owner_role, 'path' => "/exc/{$e->number}",
+                'status' => $e->status, // so the client offers acknowledge only while the exception is still open
             ];
         }
 

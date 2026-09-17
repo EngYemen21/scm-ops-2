@@ -37,6 +37,10 @@ const userName = computed(() => (auth.user ? pname(auth.user) : ''));
           <Btn tone="dark" class="!h-11 flex-1 !text-[11.5px]" :loading="pending" :disabled="disabled" :label="submitLabel" @click="emit('submit')" />
           <Btn tone="soft" class="!h-11 !w-[110px]" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="emit('close')" />
         </div>
+        <!-- a disabled button with no reason looks broken: say what is missing -->
+        <div v-if="disabled && !pending" class="mt-2 text-[10px] font-bold leading-[1.7] text-warn" role="status">
+          {{ t('أكمل الحقول الإلزامية (*) لتفعيل الزر', 'Fill in the required fields (*) to enable this button') }}
+        </div>
         <div v-if="note !== null" class="mt-2 text-[9px] leading-[1.7] text-faint">
           {{ note ? bi(note) : t(`* حقول إلزامية · يُسجل الإجراء في Audit Trail باسم ${userName}`, `* required fields · action is recorded in the Audit Trail as ${userName}`) }}
         </div>

@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import { api, useAction } from '@/api/client';
 import { Btn, Chip, SelectInput, TextInput } from '@/components';
 import { t } from '@/i18n';
-import { confirm } from '@/stores/ui';
+import { confirm, toast } from '@/stores/ui';
 import { uomOpts, useLookups } from './_shared';
 
 const props = defineProps({
@@ -23,7 +23,7 @@ const uoms = computed(() => uomOpts(lookups.data.value));
 
 async function add() {
   const code = bc.value.trim();
-  if (!code) return;
+  if (!code) { toast.say({ ar: 'اكتب الباركود أو امسحه أولًا', en: 'Type or scan the barcode first' }); return; }
   const r = await act.run(() => api.postIdempotent(`/products/${props.product.id}/barcodes`, { barcode: code, uomCode: uom.value || undefined, isPrimary: primary.value }), { success: { ar: `أُضيف الباركود ${code}`, en: `Barcode ${code} added` } });
   if (r) { bc.value = ''; uom.value = ''; primary.value = false; }
 }

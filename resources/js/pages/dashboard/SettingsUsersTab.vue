@@ -6,6 +6,8 @@ import { api, useAction, useGet } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, FormDrawer, TextInput } from '@/components';
 import { fmtDate, fmtNum, lang, t } from '@/i18n';
 import { ROLE_LABELS } from '@/shared';
+import { useAuth } from '@/stores/auth';
+import { confirm } from '@/stores/ui';
 import CardTitle from './CardTitle.vue';
 import PillMulti from './PillMulti.vue';
 import { roleName } from './settings';
@@ -33,7 +35,11 @@ const editing = computed(() => (drawer.value?.mode === 'edit' ? drawer.value.use
 const editInitial = computed(() => (editing.value ? { nameAr: editing.value.nameAr, nameEn: editing.value.nameEn, email: editing.value.email || '', active: String(editing.value.active), roles: editing.value.roles, warehouses: editing.value.warehouses } : null));
 
 const act = useAction();
-function toggleActive(u) {
+const auth = useAuth();
+// Your own row has no deactivate button (the server refuses it too: USER_SELF_DEACTIVATE).
+const isSelf = (u) => u.id === auth.user?.id;
+async function toggleActive(u) {
+  if (u.active && !(await confirm({ title: { ar: `إيقاف حساب ${u.username}؟`, en: `Deactivate ${u.username}?` }, sub: { ar: 'تُلغى جلساته فورًا ولن يستطيع الدخول حتى يُعاد تفعيله.', en: 'Their sessions end now and they cannot sign in until reactivated.' }, tone: 'danger', okLabel: { ar: 'إيقاف', en: 'Deactivate' } }))) return;
   act.run(() => api.patch(`/users/${u.id}`, { active: !u.active }), {
     success: u.active ? { ar: `تم إيقاف ${u.username}`, en: `${u.username} deactivated` } : { ar: `تم تفعيل ${u.username}`, en: `${u.username} activated` },
     invalidate: ['users'],
@@ -102,7 +108,7 @@ const editFields = [
       <template #cell-act="{ row }">
         <span class="row !gap-1.5" @click.stop>
           <Btn tone="soft" size="sm" :label="{ ar: 'تعديل', en: 'Edit' }" @click="drawer = { mode: 'edit', user: row }" />
-          <Btn :tone="row.active ? 'softRed' : 'softGreen'" size="sm" :loading="act.pending.value" :label="row.active ? { ar: 'إيقاف', en: 'Deactivate' } : { ar: 'تفعيل', en: 'Activate' }" @click="toggleActive(row)" />
+          <Btn v-if="!isSelf(row)" :tone="row.active ? 'softRed' : 'softGreen'" size="sm" :loading="act.pending.value" :label="row.active ? { ar: 'إيقاف', en: 'Deactivate' } : { ar: 'تفعيل', en: 'Activate' }" @click="toggleActive(row)" />
         </span>
       </template>
     </DataTable>

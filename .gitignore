@@ -25,3 +25,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+/public/_sweep.js
+/public/_buttons.js
+/public/_s_*.json

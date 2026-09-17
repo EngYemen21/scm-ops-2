@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useList } from '@/api/client';
 import { Btn, Chip, DataTable, DateInput, ErrorBanner, PageHead, SectionCard, TextInput } from '@/components';
 import { fmtDate, fmtNum, t } from '@/i18n';
+import { toast } from '@/stores/ui';
 import { MOVEMENT_LABELS } from '@/shared';
 import { useWarehouse } from '@/stores/warehouse';
 import Hint from './Hint.vue';
@@ -60,7 +61,10 @@ const sel = ref(null);
 /** Document number open in the trace drawer. */
 const trace = ref(null);
 const traceInput = ref('');
-const runTrace = () => { if (traceInput.value.trim()) trace.value = traceInput.value.trim(); };
+const runTrace = () => {
+  const n = traceInput.value.trim();
+  if (n) trace.value = n; else toast.say({ ar: 'اكتب رقم المستند أولًا (مثل GRN-2026-0001)', en: 'Enter a document number first (e.g. GRN-2026-0001)' });
+};
 
 const cols = [
   { key: 'number', header: { ar: 'الحركة Tx', en: 'Tx ID' }, width: '112px' },

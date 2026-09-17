@@ -74,6 +74,9 @@ class UsersService
     public function update(AuthUser $actor, string $id, array $dto): array
     {
         $u = User::with('roles.role')->find($id) ?? throw AppError::notFound('USER_NOT_FOUND', 'المستخدم غير موجود');
+        if (($dto['active'] ?? null) === false && $id === $actor->id) {
+            throw AppError::rule('USER_SELF_DEACTIVATE', 'لا يمكنك إيقاف حسابك بنفسك — اطلب ذلك من مدير آخر', 'You cannot deactivate your own account — ask another administrator');
+        }
         $data = [];
         foreach (['nameAr' => 'name_ar', 'nameEn' => 'name_en', 'email' => 'email', 'active' => 'active'] as $k => $column) {
             if (isset($dto[$k])) {
@@ -108,6 +111,9 @@ class UsersService
                 // A deactivated account loses its sessions outright (no rotation grace).
                 RefreshToken::where('user_id', $id)->whereNull('revoked_at')->update(['revoked_at' => now(), 'expires_at' => now()]);
             }
+            if (($dto['active'] ?? null) === false || isset($dto['roles'])) {
+                $this->assertSomeoneCanManageUsers();
+            }
             $logged = $dto;
             if (array_key_exists('password', $logged)) {
                 $logged['password'] = $logged['password'] ? '***' : null;
@@ -116,6 +122,23 @@ class UsersService
         });
 
         return ['ok' => true];
+    }
+
+    /**
+     * The system must never be left without an active account that can manage users — nobody could repair that from
+     * the UI. Runs inside the caller's transaction, after the change, so a violation rolls the change back.
+     */
+    private function assertSomeoneCanManageUsers(): void
+    {
+        $remaining = DB::table('users')
+            ->join('user_roles', 'user_roles.user_id', '=', 'users.id')
+            ->join('role_permissions', 'role_permissions.role_id', '=', 'user_roles.role_id')
+            ->join('permissions', 'permissions.id', '=', 'role_permissions.permission_id')
+            ->where('users.active', true)->where('permissions.key', 'user.manage')
+            ->exists();
+        if (! $remaining) {
+            throw AppError::rule('LAST_USER_ADMIN', 'لا يمكن تنفيذ التغيير: لن يبقى أي حساب نشط يملك صلاحية إدارة المستخدمين', 'Refused: no active account would be left with the user-management permission');
+        }
     }
 
     /** @param  string[]  $permissions */
@@ -131,6 +154,7 @@ class UsersService
             if ($perms->isNotEmpty()) {
                 RolePermission::insert($perms->map(fn (Permission $p) => ['role_id' => $role->id, 'permission_id' => $p->id])->all());
             }
+            $this->assertSomeoneCanManageUsers();
             $this->audit->log($actor, ['action' => 'ROLE.PERMISSIONS', 'entityType' => 'Role', 'entityId' => $role->id, 'entityNumber' => $roleKey,
                 'oldValue' => $role->permissions->map(fn ($p) => $p->permission?->key)->filter()->values()->all(), 'newValue' => $permissions]);
         });

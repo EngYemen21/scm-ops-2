@@ -56,7 +56,12 @@ class DashboardTest extends ApiTestCase
         $this->assertSame('TRP-DASH', $recent[0]['entityNumber'], 'latest first, camelCase');
         $this->assertLessThanOrEqual(8, count($recent));
         foreach ($d['actions'] as $a) {
-            $this->assertSame(['kind', 'number', 'textAr', 'textEn', 'owner', 'path'], array_keys($a));
+            // exception rows also carry their real status, so the client never offers "acknowledge" twice
+            $isExc = in_array($a['kind'], ['exception', 'sla_breach'], true);
+            $this->assertSame(['kind', 'number', 'textAr', 'textEn', 'owner', 'path', ...($isExc ? ['status'] : [])], array_keys($a));
+            if ($isExc) {
+                $this->assertContains($a['status'], ['open', 'ack']);
+            }
             $this->assertStringStartsWith('/', $a['path']);
         }
         $this->assertSame(['pos', 'prs'], array_keys($d['pendingApprovals']));

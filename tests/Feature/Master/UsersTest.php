@@ -151,4 +151,24 @@ class UsersTest extends ApiTestCase
         $this->expectOk($this->putAs('admin', '/api/users/roles/finance/permissions', ['permissions' => $inv]));
         $this->expectRejected($this->postAs('finance', '/api/uoms', ['code' => 'fi2'.substr(self::username(), -4), 'nameAr' => 'مرفوض']), 'FORBIDDEN', [403]);
     }
+
+    public function test_nobody_can_lock_the_system_out_of_user_management(): void
+    {
+        $admin = User::where('username', 'admin')->firstOrFail();
+        $roles = fn () => collect($this->expectOk($this->getAs('admin', '/api/users')))->firstWhere('username', 'admin')['roles'];
+        $before = $roles();
+
+        // an administrator cannot deactivate their own account
+        $this->expectRejected($this->patchAs('admin', "/api/users/{$admin->id}", ['active' => false]), 'USER_SELF_DEACTIVATE', [422]);
+        $this->assertTrue((bool) $admin->fresh()->active);
+
+        // admin is the only active account with user.manage: dropping the role is refused and rolled back
+        $this->expectRejected($this->patchAs('admin', "/api/users/{$admin->id}", ['roles' => ['finance']]), 'LAST_USER_ADMIN', [422]);
+        $this->assertSame($before, $roles());
+
+        // …while adding a role to yourself stays possible
+        $this->expectOk($this->patchAs('admin', "/api/users/{$admin->id}", ['roles' => [...$before, 'finance']]));
+        $this->expectOk($this->patchAs('admin', "/api/users/{$admin->id}", ['roles' => $before]));
+        $this->assertSame($before, $roles());
+    }
 }

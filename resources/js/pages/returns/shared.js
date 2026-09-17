@@ -5,7 +5,7 @@ import { computed, ref, toValue, watch } from 'vue';
 import { api, useAction, useList } from '@/api/client';
 import { lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
-import { confirm } from '@/stores/ui';
+import { ask, confirm } from '@/stores/ui';
 import { useWarehouse } from '@/stores/warehouse';
 
 // ───────────────────────────────────────────── labels
@@ -69,7 +69,7 @@ export function useReturnActions(ret, onDone) {
   }
   const approve = () => run('approve', t('اعتُمد المرتجع — بانتظار الاستلام', 'Approved — awaiting receipt'));
   async function reject() {
-    const reason = window.prompt(t('سبب الرفض', 'Rejection reason'));
+    const reason = await ask({ title: { ar: `رفض المرتجع ${ret().number}؟`, en: `Reject ${ret().number}?` }, label: { ar: 'سبب الرفض', en: 'Rejection reason' }, tone: 'danger', okLabel: { ar: 'رفض', en: 'Reject' } });
     if (reason == null) return;
     await run('reject', t('رُفض المرتجع', 'Return rejected'), { reason: reason || undefined });
   }
@@ -77,7 +77,7 @@ export function useReturnActions(ret, onDone) {
     if (await confirm({ title: { ar: `استلام المرتجع ${ret().number}؟`, en: `Receive ${ret().number}?` }, sub: { ar: 'تُستلم الأصناف في منطقة المرتجعات بانتظار الفحص.', en: 'Items are received into the returns area pending inspection.' }, tone: 'dark' })) await run('receive', t('استُلم المرتجع — بانتظار الفحص', 'Received — awaiting inspection'));
   }
   async function inspect() {
-    const findings = window.prompt(t('نتائج الفحص (اختياري)', 'Inspection findings (optional)'));
+    const findings = await ask({ title: { ar: `بدء فحص ${ret().number}`, en: `Start inspecting ${ret().number}` }, label: { ar: 'نتائج الفحص (اختياري)', en: 'Inspection findings (optional)' }, okLabel: { ar: 'بدء الفحص', en: 'Start inspection' } });
     if (findings == null) return;
     await run('inspect', t('بدأ الفحص — قرار مطلوب', 'Inspection started — decision needed'), { findings: findings || undefined });
   }

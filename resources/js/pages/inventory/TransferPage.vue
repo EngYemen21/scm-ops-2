@@ -122,7 +122,7 @@ const excText = (x) => (lang.value === 'ar' ? x.textAr : x.textEn || x.textAr);
 <template>
   <!-- No `title`: the shell's default for /trf/:number is already "تحويل · <number>" with the number in Quicksand. -->
   <PageHead :sub="tr ? t(`${wname(tr.fromWarehouse)} ← ${wname(tr.toWarehouse)}`, `${wname(tr.fromWarehouse)} → ${wname(tr.toWarehouse)}`) : null">
-    <Btn tone="soft" size="sm" :label="{ ar: '← كل التحويلات', en: '← All transfers' }" @click="router.push('/returns')" />
+    <Btn tone="soft" size="sm" :label="{ ar: '← كل التحويلات', en: '← All transfers' }" @click="router.push('/returns?tab=trf')" />
   </PageHead>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <ErrorBanner v-if="!reject" :error="act.error.value" @close="act.clearError()" />

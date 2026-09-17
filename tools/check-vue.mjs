@@ -81,6 +81,13 @@ function syntaxCheck(file, js) {
   finally { fs.rmSync(tmp, { force: true }); }
 }
 
+// Native dialogs block the page, cannot be styled or translated and throw in embedded browsers: use confirm() / ask()
+// from stores/ui.js.
+function nativeDialogs(file, source) {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  for (const m of code.matchAll(/\bwindow\.(prompt|alert|confirm)\s*\(/g)) report(file, `window.${m[1]}() is not allowed — use confirm() / ask() from stores/ui.js`);
+}
+
 let count = 0;
 for (const t of targets) {
   const abs = path.resolve(ROOT, t);
@@ -88,6 +95,7 @@ for (const t of targets) {
   for (const file of walk(abs)) {
     count++;
     const source = fs.readFileSync(file, 'utf8');
+    nativeDialogs(file, source);
     if (file.endsWith('.js')) { checkImports(file, source); syntaxCheck(file, source); continue; }
     const { descriptor, errors } = parse(source, { filename: file });
     if (errors.length) { errors.forEach((e) => report(file, 'parse: ' + e.message)); continue; }
@@ -103,6 +111,8 @@ for (const t of targets) {
     if (descriptor.template) {
       const r = compileTemplate({ source: descriptor.template.content, filename: file, id: 'check' });
       r.errors.forEach((e) => report(file, 'template: ' + (e.message || e)));
+      // Templates only see the component's own bindings: `window.x` there is `undefined.x` at click time.
+      for (const m of r.code.matchAll(/_ctx\.(window|document|localStorage|sessionStorage|navigator)\b/g)) report(file, `template uses the browser global \`${m[1]}\` — wrap it in a function in <script setup>`);
       const used = new Set([...descriptor.template.content.matchAll(/<([A-Z][A-Za-z0-9]*)[\s/>]/g)].map((m) => m[1]));
       for (const tag of used) if (!BUILTIN.has(tag) && !imported.has(tag)) report(file, `<${tag}> is used in the template but never imported`);
     }

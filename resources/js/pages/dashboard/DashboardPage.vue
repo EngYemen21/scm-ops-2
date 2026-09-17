@@ -73,7 +73,7 @@ const go = (path) => { if (path) router.push(path); };
           <ListRow v-for="(a, i) in actions" :key="`${a.kind}-${a.number}-${i}`" clickable @click="go(a.path)">
             <Chip :map="ACTION_SEV" :k="a.kind" class="flex-none" />
             <div class="flex-1 text-[11px] font-bold leading-[1.8] text-sec">{{ lang === 'ar' ? a.textAr : a.textEn }}</div>
-            <ExceptionActions v-if="isExc(a)" :row="{ number: a.number, status: 'open' }" @act="(mode) => exc.open(mode, a.number)" />
+            <ExceptionActions v-if="isExc(a)" :row="{ number: a.number, status: a.status || 'open' }" @act="(mode) => exc.open(mode, a.number)" />
             <Chip v-if="a.owner" small :label="a.owner" fg="#654e92" bg="#efeaf8" />
           </ListRow>
         </template>

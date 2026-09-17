@@ -5,7 +5,7 @@ import { computed, ref } from 'vue';
 import { api, useAction } from '@/api/client';
 import { Btn, Chip, NumberInput, SelectInput, TextInput } from '@/components';
 import { fmtMoney, t } from '@/i18n';
-import { confirm } from '@/stores/ui';
+import { confirm, toast } from '@/stores/ui';
 import { supOpts, useLookups } from './_shared';
 
 const props = defineProps({
@@ -26,7 +26,7 @@ const suppliers = computed(() => supOpts(lookups.data.value));
 const leadOf = (s) => s.leadDays ?? s.supplier.leadDays;
 
 async function link() {
-  if (!code.value) return;
+  if (!code.value) { toast.say({ ar: 'اختر المورد أولًا', en: 'Choose the supplier first' }); return; }
   const body = { supplierCode: code.value, price: price.value ?? undefined, leadDays: lead.value ?? undefined, preferred: pref.value, supplierSku: ssku.value || undefined };
   const r = await act.run(() => api.postIdempotent(`/products/${props.product.id}/suppliers`, body), { success: { ar: 'رُبط المورد بالمنتج', en: 'Supplier linked' } });
   if (r) { code.value = ''; price.value = null; lead.value = null; pref.value = false; ssku.value = ''; }
