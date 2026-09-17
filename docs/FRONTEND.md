@@ -75,6 +75,7 @@ page work. Need something new? Put it in your domain folder; propose shared chan
 | `<FormDrawer submit onDone …>` with field `render` | same props + `@done`, `@close`; custom control via `<template #field-<k>="{ value, set, values, error }">` |
 | `<Drawer open onClose footer={…}>` / `<Modal>` | `<Drawer :open @close><template #footer>…</template></Drawer>` |
 | `const confirm = useConfirm()` | `import { confirm } from '@/stores/ui'` → `if (await confirm({ title, sub, tone })) …` |
+| `window.prompt(…)` | `import { ask } from '@/stores/ui'` → `const reason = await ask({ title, label, required: true }); if (reason === null) return;` — native dialogs are rejected by `tools/check-vue.mjs` |
 | `useToast().say(…)` | `import { toast } from '@/stores/ui'` → `toast.say({ ar, en })` |
 | `act.run(() => api.postIdempotent(path, body), { success, invalidate })` | identical; `act.pending.value`, `act.error.value` |
 | `<KV k v ltr />` helper of a domain | `<KV :k="{ ar, en }" :v="…" ltr />` from `@/components` |
