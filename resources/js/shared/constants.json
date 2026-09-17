@@ -1,0 +1,2383 @@
+{
+ "ROLE_KEYS": [
+  "super",
+  "sales",
+  "wm",
+  "inv",
+  "proc",
+  "disp",
+  "worker",
+  "driver",
+  "gm",
+  "finance",
+  "auditor"
+ ],
+ "STORAGE_CLASSES": [
+  "ambient",
+  "chilled",
+  "frozen"
+ ],
+ "ZONE_TYPES": [
+  "ambient",
+  "chilled",
+  "frozen",
+  "hazmat",
+  "quarantine",
+  "staging",
+  "damaged",
+  "returns"
+ ],
+ "PICK_STRATEGIES": [
+  "fefo",
+  "fifo",
+  "lifo"
+ ],
+ "BIN_TYPES": [
+  "shelf",
+  "pallet",
+  "flow",
+  "bulk",
+  "dock",
+  "virtual"
+ ],
+ "MOVEMENT_TYPES": [
+  "opening",
+  "grn",
+  "stg",
+  "putaway",
+  "alloc",
+  "pick",
+  "pack",
+  "load",
+  "trf",
+  "ret",
+  "adj",
+  "dmg",
+  "qtn",
+  "scrap",
+  "supret",
+  "move",
+  "restock",
+  "transit"
+ ],
+ "PR_STATES": [
+  "draft",
+  "submitted",
+  "review",
+  "approved",
+  "rejected",
+  "converted",
+  "closed"
+ ],
+ "PR_TRANSITIONS": {
+  "draft": [
+   "submitted"
+  ],
+  "submitted": [
+   "review",
+   "approved",
+   "rejected"
+  ],
+  "review": [
+   "approved",
+   "rejected"
+  ],
+  "approved": [
+   "converted",
+   "closed"
+  ],
+  "rejected": [],
+  "converted": [
+   "closed"
+  ],
+  "closed": []
+ },
+ "RFQ_STATES": [
+  "draft",
+  "open",
+  "quoted",
+  "compared",
+  "awarded",
+  "closed",
+  "cancelled"
+ ],
+ "PO_STATES": [
+  "draft",
+  "pending",
+  "approved",
+  "sent",
+  "confirmed",
+  "partial",
+  "received",
+  "closed",
+  "cancelled"
+ ],
+ "PO_TRANSITIONS": {
+  "draft": [
+   "pending",
+   "cancelled"
+  ],
+  "pending": [
+   "approved",
+   "cancelled"
+  ],
+  "approved": [
+   "sent",
+   "cancelled"
+  ],
+  "sent": [
+   "confirmed",
+   "partial",
+   "received"
+  ],
+  "confirmed": [
+   "partial",
+   "received"
+  ],
+  "partial": [
+   "partial",
+   "received",
+   "closed"
+  ],
+  "received": [
+   "closed"
+  ],
+  "closed": [],
+  "cancelled": []
+ },
+ "SHIPMENT_STATES": [
+  "expected",
+  "arrived",
+  "inspecting",
+  "putaway",
+  "done",
+  "cancelled"
+ ],
+ "SHIPMENT_TRANSITIONS": {
+  "expected": [
+   "arrived",
+   "cancelled"
+  ],
+  "arrived": [
+   "inspecting"
+  ],
+  "inspecting": [
+   "putaway"
+  ],
+  "putaway": [
+   "done"
+  ],
+  "done": [],
+  "cancelled": []
+ },
+ "QC_RESULTS": [
+  "accepted",
+  "damaged",
+  "rejected"
+ ],
+ "QUOTATION_STATES": [
+  "draft",
+  "sent",
+  "approved",
+  "rejected",
+  "converted",
+  "expired"
+ ],
+ "QUOTATION_TRANSITIONS": {
+  "draft": [
+   "sent",
+   "approved",
+   "rejected",
+   "expired"
+  ],
+  "sent": [
+   "approved",
+   "rejected",
+   "expired"
+  ],
+  "approved": [
+   "converted",
+   "expired",
+   "rejected"
+  ],
+  "rejected": [],
+  "converted": [],
+  "expired": []
+ },
+ "SO_STATES": [
+  "draft",
+  "confirmed",
+  "reserved",
+  "allocated",
+  "preparing",
+  "picking",
+  "picked",
+  "packed",
+  "readydisp",
+  "loaded",
+  "outfordel",
+  "delivered",
+  "partial",
+  "failed",
+  "completed",
+  "cancelled",
+  "returned"
+ ],
+ "SO_TRANSITIONS": {
+  "draft": [
+   "confirmed",
+   "cancelled"
+  ],
+  "confirmed": [
+   "reserved",
+   "preparing",
+   "cancelled"
+  ],
+  "reserved": [
+   "allocated",
+   "preparing",
+   "cancelled"
+  ],
+  "allocated": [
+   "picking",
+   "preparing",
+   "cancelled"
+  ],
+  "preparing": [
+   "picking",
+   "cancelled"
+  ],
+  "picking": [
+   "picked",
+   "picking"
+  ],
+  "picked": [
+   "packed"
+  ],
+  "packed": [
+   "readydisp",
+   "loaded"
+  ],
+  "readydisp": [
+   "loaded"
+  ],
+  "loaded": [
+   "outfordel"
+  ],
+  "outfordel": [
+   "delivered",
+   "partial",
+   "failed"
+  ],
+  "delivered": [
+   "completed",
+   "returned"
+  ],
+  "partial": [
+   "completed",
+   "returned"
+  ],
+  "failed": [
+   "returned",
+   "outfordel"
+  ],
+  "completed": [],
+  "cancelled": [],
+  "returned": []
+ },
+ "OC_STATES": [
+  "open",
+  "consolidating",
+  "readypick",
+  "picking",
+  "packed",
+  "readydisp",
+  "dispatched",
+  "done"
+ ],
+ "OC_NEXT": {
+  "open": "consolidating",
+  "consolidating": "readypick",
+  "readypick": "picking",
+  "picking": "packed",
+  "packed": "readydisp",
+  "readydisp": "dispatched",
+  "dispatched": "done"
+ },
+ "FO_STATES": [
+  "alloc",
+  "picking",
+  "picked",
+  "packed",
+  "loaded",
+  "onroute",
+  "delivered",
+  "partial",
+  "failed",
+  "cancelled"
+ ],
+ "FO_TRANSITIONS": {
+  "alloc": [
+   "picking",
+   "picked",
+   "cancelled"
+  ],
+  "picking": [
+   "picking",
+   "picked"
+  ],
+  "picked": [
+   "packed"
+  ],
+  "packed": [
+   "loaded"
+  ],
+  "loaded": [
+   "onroute"
+  ],
+  "onroute": [
+   "delivered",
+   "partial",
+   "failed"
+  ],
+  "delivered": [],
+  "partial": [],
+  "failed": [],
+  "cancelled": []
+ },
+ "PICK_TASK_STATES": [
+  "open",
+  "partial",
+  "done",
+  "short",
+  "cancelled"
+ ],
+ "TRIP_STATES": [
+  "draft",
+  "planned",
+  "vassigned",
+  "dassigned",
+  "loading",
+  "ready",
+  "dispatched",
+  "onroute",
+  "partial",
+  "completed",
+  "returning",
+  "closed",
+  "cancelled",
+  "failed"
+ ],
+ "TRIP_TRANSITIONS": {
+  "draft": [
+   "planned",
+   "cancelled"
+  ],
+  "planned": [
+   "vassigned",
+   "dassigned",
+   "loading",
+   "cancelled"
+  ],
+  "vassigned": [
+   "dassigned",
+   "loading",
+   "cancelled"
+  ],
+  "dassigned": [
+   "vassigned",
+   "loading",
+   "cancelled"
+  ],
+  "loading": [
+   "ready",
+   "onroute",
+   "cancelled"
+  ],
+  "ready": [
+   "onroute",
+   "loading",
+   "cancelled"
+  ],
+  "dispatched": [
+   "onroute"
+  ],
+  "onroute": [
+   "partial",
+   "completed",
+   "returning",
+   "failed"
+  ],
+  "partial": [
+   "returning",
+   "closed"
+  ],
+  "completed": [
+   "returning",
+   "closed"
+  ],
+  "returning": [
+   "closed"
+  ],
+  "closed": [],
+  "cancelled": [],
+  "failed": [
+   "closed"
+  ]
+ },
+ "STOP_STATES": [
+  "pending",
+  "arrived",
+  "delivered",
+  "partial",
+  "failed",
+  "rejected",
+  "skipped"
+ ],
+ "STOP_TRANSITIONS": {
+  "pending": [
+   "arrived",
+   "skipped"
+  ],
+  "arrived": [
+   "delivered",
+   "partial",
+   "failed",
+   "rejected"
+  ],
+  "delivered": [],
+  "partial": [],
+  "failed": [],
+  "rejected": [],
+  "skipped": []
+ },
+ "DELIVERY_RESULTS": [
+  "delivered",
+  "partial",
+  "failed",
+  "rejected"
+ ],
+ "FAIL_REASONS": [
+  "closed",
+  "noavail",
+  "wrongaddr",
+  "rejected",
+  "payment",
+  "product",
+  "other"
+ ],
+ "VEHICLE_STATES": [
+  "available",
+  "reserved",
+  "assigned",
+  "loading",
+  "ready",
+  "onroute",
+  "returning",
+  "atwh",
+  "maintenance",
+  "breakdown",
+  "oos",
+  "inactive"
+ ],
+ "VEHICLE_TRANSITIONS": {
+  "available": [
+   "reserved",
+   "assigned",
+   "maintenance",
+   "oos",
+   "inactive"
+  ],
+  "reserved": [
+   "assigned",
+   "available"
+  ],
+  "assigned": [
+   "loading",
+   "available"
+  ],
+  "loading": [
+   "ready",
+   "assigned"
+  ],
+  "ready": [
+   "onroute",
+   "loading"
+  ],
+  "onroute": [
+   "returning",
+   "breakdown"
+  ],
+  "returning": [
+   "atwh"
+  ],
+  "atwh": [
+   "available",
+   "maintenance"
+  ],
+  "maintenance": [
+   "available",
+   "oos"
+  ],
+  "breakdown": [
+   "maintenance",
+   "oos"
+  ],
+  "oos": [
+   "maintenance",
+   "inactive"
+  ],
+  "inactive": [
+   "available"
+  ]
+ },
+ "VEHICLE_KINDS": [
+  "dry",
+  "chill",
+  "reefer"
+ ],
+ "VEHICLE_OWNERSHIP": [
+  "owned",
+  "leased",
+  "rented",
+  "third"
+ ],
+ "TEMP_NEEDS": [
+  "dry",
+  "chill",
+  "reefer"
+ ],
+ "DRIVER_STATES": [
+  "available",
+  "onroute",
+  "off",
+  "blocked",
+  "inactive"
+ ],
+ "MAINT_KINDS": [
+  "preventive",
+  "corrective",
+  "emergency",
+  "tire",
+  "oil",
+  "brake",
+  "engine",
+  "elec",
+  "ac",
+  "body"
+ ],
+ "MAINT_STATES": [
+  "open",
+  "closed"
+ ],
+ "RETURN_TYPES": [
+  "cust",
+  "sup",
+  "del",
+  "dmg"
+ ],
+ "RETURN_STATES": [
+  "pending",
+  "approved",
+  "rejected",
+  "received",
+  "inspect",
+  "closed"
+ ],
+ "RETURN_TRANSITIONS": {
+  "pending": [
+   "approved",
+   "rejected"
+  ],
+  "approved": [
+   "received"
+  ],
+  "received": [
+   "inspect"
+  ],
+  "inspect": [
+   "closed"
+  ],
+  "closed": [],
+  "rejected": []
+ },
+ "RETURN_DECISIONS": [
+  "restock",
+  "qtn",
+  "dmg",
+  "dispose",
+  "sup"
+ ],
+ "RETURN_REASONS": [
+  "damaged",
+  "wrong_product",
+  "wrong_qty",
+  "expired",
+  "cust_reject",
+  "del_fail",
+  "quality",
+  "partial",
+  "other"
+ ],
+ "TRANSFER_STATES": [
+  "draft",
+  "requested",
+  "approved",
+  "picking",
+  "ready",
+  "transit",
+  "received",
+  "partial",
+  "done",
+  "rejected",
+  "cancelled"
+ ],
+ "TRANSFER_TRANSITIONS": {
+  "draft": [
+   "requested",
+   "cancelled"
+  ],
+  "requested": [
+   "approved",
+   "rejected",
+   "cancelled"
+  ],
+  "approved": [
+   "picking",
+   "cancelled"
+  ],
+  "picking": [
+   "ready",
+   "cancelled"
+  ],
+  "ready": [
+   "transit",
+   "cancelled"
+  ],
+  "transit": [
+   "received",
+   "partial"
+  ],
+  "received": [
+   "done"
+  ],
+  "partial": [
+   "done"
+  ],
+  "done": [],
+  "rejected": [],
+  "cancelled": []
+ },
+ "COUNT_STATES": [
+  "open",
+  "counting",
+  "variance",
+  "adjusted",
+  "closed"
+ ],
+ "EXCEPTION_KINDS": [
+  "damage",
+  "rejected",
+  "shortage",
+  "wrongloc",
+  "wrongveh",
+  "capacity",
+  "faildel",
+  "partial",
+  "temp",
+  "transfer",
+  "latedep",
+  "latedel",
+  "breakdown",
+  "reject",
+  "wrong",
+  "missing",
+  "damaged",
+  "failed",
+  "noshow",
+  "cap",
+  "other"
+ ],
+ "EXCEPTION_SEVERITIES": [
+  "c",
+  "w",
+  "i"
+ ],
+ "EXCEPTION_STATES": [
+  "open",
+  "ack",
+  "resolved"
+ ],
+ "EXCEPTION_TRANSITIONS": {
+  "open": [
+   "ack",
+   "resolved"
+  ],
+  "ack": [
+   "resolved"
+  ],
+  "resolved": []
+ },
+ "ALERT_STATES": [
+  "open",
+  "assigned",
+  "snoozed",
+  "resolved"
+ ],
+ "OPREQ_TYPES": [
+  "fuel",
+  "maint",
+  "tire",
+  "vehicle",
+  "toll",
+  "parking",
+  "emergency",
+  "other"
+ ],
+ "OPREQ_STATES": [
+  "submitted",
+  "review",
+  "approved",
+  "rejected",
+  "processed",
+  "closed"
+ ],
+ "INTEGRATION_STATUS": [
+  "connected",
+  "integration_pending",
+  "error"
+ ],
+ "ROLE_LABELS": {
+  "super": {
+   "ar": "سوبر أدمن",
+   "en": "Super Admin"
+  },
+  "sales": {
+   "ar": "مبيعات",
+   "en": "Sales"
+  },
+  "wm": {
+   "ar": "مدير المستودع",
+   "en": "Warehouse Mgr"
+  },
+  "inv": {
+   "ar": "مراقب المخزون",
+   "en": "Inventory Ctrl"
+  },
+  "proc": {
+   "ar": "مدير المشتريات",
+   "en": "Procurement"
+  },
+  "disp": {
+   "ar": "الموزع Dispatcher",
+   "en": "Dispatcher"
+  },
+  "worker": {
+   "ar": "عامل مستودع",
+   "en": "Worker"
+  },
+  "driver": {
+   "ar": "سائق",
+   "en": "Driver"
+  },
+  "gm": {
+   "ar": "المدير العام",
+   "en": "General Manager"
+  },
+  "finance": {
+   "ar": "المالية",
+   "en": "Finance"
+  },
+  "auditor": {
+   "ar": "مدقق",
+   "en": "Auditor"
+  }
+ },
+ "NAV_LABELS": {
+  "dash": {
+   "ar": "لوحة القيادة",
+   "en": "Dashboard"
+  },
+  "inv": {
+   "ar": "أرصدة المخزون",
+   "en": "Stock Balances"
+  },
+  "ledger": {
+   "ar": "سجل الحركات",
+   "en": "Inventory Ledger"
+  },
+  "batches": {
+   "ar": "الدفعات والصلاحية",
+   "en": "Batches & Expiry"
+  },
+  "receiving": {
+   "ar": "الاستلام GRN",
+   "en": "Receiving"
+  },
+  "procurement": {
+   "ar": "المشتريات",
+   "en": "Procurement"
+  },
+  "picking": {
+   "ar": "التجهيز والتعبئة",
+   "en": "Pick & Pack"
+  },
+  "dispatch": {
+   "ar": "التحميل والتوصيل",
+   "en": "Load & Dispatch"
+  },
+  "fleet": {
+   "ar": "الأسطول والسائقون",
+   "en": "Fleet & Drivers"
+  },
+  "returns": {
+   "ar": "المرتجعات والتحويلات",
+   "en": "Returns & Transfers"
+  },
+  "counts": {
+   "ar": "الجرد",
+   "en": "Counting"
+  },
+  "tower": {
+   "ar": "Control Tower",
+   "en": "Control Tower"
+  },
+  "settings": {
+   "ar": "الإعدادات",
+   "en": "Settings"
+  },
+  "driver": {
+   "ar": "رحلاتي",
+   "en": "My Trips"
+  },
+  "trips": {
+   "ar": "الرحلات",
+   "en": "Trips"
+  },
+  "ttower": {
+   "ar": "Transport Control Tower",
+   "en": "Transport Control Tower"
+  },
+  "products": {
+   "ar": "المنتجات Master",
+   "en": "Product Master"
+  },
+  "whs": {
+   "ar": "هيكل المستودعات",
+   "en": "Warehouse Structure"
+  },
+  "sales": {
+   "ar": "المبيعات",
+   "en": "Sales"
+  },
+  "consol": {
+   "ar": "تجميع الطلبات",
+   "en": "Order Consolidation"
+  },
+  "activity": {
+   "ar": "سجل النشاط والتدقيق",
+   "en": "Activity & Audit"
+  },
+  "wreceive": {
+   "ar": "الاستلام",
+   "en": "Receive"
+  },
+  "reports": {
+   "ar": "التقارير",
+   "en": "Reports"
+  }
+ },
+ "MOVEMENT_LABELS": {
+  "opening": {
+   "ar": "رصيد افتتاحي",
+   "en": "Opening balance",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "grn": {
+   "ar": "استلام",
+   "en": "Receipt",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "putaway": {
+   "ar": "تخزين Putaway",
+   "en": "Putaway",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "load": {
+   "ar": "تحميل شاحنة",
+   "en": "Truck load",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "stg": {
+   "ar": "Staging",
+   "en": "Staging",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "pack": {
+   "ar": "تعبئة",
+   "en": "Packing",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "supret": {
+   "ar": "إرجاع لمورد",
+   "en": "Supplier return",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "alloc": {
+   "ar": "حجز طلب",
+   "en": "Allocation",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "pick": {
+   "ar": "صرف تجهيز",
+   "en": "Picking",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "trf": {
+   "ar": "تحويل",
+   "en": "Transfer",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "transit": {
+   "ar": "في العبور",
+   "en": "In transit",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "move": {
+   "ar": "نقل بين مواقع",
+   "en": "Bin move",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "ret": {
+   "ar": "مرتجع",
+   "en": "Return",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "restock": {
+   "ar": "إعادة للمخزون",
+   "en": "Restock",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "adj": {
+   "ar": "تسوية جرد",
+   "en": "Adjustment",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "dmg": {
+   "ar": "تالف",
+   "en": "Damage",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "scrap": {
+   "ar": "إعدام",
+   "en": "Scrap",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "qtn": {
+   "ar": "حجر",
+   "en": "Quarantine",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "PO_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "pending": {
+   "ar": "بانتظار الاعتماد",
+   "en": "Pending approval",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "approved": {
+   "ar": "معتمد — أُرسل",
+   "en": "Approved & sent",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "sent": {
+   "ar": "أُرسل للمورد",
+   "en": "Sent",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "confirmed": {
+   "ar": "مؤكد من المورد",
+   "en": "Supplier confirmed",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "partial": {
+   "ar": "مستلم جزئيًا",
+   "en": "Partially received",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "received": {
+   "ar": "مستلم — GRN",
+   "en": "Received",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "closed": {
+   "ar": "مقفل",
+   "en": "Closed",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "cancelled": {
+   "ar": "ملغى",
+   "en": "Cancelled",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "PR_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "submitted": {
+   "ar": "مُرسل",
+   "en": "Submitted",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "review": {
+   "ar": "قيد المراجعة",
+   "en": "Under review",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "approved": {
+   "ar": "معتمد",
+   "en": "Approved",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "rejected": {
+   "ar": "مرفوض",
+   "en": "Rejected",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "converted": {
+   "ar": "حُوّل",
+   "en": "Converted",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "closed": {
+   "ar": "مغلق",
+   "en": "Closed",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  }
+ },
+ "SHIPMENT_LABELS": {
+  "expected": {
+   "ar": "متوقعة",
+   "en": "Expected",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "arrived": {
+   "ar": "وصلت — Gate Check",
+   "en": "Arrived",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "inspecting": {
+   "ar": "قيد الفحص",
+   "en": "Inspecting",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "putaway": {
+   "ar": "بانتظار Putaway",
+   "en": "Awaiting putaway",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "done": {
+   "ar": "مكتملة",
+   "en": "Done",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "cancelled": {
+   "ar": "ملغاة",
+   "en": "Cancelled",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "QT_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "sent": {
+   "ar": "مُرسل — بانتظار العميل",
+   "en": "Sent",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "approved": {
+   "ar": "معتمد",
+   "en": "Approved",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "rejected": {
+   "ar": "مرفوض",
+   "en": "Rejected",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "converted": {
+   "ar": "حُوّل لأمر بيع",
+   "en": "Converted",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "expired": {
+   "ar": "منتهي",
+   "en": "Expired",
+   "fg": "#a8a4b8",
+   "bg": "#F1EFF6"
+  }
+ },
+ "SO_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "confirmed": {
+   "ar": "مؤكد",
+   "en": "Confirmed",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "reserved": {
+   "ar": "محجوز",
+   "en": "Reserved",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "allocated": {
+   "ar": "مخصص",
+   "en": "Allocated",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "preparing": {
+   "ar": "قيد التحضير",
+   "en": "Preparing",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "picking": {
+   "ar": "قيد التجهيز",
+   "en": "Picking",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "picked": {
+   "ar": "مُجهز",
+   "en": "Picked",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "packed": {
+   "ar": "معبأ",
+   "en": "Packed",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "readydisp": {
+   "ar": "جاهز للشحن",
+   "en": "Ready",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "loaded": {
+   "ar": "محمَّل",
+   "en": "Loaded",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "outfordel": {
+   "ar": "في الطريق",
+   "en": "Out for delivery",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "delivered": {
+   "ar": "مسلّم",
+   "en": "Delivered",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "partial": {
+   "ar": "مسلّم جزئيًا",
+   "en": "Partially delivered",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "failed": {
+   "ar": "فشل التسليم",
+   "en": "Failed",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "completed": {
+   "ar": "مكتمل ✓",
+   "en": "Completed ✓",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "cancelled": {
+   "ar": "ملغى",
+   "en": "Cancelled",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "returned": {
+   "ar": "مرتجع",
+   "en": "Returned",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "OC_LABELS": {
+  "open": {
+   "ar": "مفتوح",
+   "en": "Open",
+   "fg": "#55506a",
+   "bg": "#F1EFF6",
+   "act": [
+    "بدء التجميع",
+    "Start"
+   ]
+  },
+  "consolidating": {
+   "ar": "قيد التجميع",
+   "en": "Consolidating",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "act": [
+    "جاهز للتجهيز",
+    "Ready for picking"
+   ]
+  },
+  "readypick": {
+   "ar": "جاهز للتجهيز",
+   "en": "Ready for picking",
+   "fg": "#654e92",
+   "bg": "#efeaf8",
+   "act": [
+    "بدء التجهيز",
+    "Start picking"
+   ]
+  },
+  "picking": {
+   "ar": "قيد التجهيز",
+   "en": "Picking",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "act": [
+    "اكتمال التعبئة",
+    "Packed"
+   ]
+  },
+  "packed": {
+   "ar": "معبأ",
+   "en": "Packed",
+   "fg": "#654e92",
+   "bg": "#efeaf8",
+   "act": [
+    "جاهز للشحن",
+    "Ready for dispatch"
+   ]
+  },
+  "readydisp": {
+   "ar": "جاهز للشحن",
+   "en": "Ready for dispatch",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd",
+   "act": [
+    "إرسال — إنشاء رحلة",
+    "Dispatch → trip"
+   ]
+  },
+  "dispatched": {
+   "ar": "أُرسل",
+   "en": "Dispatched",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec",
+   "act": [
+    "اكتمال التسليم",
+    "Complete"
+   ]
+  },
+  "done": {
+   "ar": "مكتمل ✓",
+   "en": "Completed ✓",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  }
+ },
+ "FO_LABELS": {
+  "alloc": {
+   "ar": "مخصص — بانتظار التجهيز",
+   "en": "Allocated",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "picking": {
+   "ar": "قيد التجهيز",
+   "en": "Picking",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "picked": {
+   "ar": "مُجهز",
+   "en": "Picked",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "packed": {
+   "ar": "معبأ — جاهز للتحميل",
+   "en": "Packed",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "loaded": {
+   "ar": "محمَّل",
+   "en": "Loaded",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "onroute": {
+   "ar": "في الطريق",
+   "en": "On route",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "delivered": {
+   "ar": "مسلّم",
+   "en": "Delivered",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "partial": {
+   "ar": "مسلّم جزئيًا",
+   "en": "Partial",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "failed": {
+   "ar": "فشل التسليم",
+   "en": "Failed",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "cancelled": {
+   "ar": "ملغى",
+   "en": "Cancelled",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "TRIP_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#a8a4b8",
+   "bg": "#F1EFF6"
+  },
+  "planned": {
+   "ar": "مخططة",
+   "en": "Planned",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "vassigned": {
+   "ar": "مركبة مسندة",
+   "en": "Vehicle assigned",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "dassigned": {
+   "ar": "سائق مسند",
+   "en": "Driver assigned",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "loading": {
+   "ar": "قيد التحميل",
+   "en": "Loading",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "ready": {
+   "ar": "جاهزة",
+   "en": "Ready",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "dispatched": {
+   "ar": "أُرسلت",
+   "en": "Dispatched",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "onroute": {
+   "ar": "في الطريق",
+   "en": "In transit",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "partial": {
+   "ar": "مسلّمة جزئيًا",
+   "en": "Partially delivered",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "completed": {
+   "ar": "مكتملة",
+   "en": "Completed",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "returning": {
+   "ar": "عائدة",
+   "en": "Returning",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "closed": {
+   "ar": "مقفلة",
+   "en": "Closed",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "cancelled": {
+   "ar": "ملغاة",
+   "en": "Cancelled",
+   "fg": "#7d7990",
+   "bg": "#F1EFF6"
+  },
+  "failed": {
+   "ar": "فاشلة",
+   "en": "Failed",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "STOP_LABELS": {
+  "pending": {
+   "ar": "بانتظار",
+   "en": "Pending",
+   "fg": "#55506a",
+   "bg": "#F1EFF6"
+  },
+  "arrived": {
+   "ar": "وصل",
+   "en": "Arrived",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "delivered": {
+   "ar": "مسلّمة",
+   "en": "Delivered",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "partial": {
+   "ar": "جزئي",
+   "en": "Partial",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "failed": {
+   "ar": "فشل",
+   "en": "Failed",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "rejected": {
+   "ar": "رفض العميل",
+   "en": "Customer rejected",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "skipped": {
+   "ar": "تخطي",
+   "en": "Skipped",
+   "fg": "#7d7990",
+   "bg": "#F1EFF6"
+  }
+ },
+ "VEHICLE_LABELS": {
+  "available": {
+   "ar": "متاحة",
+   "en": "Available",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec",
+   "dot": "#1d7a3e"
+  },
+  "reserved": {
+   "ar": "محجوزة",
+   "en": "Reserved",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9",
+   "dot": "#0d7f93"
+  },
+  "assigned": {
+   "ar": "مسندة",
+   "en": "Assigned",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9",
+   "dot": "#0d7f93"
+  },
+  "loading": {
+   "ar": "قيد التحميل",
+   "en": "Loading",
+   "fg": "#654e92",
+   "bg": "#efeaf8",
+   "dot": "#654e92"
+  },
+  "ready": {
+   "ar": "جاهزة للإرسال",
+   "en": "Ready",
+   "fg": "#654e92",
+   "bg": "#efeaf8",
+   "dot": "#654e92"
+  },
+  "onroute": {
+   "ar": "في الطريق",
+   "en": "In Transit",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "dot": "#3C79F5"
+  },
+  "returning": {
+   "ar": "عائدة",
+   "en": "Returning",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "dot": "#3C79F5"
+  },
+  "atwh": {
+   "ar": "في المستودع",
+   "en": "At Warehouse",
+   "fg": "#55506a",
+   "bg": "#F1EFF6",
+   "dot": "#55506a"
+  },
+  "maintenance": {
+   "ar": "صيانة",
+   "en": "Maintenance",
+   "fg": "#b23b3b",
+   "bg": "#fdecec",
+   "dot": "#b23b3b"
+  },
+  "breakdown": {
+   "ar": "عطل",
+   "en": "Breakdown",
+   "fg": "#b23b3b",
+   "bg": "#fdecec",
+   "dot": "#b23b3b"
+  },
+  "oos": {
+   "ar": "خارج الخدمة",
+   "en": "Out of Service",
+   "fg": "#7d7990",
+   "bg": "#F1EFF6",
+   "dot": "#a8a4b8"
+  },
+  "inactive": {
+   "ar": "غير نشطة",
+   "en": "Inactive",
+   "fg": "#a8a4b8",
+   "bg": "#F1EFF6",
+   "dot": "#c9c6d4"
+  }
+ },
+ "RETURN_LABELS": {
+  "pending": {
+   "ar": "بانتظار الاعتماد",
+   "en": "Requested",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "approved": {
+   "ar": "معتمد — بانتظار الاستلام",
+   "en": "Approved",
+   "fg": "#3C79F5",
+   "bg": "#e8effe"
+  },
+  "rejected": {
+   "ar": "مرفوض",
+   "en": "Rejected",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "received": {
+   "ar": "مستلم — بانتظار الفحص",
+   "en": "Received",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "inspect": {
+   "ar": "قيد الفحص",
+   "en": "Inspection",
+   "fg": "#654e92",
+   "bg": "#efeaf8"
+  },
+  "closed": {
+   "ar": "مكتمل",
+   "en": "Completed",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  }
+ },
+ "RETURN_DECISION_LABELS": {
+  "restock": {
+   "ar": "إعادة للمخزون",
+   "en": "Restock"
+  },
+  "qtn": {
+   "ar": "حجر",
+   "en": "Quarantine"
+  },
+  "dmg": {
+   "ar": "تالف",
+   "en": "Damaged"
+  },
+  "dispose": {
+   "ar": "إعدام",
+   "en": "Scrap"
+  },
+  "sup": {
+   "ar": "إرجاع للمورد",
+   "en": "Return to supplier"
+  }
+ },
+ "TRANSFER_LABELS": {
+  "draft": {
+   "ar": "مسودة",
+   "en": "Draft",
+   "fg": "#55506a",
+   "bg": "#F1EFF6",
+   "act": [
+    "إرسال الطلب",
+    "Submit"
+   ]
+  },
+  "requested": {
+   "ar": "بانتظار الاعتماد",
+   "en": "Requested",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd",
+   "act": [
+    "اعتماد",
+    "Approve"
+   ]
+  },
+  "approved": {
+   "ar": "معتمد — جاهز للتجهيز",
+   "en": "Approved",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "act": [
+    "بدء التجهيز",
+    "Start picking"
+   ]
+  },
+  "picking": {
+   "ar": "قيد التجهيز",
+   "en": "Picking",
+   "fg": "#3C79F5",
+   "bg": "#e8effe",
+   "act": [
+    "اكتمال التجهيز",
+    "Picking done"
+   ]
+  },
+  "ready": {
+   "ar": "جاهز للشحن",
+   "en": "Ready",
+   "fg": "#654e92",
+   "bg": "#efeaf8",
+   "act": [
+    "شحن — صرف من المصدر",
+    "Ship"
+   ]
+  },
+  "transit": {
+   "ar": "In Transit — في العبور",
+   "en": "In transit",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd",
+   "act": [
+    "استلام في الوجهة",
+    "Receive"
+   ]
+  },
+  "received": {
+   "ar": "مستلم — بانتظار الإقفال",
+   "en": "Received",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9",
+   "act": [
+    "إقفال التحويل",
+    "Close"
+   ]
+  },
+  "partial": {
+   "ar": "مستلم جزئيًا",
+   "en": "Partially received",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd",
+   "act": [
+    "إقفال بالفروقات",
+    "Close with variance"
+   ]
+  },
+  "done": {
+   "ar": "مكتمل ✓",
+   "en": "Completed ✓",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  },
+  "rejected": {
+   "ar": "مرفوض",
+   "en": "Rejected",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "cancelled": {
+   "ar": "ملغى",
+   "en": "Cancelled",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  }
+ },
+ "EXCEPTION_STATE_LABELS": {
+  "open": {
+   "ar": "مفتوح",
+   "en": "Open",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "ack": {
+   "ar": "قيد المعالجة",
+   "en": "Acknowledged",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "resolved": {
+   "ar": "مُغلق",
+   "en": "Resolved",
+   "fg": "#1d7a3e",
+   "bg": "#e6f9ec"
+  }
+ },
+ "FAIL_REASON_LABELS": {
+  "closed": {
+   "ar": "العميل مغلق",
+   "en": "Customer closed"
+  },
+  "noavail": {
+   "ar": "العميل غير متواجد",
+   "en": "Not available"
+  },
+  "wrongaddr": {
+   "ar": "عنوان خاطئ",
+   "en": "Wrong address"
+  },
+  "rejected": {
+   "ar": "رفض الاستلام",
+   "en": "Rejected"
+  },
+  "payment": {
+   "ar": "مشكلة دفع",
+   "en": "Payment issue"
+  },
+  "product": {
+   "ar": "مشكلة منتج",
+   "en": "Product issue"
+  },
+  "other": {
+   "ar": "أخرى",
+   "en": "Other"
+  }
+ },
+ "OWNERSHIP_LABELS": {
+  "owned": {
+   "ar": "مملوكة",
+   "en": "Owned"
+  },
+  "leased": {
+   "ar": "مؤجرة تمويليًا",
+   "en": "Leased"
+  },
+  "rented": {
+   "ar": "مستأجرة",
+   "en": "Rented"
+  },
+  "third": {
+   "ar": "طرف ثالث",
+   "en": "Third party"
+  }
+ },
+ "ALERT_CATEGORY_LABELS": {
+  "vehdoc": {
+   "ar": "وثائق مركبة",
+   "en": "Vehicle docs"
+  },
+  "driverdoc": {
+   "ar": "وثائق سائق",
+   "en": "Driver docs"
+  },
+  "maint": {
+   "ar": "صيانة",
+   "en": "Maintenance"
+  },
+  "delay": {
+   "ar": "تأخر رحلة",
+   "en": "Trip delay"
+  },
+  "breakdown": {
+   "ar": "عطل",
+   "en": "Breakdown"
+  },
+  "gps": {
+   "ar": "GPS",
+   "en": "GPS"
+  },
+  "temp": {
+   "ar": "حرارة",
+   "en": "Temperature"
+  },
+  "cap": {
+   "ar": "حمولة",
+   "en": "Capacity"
+  },
+  "shift": {
+   "ar": "وردية",
+   "en": "Shift"
+  },
+  "fuel": {
+   "ar": "وقود",
+   "en": "Fuel"
+  },
+  "fail": {
+   "ar": "فشل تسليم",
+   "en": "Delivery failure"
+  },
+  "transfer": {
+   "ar": "تحويل",
+   "en": "Transfer"
+  },
+  "exception": {
+   "ar": "استثناء",
+   "en": "Exception"
+  }
+ },
+ "DESIGN_TOKENS": {
+  "bg": "#F4F3F8",
+  "text": "#20242E",
+  "topbar": "#1E2130",
+  "sidebar": "#23273A",
+  "topbarInput": "#2A2E42",
+  "muted": "#8b90a5",
+  "border": "#E9E6F0",
+  "borderSoft": "#F1EFF6",
+  "accent": "#1BC4DB",
+  "accent2": "#3C79F5",
+  "purple": "#654e92",
+  "teal": "#0d7f93",
+  "green": "#1d7a3e",
+  "amber": "#b26a16",
+  "red": "#b23b3b",
+  "grey": "#55506a",
+  "greyLight": "#a8a4b8",
+  "placeholder": "#a8a4b8",
+  "cardBg": "#fff",
+  "zebra": "#FAF9FC",
+  "fontAr": "'Almarai', sans-serif",
+  "fontNum": "'Quicksand', sans-serif"
+ },
+ "PERMISSIONS": [
+  "page.dash",
+  "page.tower",
+  "page.ttower",
+  "page.sales",
+  "page.consol",
+  "page.products",
+  "page.whs",
+  "page.inv",
+  "page.ledger",
+  "page.batches",
+  "page.receiving",
+  "page.wreceive",
+  "page.procurement",
+  "page.picking",
+  "page.dispatch",
+  "page.trips",
+  "page.fleet",
+  "page.returns",
+  "page.counts",
+  "page.activity",
+  "page.settings",
+  "page.driver",
+  "page.reports",
+  "pr.create",
+  "pr.approve",
+  "rfq.create",
+  "rfq.award",
+  "supquote.create",
+  "po.create",
+  "po.approve",
+  "po.send",
+  "po.cancel",
+  "supplier.manage",
+  "shipment.receive",
+  "grn.post",
+  "putaway.confirm",
+  "inventory.adjust",
+  "inventory.move",
+  "inventory.transfer",
+  "inventory.transfer.approve",
+  "inventory.count",
+  "inventory.view_cost",
+  "sales.manage",
+  "so.reserve",
+  "so.allocate",
+  "so.cancel",
+  "consol.manage",
+  "customer.manage",
+  "pick.confirm",
+  "pack.confirm",
+  "load.confirm",
+  "trip.dispatch",
+  "trip.manage",
+  "trip.assign",
+  "trip.close",
+  "delivery.execute",
+  "return.create",
+  "return.flow",
+  "return.decide",
+  "vehicle.manage",
+  "vehicle.state",
+  "driver.manage",
+  "maintenance.manage",
+  "fuel.manage",
+  "alert.manage",
+  "opreq.manage",
+  "opreq.create",
+  "exception.manage",
+  "exception.create",
+  "product.manage",
+  "category.manage",
+  "warehouse.manage",
+  "user.manage",
+  "settings.manage",
+  "audit.view",
+  "report.export"
+ ],
+ "ROLE_PERMISSIONS": {
+  "super": [
+   "page.dash",
+   "page.tower",
+   "page.ttower",
+   "page.sales",
+   "page.consol",
+   "page.products",
+   "page.whs",
+   "page.inv",
+   "page.ledger",
+   "page.batches",
+   "page.receiving",
+   "page.wreceive",
+   "page.procurement",
+   "page.picking",
+   "page.dispatch",
+   "page.trips",
+   "page.fleet",
+   "page.returns",
+   "page.counts",
+   "page.activity",
+   "page.settings",
+   "page.driver",
+   "page.reports",
+   "pr.create",
+   "pr.approve",
+   "rfq.create",
+   "rfq.award",
+   "supquote.create",
+   "po.create",
+   "po.approve",
+   "po.send",
+   "po.cancel",
+   "supplier.manage",
+   "shipment.receive",
+   "grn.post",
+   "putaway.confirm",
+   "inventory.adjust",
+   "inventory.move",
+   "inventory.transfer",
+   "inventory.transfer.approve",
+   "inventory.count",
+   "inventory.view_cost",
+   "sales.manage",
+   "so.reserve",
+   "so.allocate",
+   "so.cancel",
+   "consol.manage",
+   "customer.manage",
+   "pick.confirm",
+   "pack.confirm",
+   "load.confirm",
+   "trip.dispatch",
+   "trip.manage",
+   "trip.assign",
+   "trip.close",
+   "delivery.execute",
+   "return.create",
+   "return.flow",
+   "return.decide",
+   "vehicle.manage",
+   "vehicle.state",
+   "driver.manage",
+   "maintenance.manage",
+   "fuel.manage",
+   "alert.manage",
+   "opreq.manage",
+   "opreq.create",
+   "exception.manage",
+   "exception.create",
+   "product.manage",
+   "category.manage",
+   "warehouse.manage",
+   "user.manage",
+   "settings.manage",
+   "audit.view",
+   "report.export"
+  ],
+  "sales": [
+   "page.dash",
+   "page.sales",
+   "page.consol",
+   "page.inv",
+   "page.products",
+   "page.returns",
+   "sales.manage",
+   "so.reserve",
+   "so.cancel",
+   "consol.manage",
+   "customer.manage",
+   "return.create",
+   "report.export"
+  ],
+  "wm": [
+   "page.dash",
+   "page.whs",
+   "page.inv",
+   "page.ledger",
+   "page.batches",
+   "page.receiving",
+   "page.wreceive",
+   "page.picking",
+   "page.consol",
+   "page.counts",
+   "page.returns",
+   "page.activity",
+   "page.products",
+   "page.procurement",
+   "page.fleet",
+   "page.trips",
+   "page.dispatch",
+   "page.reports",
+   "pr.create",
+   "shipment.receive",
+   "grn.post",
+   "putaway.confirm",
+   "inventory.adjust",
+   "inventory.move",
+   "inventory.transfer",
+   "inventory.transfer.approve",
+   "inventory.count",
+   "consol.manage",
+   "pick.confirm",
+   "pack.confirm",
+   "load.confirm",
+   "return.create",
+   "return.flow",
+   "return.decide",
+   "vehicle.state",
+   "exception.manage",
+   "exception.create",
+   "warehouse.manage",
+   "audit.view",
+   "report.export"
+  ],
+  "inv": [
+   "page.dash",
+   "page.products",
+   "page.inv",
+   "page.ledger",
+   "page.batches",
+   "page.counts",
+   "page.whs",
+   "page.returns",
+   "page.receiving",
+   "page.reports",
+   "inventory.adjust",
+   "inventory.count",
+   "inventory.view_cost",
+   "product.manage",
+   "category.manage",
+   "return.create",
+   "report.export"
+  ],
+  "proc": [
+   "page.dash",
+   "page.procurement",
+   "page.products",
+   "page.inv",
+   "page.receiving",
+   "page.reports",
+   "pr.create",
+   "pr.approve",
+   "rfq.create",
+   "rfq.award",
+   "supquote.create",
+   "po.create",
+   "po.approve",
+   "po.send",
+   "po.cancel",
+   "supplier.manage",
+   "exception.manage",
+   "inventory.view_cost",
+   "report.export"
+  ],
+  "disp": [
+   "page.dash",
+   "page.ttower",
+   "page.consol",
+   "page.dispatch",
+   "page.trips",
+   "page.fleet",
+   "page.returns",
+   "page.driver",
+   "page.reports",
+   "consol.manage",
+   "load.confirm",
+   "trip.dispatch",
+   "trip.manage",
+   "trip.assign",
+   "trip.close",
+   "vehicle.manage",
+   "vehicle.state",
+   "driver.manage",
+   "maintenance.manage",
+   "fuel.manage",
+   "alert.manage",
+   "opreq.manage",
+   "exception.manage",
+   "exception.create",
+   "return.create",
+   "report.export"
+  ],
+  "worker": [
+   "page.wreceive",
+   "page.picking",
+   "page.counts",
+   "page.dispatch",
+   "page.receiving",
+   "shipment.receive",
+   "grn.post",
+   "putaway.confirm",
+   "pick.confirm",
+   "pack.confirm",
+   "load.confirm",
+   "inventory.count"
+  ],
+  "driver": [
+   "page.driver",
+   "delivery.execute",
+   "opreq.create"
+  ],
+  "gm": [
+   "page.dash",
+   "page.tower",
+   "page.procurement",
+   "page.inv",
+   "page.reports",
+   "page.activity",
+   "po.approve",
+   "inventory.view_cost",
+   "audit.view",
+   "report.export"
+  ],
+  "finance": [
+   "page.dash",
+   "page.procurement",
+   "page.inv",
+   "page.reports",
+   "po.approve",
+   "inventory.view_cost",
+   "report.export"
+  ],
+  "auditor": [
+   "page.dash",
+   "page.inv",
+   "page.ledger",
+   "page.batches",
+   "page.procurement",
+   "page.receiving",
+   "page.picking",
+   "page.trips",
+   "page.returns",
+   "page.activity",
+   "page.reports",
+   "audit.view",
+   "inventory.view_cost"
+  ]
+ },
+ "ROLE_NAV": {
+  "super": [
+   "dash",
+   "tower",
+   "sales",
+   "consol",
+   "products",
+   "whs",
+   "inv",
+   "ledger",
+   "batches",
+   "receiving",
+   "procurement",
+   "picking",
+   "dispatch",
+   "trips",
+   "fleet",
+   "ttower",
+   "returns",
+   "counts",
+   "reports",
+   "activity",
+   "settings"
+  ],
+  "sales": [
+   "dash",
+   "sales",
+   "consol",
+   "inv"
+  ],
+  "wm": [
+   "dash",
+   "whs",
+   "inv",
+   "ledger",
+   "batches",
+   "receiving",
+   "picking",
+   "consol",
+   "counts",
+   "returns",
+   "activity"
+  ],
+  "inv": [
+   "dash",
+   "products",
+   "inv",
+   "ledger",
+   "batches",
+   "counts"
+  ],
+  "proc": [
+   "dash",
+   "procurement",
+   "products",
+   "inv",
+   "receiving"
+  ],
+  "disp": [
+   "dash",
+   "ttower",
+   "consol",
+   "dispatch",
+   "trips",
+   "fleet",
+   "returns"
+  ],
+  "worker": [
+   "wreceive",
+   "picking",
+   "counts"
+  ],
+  "driver": [
+   "driver"
+  ],
+  "gm": [
+   "dash",
+   "tower",
+   "procurement",
+   "inv",
+   "reports",
+   "activity"
+  ],
+  "finance": [
+   "dash",
+   "procurement",
+   "inv",
+   "reports"
+  ],
+  "auditor": [
+   "dash",
+   "inv",
+   "ledger",
+   "batches",
+   "procurement",
+   "receiving",
+   "picking",
+   "trips",
+   "returns",
+   "activity",
+   "reports"
+  ]
+ }
+}
