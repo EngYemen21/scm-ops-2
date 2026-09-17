@@ -50,6 +50,7 @@ export function entityPath(type, number) {
     product: '/product/', sku: '/product/',
   };
   if (map[k]) return map[k] + encodeURIComponent(number);
-  const page = { supplier: '/procurement', customer: '/sales', vehicle: '/fleet', driver: '/fleet', bin: '/whs', warehouse: '/whs', batch: '/batches', count: '/counts', pr: '/procurement', rfq: '/procurement', quotation: '/sales', qt: '/sales', oc: '/consol', consolidation: '/consol', maintenance: '/fleet', alert: '/ttower' };
+  if (k === 'supplier') return `/procurement?tab=sup&supplier=${encodeURIComponent(number)}`;
+  const page = { customer: '/sales', vehicle: '/fleet', driver: '/fleet', bin: '/whs', warehouse: '/whs', batch: '/batches', count: '/counts', pr: '/procurement', rfq: '/procurement', quotation: '/sales', qt: '/sales', oc: '/consol', consolidation: '/consol', maintenance: '/fleet', alert: '/ttower' };
   return page[k] ? `${page[k]}?q=${encodeURIComponent(number)}` : null;
 }

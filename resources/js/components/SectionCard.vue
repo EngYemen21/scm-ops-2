@@ -10,6 +10,7 @@ defineProps({
   small: { type: Boolean, default: false },
   selected: { type: Boolean, default: false },
   padded: { type: Boolean, default: true },
+  bodyClass: { type: [String, Array, Object], default: null },
 });
 </script>
 
@@ -23,6 +24,6 @@ defineProps({
       <span v-if="count != null" class="card-count num">{{ count }}</span>
       <slot name="actions" />
     </div>
-    <div :class="{ 'card-body': padded }"><slot /></div>
+    <div :class="[{ 'card-body': padded }, bodyClass]"><slot /></div>
   </div>
 </template>

@@ -104,10 +104,12 @@ async function signOut() {
         <div v-if="!pageHeader.hidden" class="page-head">
           <div>
             <div class="page-title">
-              <template v-if="title">{{ title }}</template>
+              <span id="page-title-slot" />
+              <template v-if="pageHeader.titleSlot" />
+              <template v-else-if="title">{{ title }}</template>
               <template v-else>{{ defaultTitle }} <span v-if="routeParam" class="num text-violet">{{ routeParam }}</span></template>
             </div>
-            <div v-if="sub" class="page-sub">{{ sub }}</div>
+            <div v-show="sub || pageHeader.subSlot" class="page-sub"><span id="page-sub-slot" /><template v-if="!pageHeader.subSlot">{{ sub }}</template></div>
           </div>
           <div class="flex-1" />
           <div id="page-actions" class="row wrap" />

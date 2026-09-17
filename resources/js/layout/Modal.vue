@@ -27,7 +27,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
       <div v-if="title || sub || $slots.title" class="drawer-head">
         <div class="drawer-title">
           <slot name="title">{{ isBi(title) ? bi(title) : title }}</slot>
-          <div v-if="sub" class="drawer-sub">{{ isBi(sub) ? bi(sub) : sub }}</div>
+          <div v-if="sub || $slots.sub" class="drawer-sub"><slot name="sub">{{ isBi(sub) ? bi(sub) : sub }}</slot></div>
         </div>
         <button v-if="!locked" type="button" class="x-btn" aria-label="close" @click="emit('close')">✕</button>
       </div>

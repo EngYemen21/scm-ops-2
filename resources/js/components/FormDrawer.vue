@@ -89,7 +89,7 @@ const userName = computed(() => (auth.user ? (lang.value === 'ar' ? auth.user.na
     <slot name="before" :values="values" />
     <form class="form-grid" @submit.prevent="doSubmit">
       <template v-for="f in visible" :key="f.k">
-        <div v-if="$slots[`field-${f.k}`]" class="field" :class="{ full: f.full }"><slot :name="`field-${f.k}`" :value="values[f.k]" :set="(v) => set(f.k, v)" :values="values" :error="errors[f.k]" /></div>
+        <div v-if="$slots[`field-${f.k}`]" class="field" :class="{ full: f.full }"><slot :name="`field-${f.k}`" :value="values[f.k]" :set="(v) => set(f.k, v)" :values="values" :error="errors[f.k]" /><div v-if="errors[f.k]" class="field-err">{{ errors[f.k] }}</div></div>
         <NumberInput v-else-if="f.type === 'num'" :model-value="values[f.k]" :label="f.label" :required="f.required" :error="errors[f.k]" :hint="f.hint" :full="f.full" :placeholder="f.ph" :disabled="disabledOf(f)" :min="f.min" :max="f.max" :step="f.step" @update:model-value="set(f.k, $event)" />
         <TextArea v-else-if="f.type === 'area'" :model-value="values[f.k]" :label="f.label" :required="f.required" :error="errors[f.k]" :hint="f.hint" :placeholder="f.ph" :disabled="disabledOf(f)" @update:model-value="set(f.k, $event)" />
         <SelectInput v-else-if="f.type === 'select'" :model-value="values[f.k]" :options="optsOf(f)" :label="f.label" :required="f.required" :error="errors[f.k]" :hint="f.hint" :full="f.full" :placeholder="selectPh(f)" :disabled="disabledOf(f)" @update:model-value="set(f.k, $event)" />

@@ -2,9 +2,11 @@
 
 use App\Http\Middleware\AuthenticateApi;
 use App\Http\Middleware\Idempotency;
+use App\Http\Middleware\NormalizeApiQuery;
 use App\Http\Middleware\RequestId;
 use App\Http\Middleware\RequirePermission;
 use App\Support\ApiExceptionRenderer;
+use App\Support\AppError;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(RequestId::class);
+        $middleware->api(prepend: [NormalizeApiQuery::class]);
         $middleware->alias([
             'auth.api' => AuthenticateApi::class,
             'perm' => RequirePermission::class,
@@ -31,5 +34,5 @@ return Application::configure(basePath: dirname(__DIR__))
         );
         // One error shape for the whole API: { category, code, message, messageEn, details, requestId }.
         $exceptions->render(fn (Throwable $e, Request $request) => $request->is('api/*') ? ApiExceptionRenderer::render($e, $request) : null);
-        $exceptions->dontReport(App\Support\AppError::class);
+        $exceptions->dontReport(AppError::class);
     })->create();

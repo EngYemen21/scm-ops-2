@@ -7,6 +7,7 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps({
   modelValue: { type: String, default: '' },
   label: { type: [String, Object], default: null },
+  fieldClass: { type: [String, Array, Object], default: null },
   required: Boolean, error: { type: String, default: null }, hint: { type: [String, Object], default: null }, full: Boolean,
   small: Boolean, disabled: Boolean, time: Boolean,
   min: { type: String, default: null }, max: { type: String, default: null },
@@ -17,7 +18,7 @@ const shown = computed(() => (props.modelValue ? (props.time ? props.modelValue.
 </script>
 
 <template>
-  <Field :label="label" :required="required" :error="error" :hint="hint" :full="full" :for="id">
+  <Field :class="fieldClass" :label="label" :required="required" :error="error" :hint="hint" :full="full" :for="id">
     <input :id="id" v-bind="$attrs" :type="time ? 'datetime-local' : 'date'" dir="ltr" class="inp num" :class="{ sm: small, err: !!error }" :value="shown" :min="min" :max="max" :disabled="disabled" @input="emit('update:modelValue', $event.target.value)">
   </Field>
 </template>
