@@ -2,6 +2,7 @@
 // Centered modal. `locked` hides ✕ and ignores overlay / Escape (forced password change).
 //   <Modal :open="open" :title="{ ar, en }" :width="440" @close="open = false"> body <template #footer>…</template></Modal>
 import { onBeforeUnmount, watch } from 'vue';
+import { useScrollLock } from '../composables/scrollLock';
 import { bi, dir, isBi } from '../i18n';
 
 const props = defineProps({
@@ -19,6 +20,7 @@ watch(() => props.open, (open) => {
   if (open) window.addEventListener('keydown', onKey); else window.removeEventListener('keydown', onKey);
 }, { immediate: true });
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+useScrollLock(() => props.open);
 </script>
 
 <template>

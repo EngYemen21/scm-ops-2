@@ -2,6 +2,7 @@
 // Confirm dialog. Ask from anywhere: `if (await confirm({ title, sub, tone })) …` (stores/ui.js).
 // With `input` (see `ask()` in stores/ui.js) it also collects a line of text — the app's replacement for window.prompt.
 import { computed, nextTick, ref, watch } from 'vue';
+import { useScrollLock } from '../composables/scrollLock';
 import { bi, dir, t } from '../i18n';
 import { confirmState, resolveConfirm } from '../stores/ui';
 
@@ -9,6 +10,7 @@ const tone = computed(() => (confirmState.value?.tone === 'dark' ? 'dark' : conf
 const input = computed(() => confirmState.value?.input || null);
 const text = ref('');
 const field = ref(null);
+useScrollLock(() => !!confirmState.value);
 const blocked = computed(() => !!input.value?.required && !text.value.trim());
 
 watch(confirmState, async (s) => {

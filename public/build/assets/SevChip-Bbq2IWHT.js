@@ -1,0 +1,1 @@
+import{Et as e,Lt as t,Qt as n}from"./app-DKmfz-P4.js";import{x as r}from"./components-Bygr4MqR.js";import{i}from"./shared-BCdh6ZHc.js";var a={__name:`SevChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(t(),e(n(r),{map:n(i),k:a.k||`i`,small:a.small,class:`flex-none`},null,8,[`map`,`k`,`small`]))}};export{a as default};

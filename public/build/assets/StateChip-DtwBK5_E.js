@@ -1,0 +1,1 @@
+import{Et as e,Lt as t,Qt as n,i as r}from"./app-DKmfz-P4.js";import{x as i}from"./components-Bygr4MqR.js";var a={__name:`StateChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(t(),e(n(i),{map:n(r),k:a.k,small:a.small},null,8,[`map`,`k`,`small`]))}};export{a as default};

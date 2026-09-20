@@ -1,0 +1,1 @@
+import{$t as e,Lt as t,Ot as n,zt as r}from"./app-DKmfz-P4.js";var i={__name:`Hint`,props:{tone:{type:String,default:null}},setup(i){return(a,o)=>(t(),n(`div`,{class:e([`hint`,i.tone])},[r(a.$slots,`default`)],2))}};export{i as default};

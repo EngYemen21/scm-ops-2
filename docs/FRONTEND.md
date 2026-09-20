@@ -104,7 +104,9 @@ Rules for pages, so they keep working on a phone without extra work:
 
 - Use `DataTable` for lists: on a phone every row becomes a card (first column = title, other cells get their header as a
   caption). Give a column `bare: true` when a caption makes no sense (chips, action buttons).
-- Use `Drawer` / `Modal` / `confirm()` / `ask()` for overlays: they become bottom sheets with a sticky footer.
+- Use `Drawer` for forms and detail panels: on a phone it is a full app screen — fixed app bar with a back arrow, scrolling body, fixed action bar — and the page behind it is frozen (`composables/scrollLock.js`). `Modal` / `confirm()` / `ask()` / `BottomSheet` are bottom sheets.
+- Build forms with `.form-grid` + the input components: one column on a phone, two adjacent short fields (numbers, dates) share a row, selects get one chevron style, `PillChoice` becomes an even segmented grid.
+- Line editors mark their header row `le-head` and each line `le-row`; on a phone the header goes and every line is a card, so give the inputs a caption there: `:label="cap('الكمية', 'Qty')"` (see `pages/sales/LinesEditor.vue`).
 - Put command buttons in `<PageHead>`: they wrap under the title and get 44px touch height.
 - Do not hard-code widths for a desktop toolbar without a fallback; on a phone `min-w-[…]` utilities inside `.main` are
   neutralised and wrapped rows stretch to the full width.

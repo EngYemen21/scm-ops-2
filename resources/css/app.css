@@ -374,9 +374,7 @@
     .page-head > .flex-1 { display: none; }
     .page-title { font-size: 18px; }
     .page-sub { font-size: 11.5px; }
-    #page-actions { flex-basis: 100%; gap: 6px; }
     #page-actions:empty { display: none; }
-    #page-actions .btn { flex: 1 1 auto; }
 
     .m-tabbar { position: fixed; inset-inline: 0; bottom: 0; z-index: 50; display: flex; background: #fff; border-top: 1px solid #e9e6f0; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 24px rgba(30, 33, 48, .06); }
     .m-tab { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 2px 0; color: #a8a4b8; text-decoration: none; }
@@ -464,12 +462,59 @@
     .gt-foot > .flex-1 { flex: 1 1 100%; text-align: center; }
     .gt-empty { background: #fff; border-radius: 16px; border: 1px dashed #dcd2ee; }
 
-    /* ----- drawers and dialogs become bottom sheets ----- */
-    .drawer { width: 100% !important; inset-inline: 0 !important; top: 5dvh !important; bottom: 0; border-radius: 24px 24px 0 0; box-shadow: 0 -12px 40px rgba(30, 33, 48, .3); animation: mSheetUp .22s cubic-bezier(.2, .8, .2, 1); overflow: hidden; }
-    .drawer-head { padding: 16px 16px 12px; }
-    .drawer-title { font-size: 16px; } .drawer-sub { font-size: 11.5px; }
-    .drawer-body { padding: 14px 16px; }
-    .drawer-foot { padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 18px rgba(30, 33, 48, .05); }
+    /* ----- a drawer is a full app screen: fixed app bar · scrolling body · fixed action bar ----- */
+    .overlay { display: none; }
+    .drawer { width: 100% !important; inset: 0 !important; height: 100dvh; border-radius: 0; box-shadow: none; background: #f4f3f8; animation: mScreenIn .24s cubic-bezier(.2, .8, .2, 1); overflow: hidden; }
+    .drawer-head { flex: none; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; background: #fff; border-bottom: 1px solid #e9e6f0; min-height: calc(60px + env(safe-area-inset-top)); }
+    .drawer-title { font-size: 16px; line-height: 1.35; }
+    .drawer-sub { font-size: 11.5px; margin-top: 1px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+    .m-back { width: 40px; height: 40px; border-radius: 13px; color: #20242e; }
+    .m-back.dark { color: #fff; }
+    .drawer-body { flex: 1 1 auto; min-height: 0; padding: 16px 14px 24px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    .drawer-foot { flex: none; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid #e9e6f0; box-shadow: 0 -8px 22px rgba(30, 33, 48, .06); }
+    .drawer-foot .btn { height: 50px !important; font-size: 14px !important; border-radius: 15px; }
+    .drawer-foot .btn.soft { flex: 0 0 96px; width: 96px !important; background: #f4f3f8; }
+    .drawer-foot > .text-faint, .drawer-foot > div > .text-faint { display: none; } /* the audit note stays on the desktop; the action bar has one job */
+    .drawer-foot .banner { margin-bottom: 8px; }
+
+    /* forms inside a screen: white grouped card, two columns where short fields meet */
+    .drawer-body > form.form-grid, .drawer-body > .form-grid { background: #fff; border: 1px solid #e9e6f0; border-radius: 18px; padding: 16px 14px; }
+    .drawer-body .form-grid, .modal-body .form-grid { grid-template-columns: 1fr 1fr; gap: 14px 10px; }
+    .drawer-body .form-grid > *, .modal-body .form-grid > * { grid-column: 1 / -1; min-width: 0; }
+    /* two short fields (numbers, dates) in a row share it; a short field on its own keeps the full width */
+    .form-grid > .field:has(> input.num):not(.full):has(+ .field:has(> input.num):not(.full)),
+    .form-grid > .field:has(> input.num):not(.full) + .field:has(> input.num):not(.full) { grid-column: span 1; }
+    .drawer-body .card, .drawer-body .tile { border-radius: 16px; }
+    .drawer-body .hint { border-radius: 14px; margin-top: 12px; }
+
+    /* line editors (quotation, order, PO, return, transfer): the header row goes, each line becomes a card */
+    .le-head { display: none !important; }
+    .le-row { position: relative; display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; align-items: start !important; background: #fff; border: 1px solid #e9e6f0 !important; border-radius: 16px; padding: 12px !important; margin-bottom: 8px; }
+    .le-row > :first-child { grid-column: 1 / -1; padding-inline-end: 44px; min-width: 0; }
+    .le-row > .x-btn { position: absolute; top: 10px; inset-inline-end: 10px; width: 34px !important; height: 34px !important; }
+    .le-row > [data-label] { display: flex; flex-direction: column; gap: 5px; padding-top: 0 !important; font-size: 14px !important; }
+    .le-row > [data-label]::before { content: attr(data-label); font-family: 'Almarai', sans-serif; font-size: 11.5px; font-weight: 800; color: #7d7990; }
+
+    /* choices in a form: an even grid of large buttons (a segmented control), not pills of random widths */
+    .pill-choice { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px !important; }
+    .pill-choice > .pill { height: 46px; border-radius: 13px; justify-content: center; font-size: 12px; white-space: normal; text-align: center; line-height: 1.35; padding: 0 8px; }
+
+    /* native controls, one look: custom chevron on selects, start-aligned dates, roomy checkboxes */
+    select.inp { appearance: none; -webkit-appearance: none; padding-inline: 14px 38px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237d7990' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-size: 16px; background-position: left 13px center; text-overflow: ellipsis; }
+    [dir="ltr"] select.inp { background-position: right 13px center; }
+    input.inp[type="date"], input.inp[type="datetime-local"], input.inp[type="time"] { text-align: start; min-width: 0; padding-inline: 14px; }
+    input.inp[type="date"]::-webkit-calendar-picker-indicator, input.inp[type="datetime-local"]::-webkit-calendar-picker-indicator { margin: 0; padding: 4px; opacity: .55; }
+    input.inp[type="date"]::-webkit-date-and-time-value, input.inp[type="datetime-local"]::-webkit-date-and-time-value { text-align: start; }
+    input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; accent-color: #654e92; flex: none; }
+    .inp { background: #faf9fc; }
+    .inp:focus { box-shadow: 0 0 0 3px rgba(27, 196, 219, .16); }
+
+    /* ----- page command buttons and filter bars: an even grid instead of a ragged wrap ----- */
+    #page-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; width: 100%; }
+    #page-actions > .btn, #page-actions > * > .btn { width: 100%; }
+    #page-actions > .btn:first-child:nth-last-child(3), #page-actions > .btn:first-child:nth-last-child(5) { grid-column: 1 / -1; } /* odd count: the main action takes the first row */
+
+    /* ----- dialogs become bottom sheets ----- */
     .modal-wrap { padding: 0; align-items: flex-end; }
     .modal { width: 100% !important; max-height: 92dvh; border-radius: 24px 24px 0 0; animation: mSheetUp .22s cubic-bezier(.2, .8, .2, 1); }
     .modal-body { padding: 14px 16px; }
@@ -483,7 +528,14 @@
   .main [class*="min-w-["] { min-width: 0 !important; }
   .main .row.wrap > *, .drawer-body .row.wrap > *, .modal-body .row.wrap > * { max-width: 100%; }
   .main .row.wrap > .field, .main .row.wrap > .search-box, .main .row.wrap > .scan-wrap { flex: 1 1 100%; width: 100% !important; }
+  .main .row.wrap > .field:has(> select), .main .row.wrap > .field:has(> input[type="date"]), .main .row.wrap > .field:has(> input[type="datetime-local"]) { flex: 1 1 calc(50% - 4px); width: auto !important; }
+  .main .row.wrap > .pill-bar, .main .row.wrap > .tab-bar { flex: 1 1 100%; }
+  .main .row.wrap > .grow { display: none; }
+  .main .row.wrap > .field > .inp, .main .row.wrap > .field > .scan-wrap, .drawer-body .field > .inp, .modal-body .field > .inp { width: 100% !important; }
+  .drawer-foot [class*="w-["] { width: auto; }
   .main { overflow-x: clip; }
+  @keyframes mScreenIn { from { transform: translateX(var(--m-from, -28px)); opacity: 0; } to { transform: none; opacity: 1; } }
+  [dir="ltr"] .drawer { --m-from: 28px; }
   @keyframes mSheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 }
 

@@ -4,6 +4,7 @@
 // A scanned barcode typed by a hardware scanner lands in the same field, so scanning works without extra UI.
 import { nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useScrollLock } from '../../composables/scrollLock';
 import { t } from '../../i18n';
 import Icon from '../Icon.vue';
 import { useGlobalSearch } from '../useGlobalSearch';
@@ -15,6 +16,7 @@ const { q, state, groups, flat, reset } = useGlobalSearch(20);
 const open = ref(false);
 const input = ref(null);
 const recent = ref(read());
+useScrollLock(open);
 
 function read() { try { return JSON.parse(localStorage.getItem(LS_RECENT) || '[]').filter((x) => typeof x === 'string').slice(0, 6); } catch { return []; } }
 function remember(term) {

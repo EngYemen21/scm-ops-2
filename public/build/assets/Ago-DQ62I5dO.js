@@ -1,1 +1,0 @@
-import{$t as e,Et as t,Ft as n,X as r,Xt as i,it as a}from"./app-DzGdZA7T.js";var o=[`title`],s={__name:`Ago`,props:{at:{type:String,default:null}},setup(s){return(c,l)=>(n(),t(`span`,{class:`num flex-none text-[9px] text-faint`,title:s.at||null},e(i(r)(s.at,i(a))),9,o))}};export{s as default};

@@ -3,6 +3,7 @@
 //   <LinesEditor v-model="lines" with-price />          lines: LineDraft[] = [{ sku, name, qty, price, tracksExpiry }]
 import { computed } from 'vue';
 import { NumberInput } from '@/components';
+import { isMobile } from '@/composables/viewport';
 import { fmtMoney, t } from '@/i18n';
 import ProductPicker from './ProductPicker.vue';
 import { pname } from './shared';
@@ -24,6 +25,8 @@ function add(p) {
   if (props.modelValue.some((l) => l.sku === p.sku)) return;
   emit('update:modelValue', [...props.modelValue, { sku: p.sku, name: pname(p), qty: null, price: p.purchasePrice != null ? Number(p.purchasePrice) : null, tracksExpiry: p.tracksExpiry }]);
 }
+/** On a phone the column header row is hidden, so every field carries its own caption. */
+const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
 </script>
 
 <template>
@@ -31,17 +34,17 @@ function add(p) {
     <ProductPicker @pick="add" />
     <div v-if="modelValue.length === 0" class="empty dashed !rounded-xl !p-4">{{ t('لا بنود بعد — أضف منتجًا واحدًا على الأقل', 'No lines yet — add at least one product') }}</div>
     <div v-else class="overflow-hidden rounded-xl border border-line-2">
-      <div class="grid gap-1.5 bg-soft px-2.5 py-[7px] text-[9.5px] font-extrabold text-muted" :class="gridCols">
+      <div class="le-head grid gap-1.5 bg-soft px-2.5 py-[7px] text-[9.5px] font-extrabold text-muted" :class="gridCols">
         <div>{{ t('المنتج', 'Product') }}</div><div>{{ t('الكمية', 'Qty') }}</div>
         <template v-if="withPrice"><div>{{ t('سعر الوحدة', 'Unit price') }}</div><div>{{ t('الإجمالي', 'Total') }}</div></template>
         <div />
       </div>
-      <div v-for="(l, i) in modelValue" :key="l.sku" class="grid items-center gap-1.5 border-t border-line-2 px-2.5 py-[7px]" :class="gridCols">
+      <div v-for="(l, i) in modelValue" :key="l.sku" class="le-row grid items-center gap-1.5 border-t border-line-2 px-2.5 py-[7px]" :class="gridCols">
         <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name || l.sku }}</div><div class="num ltr text-start text-[8.5px] text-faint">{{ l.sku }}</div></div>
-        <NumberInput small :model-value="l.qty" :min="1" :placeholder="{ ar: 'كمية', en: 'qty' }" @update:model-value="(v) => patch(i, { qty: v })" />
+        <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :placeholder="{ ar: 'كمية', en: 'qty' }" @update:model-value="(v) => patch(i, { qty: v })" />
         <template v-if="withPrice">
-          <NumberInput small :model-value="l.price ?? null" :min="0" :placeholder="{ ar: 'سعر', en: 'price' }" @update:model-value="(v) => patch(i, { price: v })" />
-          <div class="num ltr text-start text-[11px]">{{ fmtMoney(lineTotal(l)) }}</div>
+          <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price ?? null" :min="0" :placeholder="{ ar: 'سعر', en: 'price' }" @update:model-value="(v) => patch(i, { price: v })" />
+          <div class="num ltr text-start text-[11px]" :data-label="t('الإجمالي', 'Total')">{{ fmtMoney(lineTotal(l)) }}</div>
         </template>
         <button type="button" class="x-btn !h-6 !w-6" aria-label="remove" @click="remove(i)">✕</button>
       </div>

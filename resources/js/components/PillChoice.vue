@@ -15,7 +15,7 @@ const emit = defineEmits(['update:modelValue']);
 
 <template>
   <Field :label="label" :required="required" :error="error" :hint="hint" :full="full">
-    <div class="row wrap !gap-1.5">
+    <div class="pill-choice row wrap !gap-1.5">
       <button v-for="o in options" :key="optV(o)" type="button" class="pill" :class="{ purple, active: optV(o) === modelValue }" @click="emit('update:modelValue', optV(o))">{{ optL(o) }}</button>
     </div>
   </Field>
