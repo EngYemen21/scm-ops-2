@@ -94,6 +94,7 @@ Both engines run the whole test suite in CI. What makes PostgreSQL behave like t
   unique keys are case-insensitive exactly as with MySQL's `*_ci` collations; a `ROUND(float, n)` overload is added.
 - `App\Database\PgConnection`: `` `identifier` `` quoting in hand-written SQL is sent as `"identifier"`.
 - `App\Support\Sql`: the few date functions that differ (`seconds`, `days`, `addHours`, `joinDistinct`).
+- Create the database with the `C.UTF-8` locale (Neon's default). With `en_US` PostgreSQL ignores punctuation when sorting, so lists order differently from MySQL.
 - Foreign keys are `DEFERRABLE` so the snapshot import can load tables in any order inside one transaction.
 
 ## 4. Moving data from the old system (NestJS / PostgreSQL)

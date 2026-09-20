@@ -50,6 +50,7 @@ jobs:
           POSTGRES_HOST_AUTH_METHOD: trust   # throw-away database of this job, reachable from the runner only
           POSTGRES_USER: scm
           POSTGRES_DB: scm_ops_test
+          POSTGRES_INITDB_ARGS: "--locale=C.UTF-8"   # same collation as the Neon database: code-point order, like MySQL's sort of ASCII
         ports: ["5432:5432"]
         options: >-
           --health-cmd="pg_isready -U scm" --health-interval=5s --health-timeout=5s --health-retries=30
