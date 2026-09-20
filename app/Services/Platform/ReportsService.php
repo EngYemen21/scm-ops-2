@@ -7,6 +7,7 @@ use App\Services\Platform\ReportSupport as R;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
+use App\Support\Sql;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -127,7 +128,7 @@ class ReportsService
     /** `AND (a LIKE %q% OR b LIKE %q% …)` over the given column expressions (the collation is case-insensitive). */
     private function whereQ(?string $q, array $columns): string
     {
-        return $q ? 'AND ('.implode(' OR ', array_map(fn ($col) => "{$col} LIKE ".$this->p(R::like($q)), $columns)).')' : '';
+        return $q ? 'AND ('.implode(' OR ', array_map(fn ($col) => "{$col} ".Sql::like()." ".$this->p(R::like($q)), $columns)).')' : '';
     }
 
     private function whereStatus(string $expression, ?string $status): string
@@ -164,8 +165,8 @@ class ReportsService
     private function inventory(ReportContext $c): array
     {
         $today = self::lit($c->today);
-        $available = 'b.quarantine = 0 AND b.blocked = 0 AND z.type NOT IN ('.self::NOT_AVAILABLE_ZONES.") AND (bt.expiry_date IS NULL OR bt.expiry_date >= {$today})";
-        $status = "CASE WHEN b.quarantine = 1 OR z.type = 'quarantine' THEN 'quarantine' WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < {$today} THEN 'expired' WHEN b.blocked = 1 THEN 'blocked' WHEN z.type NOT IN (".self::storage().") THEN z.type ELSE 'available' END";
+        $available = 'NOT b.quarantine AND NOT b.blocked AND z.type NOT IN ('.self::NOT_AVAILABLE_ZONES.") AND (bt.expiry_date IS NULL OR bt.expiry_date >= {$today})";
+        $status = "CASE WHEN b.quarantine OR z.type = 'quarantine' THEN 'quarantine' WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < {$today} THEN 'expired' WHEN b.blocked THEN 'blocked' WHEN z.type NOT IN (".self::storage().") THEN z.type ELSE 'available' END";
 
         return [
             'columns' => [...self::productCols(), R::col('warehouse', 'المستودع', 'Warehouse'), R::col('zone', 'المنطقة', 'Zone'), R::col('bin', 'الموقع', 'Bin'), R::col('batch', 'الدفعة', 'Batch'), R::col('expiry', 'الصلاحية', 'Expiry', 'date'),
@@ -209,7 +210,7 @@ class ReportsService
                     {$bucket(0, 30)} AS `d0_30`, {$bucket(31, 60)} AS `d31_60`, {$bucket(61, 90)} AS `d61_90`, {$bucket(91)} AS `d90p`,
                     SUM(b.on_hand) AS `total`, SUM(b.on_hand * COALESCE(p.purchase_price, 0)) AS `value`,
                     COALESCE(SUM(CASE WHEN b.age >= 91 THEN b.on_hand * COALESCE(p.purchase_price, 0) ELSE 0 END), 0) AS `value90p`
-                FROM (SELECT b.product_id, b.on_hand, FLOOR(TIMESTAMPDIFF(SECOND, COALESCE(bt.created_at, b.updated_at), {$now}) / 86400) AS age
+                FROM (SELECT b.product_id, b.on_hand, FLOOR(".Sql::seconds('COALESCE(bt.created_at, b.updated_at)', $now)." / 86400) AS age
                       FROM inventory_balances b LEFT JOIN batches bt ON bt.id = b.batch_id WHERE b.on_hand > 0 {$this->whereWh('b.warehouse_id', $c->whId)}) b
                 JOIN products p ON p.id = b.product_id WHERE 1 = 1 {$this->whereQ($c->q, ['p.sku', 'p.name_ar', 'p.name_en'])}
                 GROUP BY p.id, p.sku, p.name_ar, p.name_en",
@@ -219,13 +220,13 @@ class ReportsService
 
     private function expiry(ReportContext $c): array
     {
-        $days = 'DATEDIFF(bt.expiry_date, '.self::lit($c->today).')';
+        $days = Sql::days('bt.expiry_date', self::lit($c->today));
         $bucket = "CASE WHEN {$days} < 0 THEN 'expired' WHEN {$days} <= 7 THEN '0-7' WHEN {$days} <= 30 THEN '8-30' WHEN {$days} <= 90 THEN '31-90' ELSE '90+' END";
 
         return [
             'columns' => [...self::productCols(), R::col('batch', 'الدفعة', 'Batch'), R::col('expiry', 'تاريخ الانتهاء', 'Expiry', 'date'), R::col('daysToExpiry', 'أيام للانتهاء', 'Days to expiry', 'number'), R::col('bucket', 'الشريحة', 'Bucket', 'status'), R::col('qty', 'الكمية', 'Qty', 'number'), R::col('value', 'القيمة (ر.س)', 'Value (SAR)', 'money'), R::col('warehouses', 'المستودعات', 'Warehouses')],
             'body' => "SELECT p.sku AS `sku`, p.name_ar AS `productAr`, p.name_en AS `productEn`, bt.batch_no AS `batch`, bt.expiry_date AS `expiry`, {$days} AS `daysToExpiry`, {$bucket} AS `bucket`,
-                    SUM(b.on_hand) AS `qty`, SUM(b.on_hand * COALESCE(p.purchase_price, 0)) AS `value`, GROUP_CONCAT(DISTINCT w.code ORDER BY w.code SEPARATOR ',') AS `warehouses`
+                    SUM(b.on_hand) AS `qty`, SUM(b.on_hand * COALESCE(p.purchase_price, 0)) AS `value`, ".Sql::joinDistinct('w.code')." AS `warehouses`
                 FROM batches bt JOIN products p ON p.id = bt.product_id JOIN inventory_balances b ON b.batch_id = bt.id JOIN warehouses w ON w.id = b.warehouse_id
                 WHERE bt.expiry_date IS NOT NULL {$this->whereWh('b.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['p.sku', 'p.name_ar', 'p.name_en', 'bt.batch_no'])} {$this->whereStatus("({$bucket})", $c->status)}
                 GROUP BY bt.id, bt.batch_no, bt.expiry_date, p.sku, p.name_ar, p.name_en HAVING SUM(b.on_hand) > 0",
@@ -242,7 +243,7 @@ class ReportsService
             'body' => 'SELECT g.number AS `number`, g.posted_at AS `postedAt`, po.number AS `po`, po.due_date AS `dueDate`, s.name_ar AS `supplierAr`, s.name_en AS `supplierEn`, w.code AS `warehouse`, sh.number AS `shipment`,
                     COALESCE(a.ordered, 0) AS `ordered`, COALESCE(a.received, 0) AS `received`, COALESCE(a.accepted, 0) AS `accepted`, COALESCE(a.damaged, 0) AS `damaged`, COALESCE(a.rejected, 0) AS `rejected`,
                     CASE WHEN po.due_date IS NULL THEN NULL ELSE (DATE(g.posted_at) <= DATE(po.due_date)) END AS `onTime`,
-                    CASE WHEN po.due_date IS NULL THEN NULL ELSE GREATEST(DATEDIFF(g.posted_at, po.due_date), 0) END AS `daysLate`, g.posted_by AS `postedBy`
+                    CASE WHEN po.due_date IS NULL THEN NULL ELSE GREATEST('.Sql::days('g.posted_at', 'po.due_date').', 0) END AS `daysLate`, g.posted_by AS `postedBy`
                 FROM goods_receipts g JOIN purchase_orders po ON po.id = g.po_id JOIN suppliers s ON s.id = g.supplier_id JOIN warehouses w ON w.id = g.warehouse_id JOIN inbound_shipments sh ON sh.id = g.shipment_id
                 LEFT JOIN '.self::GRN_AGG." a ON a.grn_id = g.id
                 WHERE {$this->between('g.posted_at', $c)} {$this->whereWh('g.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['g.number', 'po.number', 's.name_ar', 's.name_en', 'sh.number'])}",
@@ -279,10 +280,10 @@ class ReportsService
                     COUNT(g.id) AS `grns`,
                     ROUND(100.0 * SUM(CASE WHEN g.id IS NOT NULL AND {$onTimeInFull} THEN 1 ELSE 0 END) / NULLIF(COUNT(g.id), 0), 1) AS `otifPct`,
                     ROUND(100.0 * SUM(g.accepted) / NULLIF(SUM(g.ordered), 0), 1) AS `fillPct`,
-                    ROUND(AVG(TIMESTAMPDIFF(SECOND, g.sent_at, g.posted_at) / 86400), 1) AS `avgLeadDays`,
+                    ROUND(AVG(".Sql::seconds('g.sent_at', 'g.posted_at')." / 86400), 1) AS `avgLeadDays`,
                     ROUND(100.0 * SUM(g.damaged) / NULLIF(SUM(g.received), 0), 1) AS `damagedPct`, s.score AS `score`
                 FROM suppliers s LEFT JOIN g ON g.supplier_id = s.id
-                WHERE s.active = 1 AND EXISTS (SELECT 1 FROM pos WHERE pos.supplier_id = s.id) {$this->whereQ($c->q, ['s.code', 's.name_ar', 's.name_en'])}
+                WHERE s.active AND EXISTS (SELECT 1 FROM pos WHERE pos.supplier_id = s.id) {$this->whereQ($c->q, ['s.code', 's.name_ar', 's.name_en'])}
                 GROUP BY s.id, s.code, s.name_ar, s.name_en, s.score",
             'order' => 't.`pos` DESC, t.`code`', 'sums' => ['pos', 'poValue', 'grns'],
         ];
@@ -322,8 +323,8 @@ class ReportsService
         return [
             'columns' => [R::col('warehouse', 'المستودع', 'Warehouse'), R::col('status', 'الحالة', 'Status', 'status'), R::col('orders', 'الطلبات', 'Orders', 'number'), R::col('cartons', 'الكراتين', 'Cartons', 'number'), R::col('kg', 'الوزن (كجم)', 'Weight (kg)', 'number'), R::col('packed', 'معبأ', 'Packed', 'number'), R::col('avgHoursAllocToPacked', 'متوسط ساعات التخصيص→التعبئة', 'Avg hours alloc→packed', 'number'), R::col('avgHoursPackedToDispatch', 'متوسط ساعات التعبئة→الشحن', 'Avg hours packed→dispatch', 'number')],
             'body' => "SELECT w.code AS `warehouse`, f.status AS `status`, COUNT(*) AS `orders`, SUM(f.cartons) AS `cartons`, ROUND(SUM(f.weight_kg), 1) AS `kg`, COUNT(f.packed_at) AS `packed`,
-                    ROUND(AVG(TIMESTAMPDIFF(SECOND, f.created_at, f.packed_at) / 3600), 2) AS `avgHoursAllocToPacked`,
-                    ROUND(AVG(TIMESTAMPDIFF(SECOND, f.packed_at, f.dispatched_at) / 3600), 2) AS `avgHoursPackedToDispatch`
+                    ROUND(AVG(".Sql::seconds('f.created_at', 'f.packed_at')." / 3600), 2) AS `avgHoursAllocToPacked`,
+                    ROUND(AVG(".Sql::seconds('f.packed_at', 'f.dispatched_at')." / 3600), 2) AS `avgHoursPackedToDispatch`
                 FROM fulfillment_orders f JOIN warehouses w ON w.id = f.warehouse_id
                 WHERE {$this->between('f.created_at', $c)} {$this->whereWh('f.warehouse_id', $c->whId)} {$this->whereStatus('f.status', $c->status)}
                 GROUP BY w.code, f.status",
@@ -358,7 +359,7 @@ class ReportsService
         // The three sub-aggregates come first in the SQL text, so their bound values are registered first, in order.
         $trips = "(SELECT tr.vehicle_id, COUNT(*) AS trips, SUM(tr.km) AS km, SUM(tr.kg) AS kg FROM trips tr
             WHERE {$this->between('COALESCE(tr.date, tr.created_at)', $c)} AND tr.status NOT IN ('draft','cancelled') {$this->whereWh('tr.warehouse_id', $c->whId)} GROUP BY tr.vehicle_id)";
-        $maintenance = "(SELECT mo.vehicle_id, SUM(COALESCE(mo.down_days, GREATEST(DATEDIFF(mo.end_date, mo.start_date), 0), 0)) AS days, SUM(mo.cost) AS cost FROM maintenance_orders mo
+        $maintenance = "(SELECT mo.vehicle_id, SUM(COALESCE(mo.down_days, GREATEST(".Sql::days('mo.end_date', 'mo.start_date').", 0), 0)) AS days, SUM(mo.cost) AS cost FROM maintenance_orders mo
             WHERE {$this->between('COALESCE(mo.start_date, mo.created_at)', $c)} GROUP BY mo.vehicle_id)";
         $fuel = "(SELECT fr.vehicle_id, SUM(fr.liters) AS liters, SUM(fr.cost) AS cost FROM fuel_records fr WHERE {$this->between('fr.date', $c)} GROUP BY fr.vehicle_id)";
         $wh = $c->whId ? 'AND (v.warehouse_id = '.$this->p($c->whId).' OR tt.vehicle_id IS NOT NULL)' : '';
@@ -371,7 +372,7 @@ class ReportsService
                     COALESCE(m.days, 0) AS `maintenanceDays`, COALESCE(m.cost, 0) AS `maintenanceCost`, COALESCE(f.liters, 0) AS `liters`, COALESCE(f.cost, 0) AS `fuelCost`,
                     ROUND(COALESCE(tt.km, 0) / NULLIF(f.liters, 0), 2) AS `kmPerL`
                 FROM vehicles v LEFT JOIN {$trips} tt ON tt.vehicle_id = v.id LEFT JOIN {$maintenance} m ON m.vehicle_id = v.id LEFT JOIN {$fuel} f ON f.vehicle_id = v.id
-                WHERE v.active = 1 {$wh} {$this->whereQ($c->q, ['v.code', 'v.plate_ar', 'v.plate_en'])}",
+                WHERE v.active {$wh} {$this->whereQ($c->q, ['v.code', 'v.plate_ar', 'v.plate_en'])}",
             'order' => 't.`trips` DESC, t.`code`', 'sums' => ['trips', 'km', 'kgLoaded', 'capacityKg', 'maintenanceDays', 'maintenanceCost', 'liters', 'fuelCost'],
         ];
     }
@@ -412,13 +413,13 @@ class ReportsService
     private function exceptions(ReportContext $c): array
     {
         $now = self::lit($c->now);
-        $breached = "SUM(CASE WHEN COALESCE(e.resolved_at, {$now}) > TIMESTAMPADD(SECOND, ROUND(e.sla_hours * 3600), e.created_at) THEN 1 ELSE 0 END)";
+        $breached = "SUM(CASE WHEN COALESCE(e.resolved_at, {$now}) > ".Sql::addHours('e.created_at', 'e.sla_hours').' THEN 1 ELSE 0 END)';
 
         return [
             'columns' => [R::col('kind', 'النوع', 'Kind', 'status'), R::col('severity', 'الخطورة', 'Severity', 'status'), R::col('owner', 'المسؤول', 'Owner'), R::col('total', 'الإجمالي', 'Total', 'number'), R::col('open', 'مفتوح', 'Open', 'number'), R::col('resolved', 'مُغلق', 'Resolved', 'number'), R::col('avgResolutionHours', 'متوسط ساعات الحل', 'Avg resolution (h)', 'number'), R::col('slaBreaches', 'خروقات SLA', 'SLA breaches', 'number'), R::col('slaBreachPct', 'نسبة خرق SLA %', 'SLA breach %', 'pct')],
             'body' => "SELECT e.kind AS `kind`, e.severity AS `severity`, COALESCE(e.owner_role, '—') AS `owner`, COUNT(*) AS `total`,
                     SUM(CASE WHEN e.status <> 'resolved' THEN 1 ELSE 0 END) AS `open`, SUM(CASE WHEN e.status = 'resolved' THEN 1 ELSE 0 END) AS `resolved`,
-                    ROUND(AVG(TIMESTAMPDIFF(SECOND, e.created_at, e.resolved_at) / 3600), 1) AS `avgResolutionHours`,
+                    ROUND(AVG(".Sql::seconds('e.created_at', 'e.resolved_at')." / 3600), 1) AS `avgResolutionHours`,
                     {$breached} AS `slaBreaches`, ROUND(100.0 * {$breached} / NULLIF(COUNT(*), 0), 1) AS `slaBreachPct`
                 FROM exceptions e
                 WHERE {$this->between('e.created_at', $c)} {$this->whereStatus('e.status', $c->status)} {$this->whereQ($c->q, ['e.kind', 'e.owner_role', 'e.text_ar'])}

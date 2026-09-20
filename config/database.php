@@ -103,6 +103,10 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'timezone' => 'UTC', // the application stores and reads UTC, as on MySQL
+            // Behind a transaction-mode pooler (Neon / PgBouncer) server-side prepared statements do not survive
+            // between transactions: DB_EMULATE_PREPARES=true lets PDO build the statements itself.
+            'options' => env('DB_EMULATE_PREPARES', false) && extension_loaded('pdo_pgsql') ? [PDO::ATTR_EMULATE_PREPARES => true] : [],
         ],
 
         'sqlsrv' => [

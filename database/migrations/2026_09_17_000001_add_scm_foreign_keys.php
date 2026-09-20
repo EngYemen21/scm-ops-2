@@ -12,338 +12,338 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('user_roles', function (Blueprint $table) {
-            $table->foreign(['user_id'], 'user_roles_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete();
-            $table->foreign(['role_id'], 'user_roles_role_id_fk')->references(['id'])->on('roles')->cascadeOnDelete();
+            $table->foreign(['user_id'], 'user_roles_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete()->deferrable();
+            $table->foreign(['role_id'], 'user_roles_role_id_fk')->references(['id'])->on('roles')->cascadeOnDelete()->deferrable();
         });
         Schema::table('role_permissions', function (Blueprint $table) {
-            $table->foreign(['role_id'], 'role_permissions_role_id_fk')->references(['id'])->on('roles')->cascadeOnDelete();
-            $table->foreign(['permission_id'], 'role_permissions_permission_id_fk')->references(['id'])->on('permissions')->cascadeOnDelete();
+            $table->foreign(['role_id'], 'role_permissions_role_id_fk')->references(['id'])->on('roles')->cascadeOnDelete()->deferrable();
+            $table->foreign(['permission_id'], 'role_permissions_permission_id_fk')->references(['id'])->on('permissions')->cascadeOnDelete()->deferrable();
         });
         Schema::table('user_warehouses', function (Blueprint $table) {
-            $table->foreign(['user_id'], 'user_warehouses_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete();
-            $table->foreign(['warehouse_id'], 'user_warehouses_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete();
+            $table->foreign(['user_id'], 'user_warehouses_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'user_warehouses_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete()->deferrable();
         });
         Schema::table('refresh_tokens', function (Blueprint $table) {
-            $table->foreign(['user_id'], 'refresh_tokens_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete();
+            $table->foreign(['user_id'], 'refresh_tokens_user_id_fk')->references(['id'])->on('users')->cascadeOnDelete()->deferrable();
         });
         Schema::table('product_categories', function (Blueprint $table) {
-            $table->foreign(['parent_id'], 'product_categories_parent_id_fk')->references(['id'])->on('product_categories')->nullOnDelete();
+            $table->foreign(['parent_id'], 'product_categories_parent_id_fk')->references(['id'])->on('product_categories')->nullOnDelete()->deferrable();
         });
         Schema::table('products', function (Blueprint $table) {
-            $table->foreign(['category_id'], 'products_category_id_fk')->references(['id'])->on('product_categories')->nullOnDelete();
-            $table->foreign(['base_uom_id'], 'products_base_uom_id_fk')->references(['id'])->on('uoms')->nullOnDelete();
-            $table->foreign(['home_warehouse_id'], 'products_home_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete();
+            $table->foreign(['category_id'], 'products_category_id_fk')->references(['id'])->on('product_categories')->nullOnDelete()->deferrable();
+            $table->foreign(['base_uom_id'], 'products_base_uom_id_fk')->references(['id'])->on('uoms')->nullOnDelete()->deferrable();
+            $table->foreign(['home_warehouse_id'], 'products_home_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete()->deferrable();
         });
         Schema::table('product_barcodes', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'product_barcodes_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete();
-            $table->foreign(['uom_id'], 'product_barcodes_uom_id_fk')->references(['id'])->on('uoms')->nullOnDelete();
+            $table->foreign(['product_id'], 'product_barcodes_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete()->deferrable();
+            $table->foreign(['uom_id'], 'product_barcodes_uom_id_fk')->references(['id'])->on('uoms')->nullOnDelete()->deferrable();
         });
         Schema::table('product_suppliers', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'product_suppliers_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete();
-            $table->foreign(['supplier_id'], 'product_suppliers_supplier_id_fk')->references(['id'])->on('suppliers')->cascadeOnDelete();
+            $table->foreign(['product_id'], 'product_suppliers_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'product_suppliers_supplier_id_fk')->references(['id'])->on('suppliers')->cascadeOnDelete()->deferrable();
         });
         Schema::table('product_storage_requirements', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'product_storage_requirements_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete();
+            $table->foreign(['product_id'], 'product_storage_requirements_product_id_fk')->references(['id'])->on('products')->cascadeOnDelete()->deferrable();
         });
         Schema::table('zones', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'zones_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete();
+            $table->foreign(['warehouse_id'], 'zones_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete()->deferrable();
         });
         Schema::table('racks', function (Blueprint $table) {
-            $table->foreign(['zone_id'], 'racks_zone_id_fk')->references(['id'])->on('zones')->cascadeOnDelete();
+            $table->foreign(['zone_id'], 'racks_zone_id_fk')->references(['id'])->on('zones')->cascadeOnDelete()->deferrable();
         });
         Schema::table('bins', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'bins_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete();
-            $table->foreign(['zone_id'], 'bins_zone_id_fk')->references(['id'])->on('zones')->cascadeOnDelete();
-            $table->foreign(['rack_id'], 'bins_rack_id_fk')->references(['id'])->on('racks')->nullOnDelete();
-            $table->foreign(['fixed_product_id'], 'bins_fixed_product_id_fk')->references(['id'])->on('products')->nullOnDelete();
+            $table->foreign(['warehouse_id'], 'bins_warehouse_id_fk')->references(['id'])->on('warehouses')->cascadeOnDelete()->deferrable();
+            $table->foreign(['zone_id'], 'bins_zone_id_fk')->references(['id'])->on('zones')->cascadeOnDelete()->deferrable();
+            $table->foreign(['rack_id'], 'bins_rack_id_fk')->references(['id'])->on('racks')->nullOnDelete()->deferrable();
+            $table->foreign(['fixed_product_id'], 'bins_fixed_product_id_fk')->references(['id'])->on('products')->nullOnDelete()->deferrable();
         });
         Schema::table('purchase_requisitions', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'purchase_requisitions_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['warehouse_id'], 'purchase_requisitions_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('pr_lines', function (Blueprint $table) {
-            $table->foreign(['pr_id'], 'pr_lines_pr_id_fk')->references(['id'])->on('purchase_requisitions')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'pr_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['pr_id'], 'pr_lines_pr_id_fk')->references(['id'])->on('purchase_requisitions')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'pr_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('pr_approvals', function (Blueprint $table) {
-            $table->foreign(['pr_id'], 'pr_approvals_pr_id_fk')->references(['id'])->on('purchase_requisitions')->cascadeOnDelete();
+            $table->foreign(['pr_id'], 'pr_approvals_pr_id_fk')->references(['id'])->on('purchase_requisitions')->cascadeOnDelete()->deferrable();
         });
         Schema::table('rfqs', function (Blueprint $table) {
-            $table->foreign(['pr_id'], 'rfqs_pr_id_fk')->references(['id'])->on('purchase_requisitions')->nullOnDelete();
-            $table->foreign(['delivery_warehouse_id'], 'rfqs_delivery_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete();
-            $table->foreign(['awarded_quotation_id'], 'rfqs_awarded_quotation_id_fk')->references(['id'])->on('supplier_quotations')->nullOnDelete();
+            $table->foreign(['pr_id'], 'rfqs_pr_id_fk')->references(['id'])->on('purchase_requisitions')->nullOnDelete()->deferrable();
+            $table->foreign(['delivery_warehouse_id'], 'rfqs_delivery_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete()->deferrable();
+            $table->foreign(['awarded_quotation_id'], 'rfqs_awarded_quotation_id_fk')->references(['id'])->on('supplier_quotations')->nullOnDelete()->deferrable();
         });
         Schema::table('rfq_lines', function (Blueprint $table) {
-            $table->foreign(['rfq_id'], 'rfq_lines_rfq_id_fk')->references(['id'])->on('rfqs')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'rfq_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['rfq_id'], 'rfq_lines_rfq_id_fk')->references(['id'])->on('rfqs')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'rfq_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('rfq_suppliers', function (Blueprint $table) {
-            $table->foreign(['rfq_id'], 'rfq_suppliers_rfq_id_fk')->references(['id'])->on('rfqs')->cascadeOnDelete();
-            $table->foreign(['supplier_id'], 'rfq_suppliers_supplier_id_fk')->references(['id'])->on('suppliers')->cascadeOnDelete();
+            $table->foreign(['rfq_id'], 'rfq_suppliers_rfq_id_fk')->references(['id'])->on('rfqs')->cascadeOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'rfq_suppliers_supplier_id_fk')->references(['id'])->on('suppliers')->cascadeOnDelete()->deferrable();
         });
         Schema::table('supplier_quotations', function (Blueprint $table) {
-            $table->foreign(['supplier_id'], 'supplier_quotations_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete();
-            $table->foreign(['rfq_id'], 'supplier_quotations_rfq_id_fk')->references(['id'])->on('rfqs')->nullOnDelete();
+            $table->foreign(['supplier_id'], 'supplier_quotations_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete()->deferrable();
+            $table->foreign(['rfq_id'], 'supplier_quotations_rfq_id_fk')->references(['id'])->on('rfqs')->nullOnDelete()->deferrable();
         });
         Schema::table('supplier_quotation_lines', function (Blueprint $table) {
-            $table->foreign(['quotation_id'], 'supplier_quotation_lines_quotation_id_fk')->references(['id'])->on('supplier_quotations')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'supplier_quotation_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['quotation_id'], 'supplier_quotation_lines_quotation_id_fk')->references(['id'])->on('supplier_quotations')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'supplier_quotation_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('purchase_orders', function (Blueprint $table) {
-            $table->foreign(['supplier_id'], 'purchase_orders_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'purchase_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['rfq_id'], 'purchase_orders_rfq_id_fk')->references(['id'])->on('rfqs')->nullOnDelete();
+            $table->foreign(['supplier_id'], 'purchase_orders_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'purchase_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['rfq_id'], 'purchase_orders_rfq_id_fk')->references(['id'])->on('rfqs')->nullOnDelete()->deferrable();
         });
         Schema::table('po_lines', function (Blueprint $table) {
-            $table->foreign(['po_id'], 'po_lines_po_id_fk')->references(['id'])->on('purchase_orders')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'po_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['po_id'], 'po_lines_po_id_fk')->references(['id'])->on('purchase_orders')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'po_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('po_approvals', function (Blueprint $table) {
-            $table->foreign(['po_id'], 'po_approvals_po_id_fk')->references(['id'])->on('purchase_orders')->cascadeOnDelete();
+            $table->foreign(['po_id'], 'po_approvals_po_id_fk')->references(['id'])->on('purchase_orders')->cascadeOnDelete()->deferrable();
         });
         Schema::table('inbound_shipments', function (Blueprint $table) {
-            $table->foreign(['po_id'], 'inbound_shipments_po_id_fk')->references(['id'])->on('purchase_orders')->restrictOnDelete();
-            $table->foreign(['supplier_id'], 'inbound_shipments_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'inbound_shipments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['po_id'], 'inbound_shipments_po_id_fk')->references(['id'])->on('purchase_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'inbound_shipments_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'inbound_shipments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('shipment_lines', function (Blueprint $table) {
-            $table->foreign(['shipment_id'], 'shipment_lines_shipment_id_fk')->references(['id'])->on('inbound_shipments')->cascadeOnDelete();
-            $table->foreign(['po_line_id'], 'shipment_lines_po_line_id_fk')->references(['id'])->on('po_lines')->nullOnDelete();
-            $table->foreign(['product_id'], 'shipment_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['suggested_bin_id'], 'shipment_lines_suggested_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
+            $table->foreign(['shipment_id'], 'shipment_lines_shipment_id_fk')->references(['id'])->on('inbound_shipments')->cascadeOnDelete()->deferrable();
+            $table->foreign(['po_line_id'], 'shipment_lines_po_line_id_fk')->references(['id'])->on('po_lines')->nullOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'shipment_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['suggested_bin_id'], 'shipment_lines_suggested_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
         });
         Schema::table('goods_receipts', function (Blueprint $table) {
-            $table->foreign(['shipment_id'], 'goods_receipts_shipment_id_fk')->references(['id'])->on('inbound_shipments')->restrictOnDelete();
-            $table->foreign(['po_id'], 'goods_receipts_po_id_fk')->references(['id'])->on('purchase_orders')->restrictOnDelete();
-            $table->foreign(['supplier_id'], 'goods_receipts_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'goods_receipts_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['shipment_id'], 'goods_receipts_shipment_id_fk')->references(['id'])->on('inbound_shipments')->restrictOnDelete()->deferrable();
+            $table->foreign(['po_id'], 'goods_receipts_po_id_fk')->references(['id'])->on('purchase_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'goods_receipts_supplier_id_fk')->references(['id'])->on('suppliers')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'goods_receipts_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('grn_lines', function (Blueprint $table) {
-            $table->foreign(['grn_id'], 'grn_lines_grn_id_fk')->references(['id'])->on('goods_receipts')->cascadeOnDelete();
-            $table->foreign(['shipment_line_id'], 'grn_lines_shipment_line_id_fk')->references(['id'])->on('shipment_lines')->nullOnDelete();
-            $table->foreign(['po_line_id'], 'grn_lines_po_line_id_fk')->references(['id'])->on('po_lines')->nullOnDelete();
-            $table->foreign(['product_id'], 'grn_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'grn_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
+            $table->foreign(['grn_id'], 'grn_lines_grn_id_fk')->references(['id'])->on('goods_receipts')->cascadeOnDelete()->deferrable();
+            $table->foreign(['shipment_line_id'], 'grn_lines_shipment_line_id_fk')->references(['id'])->on('shipment_lines')->nullOnDelete()->deferrable();
+            $table->foreign(['po_line_id'], 'grn_lines_po_line_id_fk')->references(['id'])->on('po_lines')->nullOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'grn_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'grn_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
         });
         Schema::table('qc_results', function (Blueprint $table) {
-            $table->foreign(['grn_line_id'], 'qc_results_grn_line_id_fk')->references(['id'])->on('grn_lines')->cascadeOnDelete();
+            $table->foreign(['grn_line_id'], 'qc_results_grn_line_id_fk')->references(['id'])->on('grn_lines')->cascadeOnDelete()->deferrable();
         });
         Schema::table('putaway_tasks', function (Blueprint $table) {
-            $table->foreign(['grn_id'], 'putaway_tasks_grn_id_fk')->references(['id'])->on('goods_receipts')->restrictOnDelete();
-            $table->foreign(['grn_line_id'], 'putaway_tasks_grn_line_id_fk')->references(['id'])->on('grn_lines')->restrictOnDelete();
-            $table->foreign(['shipment_id'], 'putaway_tasks_shipment_id_fk')->references(['id'])->on('inbound_shipments')->nullOnDelete();
-            $table->foreign(['product_id'], 'putaway_tasks_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'putaway_tasks_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
-            $table->foreign(['warehouse_id'], 'putaway_tasks_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['suggested_bin_id'], 'putaway_tasks_suggested_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
-            $table->foreign(['actual_bin_id'], 'putaway_tasks_actual_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
+            $table->foreign(['grn_id'], 'putaway_tasks_grn_id_fk')->references(['id'])->on('goods_receipts')->restrictOnDelete()->deferrable();
+            $table->foreign(['grn_line_id'], 'putaway_tasks_grn_line_id_fk')->references(['id'])->on('grn_lines')->restrictOnDelete()->deferrable();
+            $table->foreign(['shipment_id'], 'putaway_tasks_shipment_id_fk')->references(['id'])->on('inbound_shipments')->nullOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'putaway_tasks_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'putaway_tasks_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'putaway_tasks_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['suggested_bin_id'], 'putaway_tasks_suggested_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
+            $table->foreign(['actual_bin_id'], 'putaway_tasks_actual_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
         });
         Schema::table('batches', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'batches_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['supplier_id'], 'batches_supplier_id_fk')->references(['id'])->on('suppliers')->nullOnDelete();
+            $table->foreign(['product_id'], 'batches_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'batches_supplier_id_fk')->references(['id'])->on('suppliers')->nullOnDelete()->deferrable();
         });
         Schema::table('inventory_balances', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'inventory_balances_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'inventory_balances_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['bin_id'], 'inventory_balances_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'inventory_balances_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
+            $table->foreign(['product_id'], 'inventory_balances_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'inventory_balances_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['bin_id'], 'inventory_balances_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'inventory_balances_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
         });
         Schema::table('inventory_movements', function (Blueprint $table) {
-            $table->foreign(['product_id'], 'inventory_movements_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'inventory_movements_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
-            $table->foreign(['src_bin_id'], 'inventory_movements_src_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
-            $table->foreign(['dst_bin_id'], 'inventory_movements_dst_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
+            $table->foreign(['product_id'], 'inventory_movements_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'inventory_movements_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
+            $table->foreign(['src_bin_id'], 'inventory_movements_src_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
+            $table->foreign(['dst_bin_id'], 'inventory_movements_dst_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
         });
         Schema::table('inventory_reservations', function (Blueprint $table) {
-            $table->foreign(['so_id'], 'inventory_reservations_so_id_fk')->references(['id'])->on('sales_orders')->restrictOnDelete();
-            $table->foreign(['so_line_id'], 'inventory_reservations_so_line_id_fk')->references(['id'])->on('sales_order_lines')->restrictOnDelete();
-            $table->foreign(['product_id'], 'inventory_reservations_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'inventory_reservations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['so_id'], 'inventory_reservations_so_id_fk')->references(['id'])->on('sales_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['so_line_id'], 'inventory_reservations_so_line_id_fk')->references(['id'])->on('sales_order_lines')->restrictOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'inventory_reservations_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'inventory_reservations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('inventory_allocations', function (Blueprint $table) {
-            $table->foreign(['reservation_id'], 'inventory_allocations_reservation_id_fk')->references(['id'])->on('inventory_reservations')->restrictOnDelete();
-            $table->foreign(['so_line_id'], 'inventory_allocations_so_line_id_fk')->references(['id'])->on('sales_order_lines')->restrictOnDelete();
-            $table->foreign(['product_id'], 'inventory_allocations_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'inventory_allocations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['bin_id'], 'inventory_allocations_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'inventory_allocations_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
+            $table->foreign(['reservation_id'], 'inventory_allocations_reservation_id_fk')->references(['id'])->on('inventory_reservations')->restrictOnDelete()->deferrable();
+            $table->foreign(['so_line_id'], 'inventory_allocations_so_line_id_fk')->references(['id'])->on('sales_order_lines')->restrictOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'inventory_allocations_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'inventory_allocations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['bin_id'], 'inventory_allocations_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'inventory_allocations_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
         });
         Schema::table('warehouse_transfers', function (Blueprint $table) {
-            $table->foreign(['from_warehouse_id'], 'warehouse_transfers_from_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['to_warehouse_id'], 'warehouse_transfers_to_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['from_warehouse_id'], 'warehouse_transfers_from_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['to_warehouse_id'], 'warehouse_transfers_to_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('transfer_lines', function (Blueprint $table) {
-            $table->foreign(['transfer_id'], 'transfer_lines_transfer_id_fk')->references(['id'])->on('warehouse_transfers')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'transfer_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'transfer_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
-            $table->foreign(['from_bin_id'], 'transfer_lines_from_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
-            $table->foreign(['to_bin_id'], 'transfer_lines_to_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
+            $table->foreign(['transfer_id'], 'transfer_lines_transfer_id_fk')->references(['id'])->on('warehouse_transfers')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'transfer_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'transfer_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
+            $table->foreign(['from_bin_id'], 'transfer_lines_from_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
+            $table->foreign(['to_bin_id'], 'transfer_lines_to_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
         });
         Schema::table('inventory_counts', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'inventory_counts_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['zone_id'], 'inventory_counts_zone_id_fk')->references(['id'])->on('zones')->nullOnDelete();
+            $table->foreign(['warehouse_id'], 'inventory_counts_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['zone_id'], 'inventory_counts_zone_id_fk')->references(['id'])->on('zones')->nullOnDelete()->deferrable();
         });
         Schema::table('count_lines', function (Blueprint $table) {
-            $table->foreign(['count_id'], 'count_lines_count_id_fk')->references(['id'])->on('inventory_counts')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'count_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['bin_id'], 'count_lines_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'count_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
+            $table->foreign(['count_id'], 'count_lines_count_id_fk')->references(['id'])->on('inventory_counts')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'count_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['bin_id'], 'count_lines_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'count_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
         });
         Schema::table('staging_entries', function (Blueprint $table) {
-            $table->foreign(['bin_id'], 'staging_entries_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
+            $table->foreign(['bin_id'], 'staging_entries_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
         });
         Schema::table('quotations', function (Blueprint $table) {
-            $table->foreign(['customer_id'], 'quotations_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete();
-            $table->foreign(['so_id'], 'quotations_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete();
+            $table->foreign(['customer_id'], 'quotations_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete()->deferrable();
+            $table->foreign(['so_id'], 'quotations_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete()->deferrable();
         });
         Schema::table('quotation_lines', function (Blueprint $table) {
-            $table->foreign(['quotation_id'], 'quotation_lines_quotation_id_fk')->references(['id'])->on('quotations')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'quotation_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['quotation_id'], 'quotation_lines_quotation_id_fk')->references(['id'])->on('quotations')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'quotation_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('sales_orders', function (Blueprint $table) {
-            $table->foreign(['customer_id'], 'sales_orders_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'sales_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['consolidation_id'], 'sales_orders_consolidation_id_fk')->references(['id'])->on('order_consolidations')->nullOnDelete();
+            $table->foreign(['customer_id'], 'sales_orders_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'sales_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['consolidation_id'], 'sales_orders_consolidation_id_fk')->references(['id'])->on('order_consolidations')->nullOnDelete()->deferrable();
         });
         Schema::table('sales_order_lines', function (Blueprint $table) {
-            $table->foreign(['so_id'], 'sales_order_lines_so_id_fk')->references(['id'])->on('sales_orders')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'sales_order_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['so_id'], 'sales_order_lines_so_id_fk')->references(['id'])->on('sales_orders')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'sales_order_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('order_consolidations', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'order_consolidations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['warehouse_id'], 'order_consolidations_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('fulfillment_orders', function (Blueprint $table) {
-            $table->foreign(['so_id'], 'fulfillment_orders_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete();
-            $table->foreign(['customer_id'], 'fulfillment_orders_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete();
-            $table->foreign(['warehouse_id'], 'fulfillment_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['trip_id'], 'fulfillment_orders_trip_id_fk')->references(['id'])->on('trips')->nullOnDelete();
+            $table->foreign(['so_id'], 'fulfillment_orders_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete()->deferrable();
+            $table->foreign(['customer_id'], 'fulfillment_orders_customer_id_fk')->references(['id'])->on('customers')->restrictOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'fulfillment_orders_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['trip_id'], 'fulfillment_orders_trip_id_fk')->references(['id'])->on('trips')->nullOnDelete()->deferrable();
         });
         Schema::table('fo_lines', function (Blueprint $table) {
-            $table->foreign(['fo_id'], 'fo_lines_fo_id_fk')->references(['id'])->on('fulfillment_orders')->cascadeOnDelete();
-            $table->foreign(['so_line_id'], 'fo_lines_so_line_id_fk')->references(['id'])->on('sales_order_lines')->nullOnDelete();
-            $table->foreign(['product_id'], 'fo_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
+            $table->foreign(['fo_id'], 'fo_lines_fo_id_fk')->references(['id'])->on('fulfillment_orders')->cascadeOnDelete()->deferrable();
+            $table->foreign(['so_line_id'], 'fo_lines_so_line_id_fk')->references(['id'])->on('sales_order_lines')->nullOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'fo_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
         });
         Schema::table('pick_lists', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'pick_lists_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['fo_id'], 'pick_lists_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete();
+            $table->foreign(['warehouse_id'], 'pick_lists_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'pick_lists_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete()->deferrable();
         });
         Schema::table('pick_tasks', function (Blueprint $table) {
-            $table->foreign(['pick_list_id'], 'pick_tasks_pick_list_id_fk')->references(['id'])->on('pick_lists')->cascadeOnDelete();
-            $table->foreign(['fo_line_id'], 'pick_tasks_fo_line_id_fk')->references(['id'])->on('fo_lines')->restrictOnDelete();
-            $table->foreign(['product_id'], 'pick_tasks_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['bin_id'], 'pick_tasks_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'pick_tasks_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
+            $table->foreign(['pick_list_id'], 'pick_tasks_pick_list_id_fk')->references(['id'])->on('pick_lists')->cascadeOnDelete()->deferrable();
+            $table->foreign(['fo_line_id'], 'pick_tasks_fo_line_id_fk')->references(['id'])->on('fo_lines')->restrictOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'pick_tasks_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['bin_id'], 'pick_tasks_bin_id_fk')->references(['id'])->on('bins')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'pick_tasks_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
         });
         Schema::table('packages', function (Blueprint $table) {
-            $table->foreign(['fo_id'], 'packages_fo_id_fk')->references(['id'])->on('fulfillment_orders')->cascadeOnDelete();
+            $table->foreign(['fo_id'], 'packages_fo_id_fk')->references(['id'])->on('fulfillment_orders')->cascadeOnDelete()->deferrable();
         });
         Schema::table('vehicles', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'vehicles_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete();
+            $table->foreign(['warehouse_id'], 'vehicles_warehouse_id_fk')->references(['id'])->on('warehouses')->nullOnDelete()->deferrable();
         });
         Schema::table('drivers', function (Blueprint $table) {
-            $table->foreign(['user_id'], 'drivers_user_id_fk')->references(['id'])->on('users')->nullOnDelete();
-            $table->foreign(['default_vehicle_id'], 'drivers_default_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete();
+            $table->foreign(['user_id'], 'drivers_user_id_fk')->references(['id'])->on('users')->nullOnDelete()->deferrable();
+            $table->foreign(['default_vehicle_id'], 'drivers_default_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete()->deferrable();
         });
         Schema::table('trips', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'trips_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
-            $table->foreign(['vehicle_id'], 'trips_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete();
-            $table->foreign(['driver_id'], 'trips_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete();
-            $table->foreign(['consolidation_id'], 'trips_consolidation_id_fk')->references(['id'])->on('order_consolidations')->nullOnDelete();
+            $table->foreign(['warehouse_id'], 'trips_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
+            $table->foreign(['vehicle_id'], 'trips_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete()->deferrable();
+            $table->foreign(['driver_id'], 'trips_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete()->deferrable();
+            $table->foreign(['consolidation_id'], 'trips_consolidation_id_fk')->references(['id'])->on('order_consolidations')->nullOnDelete()->deferrable();
         });
         Schema::table('trip_stops', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'trip_stops_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
-            $table->foreign(['customer_id'], 'trip_stops_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete();
-            $table->foreign(['so_id'], 'trip_stops_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete();
-            $table->foreign(['fo_id'], 'trip_stops_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete();
+            $table->foreign(['trip_id'], 'trip_stops_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
+            $table->foreign(['customer_id'], 'trip_stops_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete()->deferrable();
+            $table->foreign(['so_id'], 'trip_stops_so_id_fk')->references(['id'])->on('sales_orders')->nullOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'trip_stops_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete()->deferrable();
         });
         Schema::table('trip_orders', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'trip_orders_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
-            $table->foreign(['fo_id'], 'trip_orders_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete();
-            $table->foreign(['stop_id'], 'trip_orders_stop_id_fk')->references(['id'])->on('trip_stops')->nullOnDelete();
+            $table->foreign(['trip_id'], 'trip_orders_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'trip_orders_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['stop_id'], 'trip_orders_stop_id_fk')->references(['id'])->on('trip_stops')->nullOnDelete()->deferrable();
         });
         Schema::table('trip_events', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'trip_events_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
+            $table->foreign(['trip_id'], 'trip_events_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
         });
         Schema::table('trip_costs', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'trip_costs_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
+            $table->foreign(['trip_id'], 'trip_costs_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
         });
         Schema::table('loading_plans', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'loading_plans_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
-            $table->foreign(['vehicle_id'], 'loading_plans_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete();
+            $table->foreign(['trip_id'], 'loading_plans_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
+            $table->foreign(['vehicle_id'], 'loading_plans_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete()->deferrable();
         });
         Schema::table('loading_lines', function (Blueprint $table) {
-            $table->foreign(['loading_plan_id'], 'loading_lines_loading_plan_id_fk')->references(['id'])->on('loading_plans')->cascadeOnDelete();
-            $table->foreign(['fo_id'], 'loading_lines_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete();
+            $table->foreign(['loading_plan_id'], 'loading_lines_loading_plan_id_fk')->references(['id'])->on('loading_plans')->cascadeOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'loading_lines_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete()->deferrable();
         });
         Schema::table('dispatch_records', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'dispatch_records_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete();
-            $table->foreign(['vehicle_id'], 'dispatch_records_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete();
-            $table->foreign(['driver_id'], 'dispatch_records_driver_id_fk')->references(['id'])->on('drivers')->restrictOnDelete();
+            $table->foreign(['trip_id'], 'dispatch_records_trip_id_fk')->references(['id'])->on('trips')->cascadeOnDelete()->deferrable();
+            $table->foreign(['vehicle_id'], 'dispatch_records_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete()->deferrable();
+            $table->foreign(['driver_id'], 'dispatch_records_driver_id_fk')->references(['id'])->on('drivers')->restrictOnDelete()->deferrable();
         });
         Schema::table('delivery_records', function (Blueprint $table) {
-            $table->foreign(['trip_id'], 'delivery_records_trip_id_fk')->references(['id'])->on('trips')->restrictOnDelete();
-            $table->foreign(['stop_id'], 'delivery_records_stop_id_fk')->references(['id'])->on('trip_stops')->restrictOnDelete();
-            $table->foreign(['fo_id'], 'delivery_records_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete();
-            $table->foreign(['driver_id'], 'delivery_records_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete();
-            $table->foreign(['vehicle_id'], 'delivery_records_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete();
+            $table->foreign(['trip_id'], 'delivery_records_trip_id_fk')->references(['id'])->on('trips')->restrictOnDelete()->deferrable();
+            $table->foreign(['stop_id'], 'delivery_records_stop_id_fk')->references(['id'])->on('trip_stops')->restrictOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'delivery_records_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['driver_id'], 'delivery_records_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete()->deferrable();
+            $table->foreign(['vehicle_id'], 'delivery_records_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete()->deferrable();
         });
         Schema::table('proof_of_delivery', function (Blueprint $table) {
-            $table->foreign(['delivery_id'], 'proof_of_delivery_delivery_id_fk')->references(['id'])->on('delivery_records')->nullOnDelete();
-            $table->foreign(['trip_id'], 'proof_of_delivery_trip_id_fk')->references(['id'])->on('trips')->restrictOnDelete();
-            $table->foreign(['stop_id'], 'proof_of_delivery_stop_id_fk')->references(['id'])->on('trip_stops')->restrictOnDelete();
-            $table->foreign(['fo_id'], 'proof_of_delivery_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete();
-            $table->foreign(['driver_id'], 'proof_of_delivery_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete();
-            $table->foreign(['vehicle_id'], 'proof_of_delivery_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete();
-            $table->foreign(['customer_id'], 'proof_of_delivery_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete();
+            $table->foreign(['delivery_id'], 'proof_of_delivery_delivery_id_fk')->references(['id'])->on('delivery_records')->nullOnDelete()->deferrable();
+            $table->foreign(['trip_id'], 'proof_of_delivery_trip_id_fk')->references(['id'])->on('trips')->restrictOnDelete()->deferrable();
+            $table->foreign(['stop_id'], 'proof_of_delivery_stop_id_fk')->references(['id'])->on('trip_stops')->restrictOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'proof_of_delivery_fo_id_fk')->references(['id'])->on('fulfillment_orders')->restrictOnDelete()->deferrable();
+            $table->foreign(['driver_id'], 'proof_of_delivery_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete()->deferrable();
+            $table->foreign(['vehicle_id'], 'proof_of_delivery_vehicle_id_fk')->references(['id'])->on('vehicles')->nullOnDelete()->deferrable();
+            $table->foreign(['customer_id'], 'proof_of_delivery_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete()->deferrable();
         });
         Schema::table('pod_attachments', function (Blueprint $table) {
-            $table->foreign(['pod_id'], 'pod_attachments_pod_id_fk')->references(['id'])->on('proof_of_delivery')->cascadeOnDelete();
+            $table->foreign(['pod_id'], 'pod_attachments_pod_id_fk')->references(['id'])->on('proof_of_delivery')->cascadeOnDelete()->deferrable();
         });
         Schema::table('returns', function (Blueprint $table) {
-            $table->foreign(['customer_id'], 'returns_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete();
-            $table->foreign(['supplier_id'], 'returns_supplier_id_fk')->references(['id'])->on('suppliers')->nullOnDelete();
-            $table->foreign(['fo_id'], 'returns_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete();
-            $table->foreign(['trip_id'], 'returns_trip_id_fk')->references(['id'])->on('trips')->nullOnDelete();
-            $table->foreign(['warehouse_id'], 'returns_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['customer_id'], 'returns_customer_id_fk')->references(['id'])->on('customers')->nullOnDelete()->deferrable();
+            $table->foreign(['supplier_id'], 'returns_supplier_id_fk')->references(['id'])->on('suppliers')->nullOnDelete()->deferrable();
+            $table->foreign(['fo_id'], 'returns_fo_id_fk')->references(['id'])->on('fulfillment_orders')->nullOnDelete()->deferrable();
+            $table->foreign(['trip_id'], 'returns_trip_id_fk')->references(['id'])->on('trips')->nullOnDelete()->deferrable();
+            $table->foreign(['warehouse_id'], 'returns_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('return_lines', function (Blueprint $table) {
-            $table->foreign(['return_id'], 'return_lines_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete();
-            $table->foreign(['product_id'], 'return_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete();
-            $table->foreign(['batch_id'], 'return_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete();
-            $table->foreign(['bin_id'], 'return_lines_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete();
+            $table->foreign(['return_id'], 'return_lines_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete()->deferrable();
+            $table->foreign(['product_id'], 'return_lines_product_id_fk')->references(['id'])->on('products')->restrictOnDelete()->deferrable();
+            $table->foreign(['batch_id'], 'return_lines_batch_id_fk')->references(['id'])->on('batches')->nullOnDelete()->deferrable();
+            $table->foreign(['bin_id'], 'return_lines_bin_id_fk')->references(['id'])->on('bins')->nullOnDelete()->deferrable();
         });
         Schema::table('return_receiving', function (Blueprint $table) {
-            $table->foreign(['return_id'], 'return_receiving_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete();
+            $table->foreign(['return_id'], 'return_receiving_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete()->deferrable();
         });
         Schema::table('return_inspections', function (Blueprint $table) {
-            $table->foreign(['return_id'], 'return_inspections_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete();
+            $table->foreign(['return_id'], 'return_inspections_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete()->deferrable();
         });
         Schema::table('return_decisions', function (Blueprint $table) {
-            $table->foreign(['return_id'], 'return_decisions_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete();
+            $table->foreign(['return_id'], 'return_decisions_return_id_fk')->references(['id'])->on('returns')->cascadeOnDelete()->deferrable();
         });
         Schema::table('maintenance_orders', function (Blueprint $table) {
-            $table->foreign(['vehicle_id'], 'maintenance_orders_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete();
+            $table->foreign(['vehicle_id'], 'maintenance_orders_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete()->deferrable();
         });
         Schema::table('fuel_records', function (Blueprint $table) {
-            $table->foreign(['vehicle_id'], 'fuel_records_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete();
-            $table->foreign(['driver_id'], 'fuel_records_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete();
+            $table->foreign(['vehicle_id'], 'fuel_records_vehicle_id_fk')->references(['id'])->on('vehicles')->restrictOnDelete()->deferrable();
+            $table->foreign(['driver_id'], 'fuel_records_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete()->deferrable();
         });
         Schema::table('incidents', function (Blueprint $table) {
-            $table->foreign(['driver_id'], 'incidents_driver_id_fk')->references(['id'])->on('drivers')->restrictOnDelete();
+            $table->foreign(['driver_id'], 'incidents_driver_id_fk')->references(['id'])->on('drivers')->restrictOnDelete()->deferrable();
         });
         Schema::table('ops_requests', function (Blueprint $table) {
-            $table->foreign(['driver_id'], 'ops_requests_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete();
+            $table->foreign(['driver_id'], 'ops_requests_driver_id_fk')->references(['id'])->on('drivers')->nullOnDelete()->deferrable();
         });
         Schema::table('dock_appointments', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'dock_appointments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['warehouse_id'], 'dock_appointments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('staff_assignments', function (Blueprint $table) {
-            $table->foreign(['warehouse_id'], 'staff_assignments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete();
+            $table->foreign(['warehouse_id'], 'staff_assignments_warehouse_id_fk')->references(['id'])->on('warehouses')->restrictOnDelete()->deferrable();
         });
         Schema::table('exception_events', function (Blueprint $table) {
-            $table->foreign(['exception_id'], 'exception_events_exception_id_fk')->references(['id'])->on('exceptions')->cascadeOnDelete();
+            $table->foreign(['exception_id'], 'exception_events_exception_id_fk')->references(['id'])->on('exceptions')->cascadeOnDelete()->deferrable();
         });
         Schema::table('audit_logs', function (Blueprint $table) {
-            $table->foreign(['user_id'], 'audit_logs_user_id_fk')->references(['id'])->on('users')->nullOnDelete();
+            $table->foreign(['user_id'], 'audit_logs_user_id_fk')->references(['id'])->on('users')->nullOnDelete()->deferrable();
         });
     }
 

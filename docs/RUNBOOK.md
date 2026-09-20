@@ -56,7 +56,47 @@ cache store (`CACHE_STORE=file` or redis).
 Not done yet, by design (needs your decisions): a scheduled command that calls
 `OutboxService::processPending()` once an integration is configured, log shipping / monitoring.
 
-## 3. Moving data from the old system (NestJS / PostgreSQL)
+## 3. The Vercel deployment (demo / staging)
+
+Live at the project's Vercel domain. Vercel has no official PHP support: the app runs on the community runtime
+[`vercel-php`](https://github.com/vercel-community/php) as ONE serverless function, and the database is **PostgreSQL on
+Neon** (Vercel offers no MySQL). Treat it as a demo/staging environment; the long-term production target is a PHP host
+with MySQL (section 2).
+
+| Piece | Where |
+|---|---|
+| Function entry | `api/index.php` → `public/index.php` (it resets `SCRIPT_NAME`, otherwise Laravel strips `/api` from every URL) |
+| Routing, runtime, non-secret env | `vercel.json` (static: `/build/*` and the logo files; everything else → the function) |
+| Read-only filesystem | `bootstrap/app.php` moves `storage/` to `/tmp` and trusts the platform proxy when `VERCEL` is set |
+| Secrets | Vercel project env (encrypted): `APP_KEY`, `JWT_ACCESS_SECRET`, `DB_URL` (Neon **pooled** URL), `APP_URL` |
+| Upload filter | `.vercelignore` |
+
+```bash
+vercel deploy --prod                                                   # deploy the working tree
+SMOKE_PASSWORD=… node tools/smoke.mjs https://<domain>                # read-only check of every GET endpoint + report
+```
+
+Schema changes and (re)seeding run from a workstation against Neon's **direct** (non-pooler) host, never from the function:
+
+```bash
+DB_CONNECTION=pgsql DB_HOST=<direct host> DB_DATABASE=scm_laravel DB_USERNAME=… DB_PASSWORD=… DB_SSLMODE=require php artisan migrate --force
+```
+
+Limits to know: no queue worker or scheduler (the outbox is run from the UI; `scm:reconcile` from a workstation), cold
+starts of about a second, `CACHE_STORE=database` (rate limiter and locks live in the database), files cannot be stored
+on the function — uploads need object storage (issue: file storage integration).
+
+### PostgreSQL support
+
+Both engines run the whole test suite in CI. What makes PostgreSQL behave like the MySQL the code was written for:
+
+- `database/migrations/…_pgsql_compatibility.php` (no-op on MySQL): text columns become `CITEXT`, so `=`, `LIKE` and
+  unique keys are case-insensitive exactly as with MySQL's `*_ci` collations; a `ROUND(float, n)` overload is added.
+- `App\Database\PgConnection`: `` `identifier` `` quoting in hand-written SQL is sent as `"identifier"`.
+- `App\Support\Sql`: the few date functions that differ (`seconds`, `days`, `addHours`, `joinDistinct`).
+- Foreign keys are `DEFERRABLE` so the snapshot import can load tables in any order inside one transaction.
+
+## 4. Moving data from the old system (NestJS / PostgreSQL)
 
 ```bash
 # on a machine that can reach the old database (uses the old project's Prisma client and .env)
@@ -72,7 +112,7 @@ Ids are preserved, so every link between documents survives. `--keep-passwords` 
 without it every user gets `SEED_PASSWORD` (demo use). Sessions and idempotency keys are never migrated.
 The demo data itself (`database/seed-data/snapshot.json`) was produced with the same tool from the reference seed.
 
-## 4. Regenerating generated files (rarely needed)
+## 5. Regenerating generated files (rarely needed)
 
 - `node tools/prisma-to-laravel.mjs` → schema migration + `app/Models/*` from `docs/reference/schema.prisma`.
   After go-live, change the schema with new Laravel migrations instead.

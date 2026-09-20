@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Services\Core\SettingsService;
 use App\Services\Platform\ReportSupport as R;
 use App\Support\AuthUser;
+use App\Support\Sql;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -32,7 +33,11 @@ class DashboardService
     private const VEHICLE_MAINT = ['maintenance', 'breakdown'];
 
     /** An exception's SLA deadline (sla_hours may be fractional). */
-    private const SLA_DUE = 'TIMESTAMPADD(SECOND, ROUND(e.sla_hours * 3600), e.created_at)';
+    /** SQL for the moment an exception's SLA runs out. */
+    private static function slaDue(): string
+    {
+        return Sql::addHours('e.created_at', 'e.sla_hours');
+    }
 
     public function __construct(private readonly SettingsService $settings) {}
 
@@ -78,8 +83,8 @@ class DashboardService
         $row = DB::selectOne(
             'SELECT COALESCE(SUM(CASE WHEN t.exp < ? THEN 1 ELSE 0 END), 0) AS expired,
                     COALESCE(SUM(CASE WHEN t.exp >= ? AND t.exp < ? THEN 1 ELSE 0 END), 0) AS expiring,
-                    COALESCE(SUM(CASE WHEN t.exp < ? THEN t.qty ELSE 0 END), 0) AS expiredQty,
-                    COALESCE(SUM(CASE WHEN t.exp >= ? AND t.exp < ? THEN t.qty ELSE 0 END), 0) AS expiringQty
+                    COALESCE(SUM(CASE WHEN t.exp < ? THEN t.qty ELSE 0 END), 0) AS `expiredQty`,
+                    COALESCE(SUM(CASE WHEN t.exp >= ? AND t.exp < ? THEN t.qty ELSE 0 END), 0) AS `expiringQty`
              FROM (SELECT bt.id, bt.expiry_date AS exp, SUM(b.on_hand) AS qty FROM batches bt JOIN inventory_balances b ON b.batch_id = bt.id
                    WHERE bt.expiry_date IS NOT NULL GROUP BY bt.id, bt.expiry_date HAVING SUM(b.on_hand) > 0) t',
             [$t, $t, $until, $t, $t, $until],
@@ -90,7 +95,7 @@ class DashboardService
 
     private function slaBreachedCount(): int
     {
-        return DB::table('exceptions as e')->where('e.status', '<>', 'resolved')->whereRaw(self::SLA_DUE.' < ?', [R::db(now())])->count();
+        return DB::table('exceptions as e')->where('e.status', '<>', 'resolved')->whereRaw(self::slaDue().' < ?', [R::db(now())])->count();
     }
 
     private function canCost(AuthUser $user): bool
@@ -180,8 +185,8 @@ class DashboardService
         $out = [];
 
         $exceptions = DB::select(
-            'SELECT e.number, e.kind, e.severity, e.status, e.owner_role, e.text_ar, e.text_en, ('.self::SLA_DUE.' < ?) AS breached
-             FROM exceptions e WHERE e.status <> \'resolved\' AND (e.severity = \'c\' OR '.self::SLA_DUE.' < ?)
+            'SELECT e.number, e.kind, e.severity, e.status, e.owner_role, e.text_ar, e.text_en, ('.self::slaDue().' < ?) AS breached
+             FROM exceptions e WHERE e.status <> \'resolved\' AND (e.severity = \'c\' OR '.self::slaDue().' < ?)
              ORDER BY (e.severity = \'c\') DESC, e.created_at ASC, e.id ASC LIMIT 6',
             [$now, $now],
         );
@@ -244,13 +249,13 @@ class DashboardService
     private function inventoryByWarehouse(bool $canCost): array
     {
         $rows = DB::select(
-            'SELECT w.id AS warehouseId, w.code, w.name_ar AS nameAr, w.name_en AS nameEn,
-                COALESCE(SUM(b.on_hand), 0) AS onHand, COALESCE(SUM(b.reserved), 0) AS reserved,
-                COALESCE(SUM(CASE WHEN b.quarantine = 0 AND b.blocked = 0 AND '.$this->storageIn('z.type').' THEN GREATEST(b.on_hand - b.reserved, 0) ELSE 0 END), 0) AS available,
+            'SELECT w.id AS `warehouseId`, w.code, w.name_ar AS `nameAr`, w.name_en AS `nameEn`,
+                COALESCE(SUM(b.on_hand), 0) AS `onHand`, COALESCE(SUM(b.reserved), 0) AS reserved,
+                COALESCE(SUM(CASE WHEN NOT b.quarantine AND NOT b.blocked AND '.$this->storageIn('z.type').' THEN GREATEST(b.on_hand - b.reserved, 0) ELSE 0 END), 0) AS available,
                 COALESCE(SUM(b.on_hand * COALESCE(p.purchase_price, 0)), 0) AS value, COUNT(DISTINCT b.product_id) AS skus
              FROM warehouses w LEFT JOIN inventory_balances b ON b.warehouse_id = w.id AND b.on_hand > 0
              LEFT JOIN bins bn ON bn.id = b.bin_id LEFT JOIN zones z ON z.id = bn.zone_id LEFT JOIN products p ON p.id = b.product_id
-             WHERE w.active = 1 GROUP BY w.id, w.code, w.name_ar, w.name_en ORDER BY w.code',
+             WHERE w.active GROUP BY w.id, w.code, w.name_ar, w.name_en ORDER BY w.code',
         );
         $base = array_sum(array_map(fn ($r) => R::num($canCost ? $r->value : $r->onHand), $rows));
 
@@ -311,8 +316,8 @@ class DashboardService
 
         $slaList = DB::select(
             'SELECT e.number, e.kind, e.severity, e.status, e.owner_role, e.text_ar, e.text_en, e.document_number, e.created_at, e.sla_hours,
-                    ROUND(TIMESTAMPDIFF(SECOND, '.self::SLA_DUE.', ?) / 60) AS overdue_min
-             FROM exceptions e WHERE e.status <> \'resolved\' AND '.self::SLA_DUE.' < ? ORDER BY e.created_at ASC, e.id ASC LIMIT 10',
+                    ROUND('.Sql::seconds(self::slaDue(), '?').' / 60) AS overdue_min
+             FROM exceptions e WHERE e.status <> \'resolved\' AND '.self::slaDue().' < ? ORDER BY e.created_at ASC, e.id ASC LIMIT 10',
             [$now, $now],
         );
 
@@ -329,12 +334,12 @@ class DashboardService
 
         $risk = DB::selectOne(
             'SELECT
-                COALESCE(SUM(CASE WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < ? THEN b.on_hand ELSE 0 END), 0) AS expiredQty,
-                COALESCE(SUM(CASE WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < ? THEN b.on_hand * COALESCE(p.purchase_price, 0) ELSE 0 END), 0) AS expiredValue,
-                COALESCE(SUM(CASE WHEN b.quarantine = 1 OR z.type = \'quarantine\' THEN b.on_hand ELSE 0 END), 0) AS quarantineQty,
-                COALESCE(SUM(CASE WHEN b.quarantine = 1 OR z.type = \'quarantine\' THEN b.on_hand * COALESCE(p.purchase_price, 0) ELSE 0 END), 0) AS quarantineValue,
-                COALESCE(SUM(CASE WHEN z.type = \'damaged\' THEN b.on_hand ELSE 0 END), 0) AS damagedQty,
-                COALESCE(SUM(CASE WHEN b.blocked = 1 THEN b.on_hand ELSE 0 END), 0) AS blockedQty
+                COALESCE(SUM(CASE WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < ? THEN b.on_hand ELSE 0 END), 0) AS `expiredQty`,
+                COALESCE(SUM(CASE WHEN bt.expiry_date IS NOT NULL AND bt.expiry_date < ? THEN b.on_hand * COALESCE(p.purchase_price, 0) ELSE 0 END), 0) AS `expiredValue`,
+                COALESCE(SUM(CASE WHEN b.quarantine OR z.type = \'quarantine\' THEN b.on_hand ELSE 0 END), 0) AS `quarantineQty`,
+                COALESCE(SUM(CASE WHEN b.quarantine OR z.type = \'quarantine\' THEN b.on_hand * COALESCE(p.purchase_price, 0) ELSE 0 END), 0) AS `quarantineValue`,
+                COALESCE(SUM(CASE WHEN z.type = \'damaged\' THEN b.on_hand ELSE 0 END), 0) AS `damagedQty`,
+                COALESCE(SUM(CASE WHEN b.blocked THEN b.on_hand ELSE 0 END), 0) AS `blockedQty`
              FROM inventory_balances b JOIN bins bn ON bn.id = b.bin_id JOIN zones z ON z.id = bn.zone_id JOIN products p ON p.id = b.product_id
              LEFT JOIN batches bt ON bt.id = b.batch_id WHERE b.on_hand > 0',
             [$t, $t],
@@ -348,13 +353,13 @@ class DashboardService
         $retInspect = $this->grouped('returns', 'status', fn ($q) => $q->whereIn('status', ['received', 'inspect']));
 
         $throughput = DB::select(
-            'SELECT w.id AS warehouseId, w.code, w.name_ar AS nameAr, w.name_en AS nameEn,
-                (SELECT COALESCE(SUM(gl.accepted_qty), 0) FROM goods_receipts g JOIN grn_lines gl ON gl.grn_id = g.id WHERE g.warehouse_id = w.id AND g.posted_at >= ? AND g.posted_at < ?) AS grnQty,
+            'SELECT w.id AS `warehouseId`, w.code, w.name_ar AS `nameAr`, w.name_en AS `nameEn`,
+                (SELECT COALESCE(SUM(gl.accepted_qty), 0) FROM goods_receipts g JOIN grn_lines gl ON gl.grn_id = g.id WHERE g.warehouse_id = w.id AND g.posted_at >= ? AND g.posted_at < ?) AS `grnQty`,
                 (SELECT COUNT(*) FROM goods_receipts g WHERE g.warehouse_id = w.id AND g.posted_at >= ? AND g.posted_at < ?) AS grns,
-                (SELECT COALESCE(SUM(pt.picked_qty), 0) FROM pick_tasks pt JOIN pick_lists pl ON pl.id = pt.pick_list_id WHERE pl.warehouse_id = w.id AND pt.picked_at >= ? AND pt.picked_at < ?) AS pickedQty,
-                (SELECT COUNT(*) FROM fulfillment_orders f WHERE f.warehouse_id = w.id AND f.dispatched_at >= ? AND f.dispatched_at < ?) AS dispatchedOrders,
-                (SELECT COUNT(*) FROM trips t WHERE t.warehouse_id = w.id AND t.dispatched_at >= ? AND t.dispatched_at < ?) AS dispatchedTrips
-             FROM warehouses w WHERE w.active = 1 ORDER BY w.code',
+                (SELECT COALESCE(SUM(pt.picked_qty), 0) FROM pick_tasks pt JOIN pick_lists pl ON pl.id = pt.pick_list_id WHERE pl.warehouse_id = w.id AND pt.picked_at >= ? AND pt.picked_at < ?) AS `pickedQty`,
+                (SELECT COUNT(*) FROM fulfillment_orders f WHERE f.warehouse_id = w.id AND f.dispatched_at >= ? AND f.dispatched_at < ?) AS `dispatchedOrders`,
+                (SELECT COUNT(*) FROM trips t WHERE t.warehouse_id = w.id AND t.dispatched_at >= ? AND t.dispatched_at < ?) AS `dispatchedTrips`
+             FROM warehouses w WHERE w.active ORDER BY w.code',
             [$from, $to, $from, $to, $from, $to, $from, $to, $from, $to],
         );
 

@@ -32,38 +32,49 @@ final class SnapshotImporter
         $hash = $resetPasswordTo !== null ? Hash::make($resetPasswordTo) : null;
         $counts = [];
 
-        Schema::disableForeignKeyConstraints();
-        try {
-            foreach ($snapshot['tables'] as $table => $spec) {
-                if (! Schema::hasTable($table)) {
-                    throw new RuntimeException("snapshot table `{$table}` does not exist here — schemas are out of sync");
-                }
-                if ($truncate) {
-                    DB::table($table)->truncate();
-                }
-                $rows = [];
-                foreach ($spec['rows'] as $row) {
-                    $out = [];
-                    foreach ($row as $field => $value) {
-                        $out[Str::snake($field)] = self::convert($value, $spec['columns'][$field] ?? 'String');
-                    }
-                    if ($table === 'users' && $hash !== null) {
-                        $out['password_hash'] = $hash;
-                    }
-                    $rows[] = $out;
-                }
-                foreach (array_chunk($rows, 200) as $chunk) {
-                    DB::table($table)->insert($chunk);
-                }
-                $counts[$table] = count($rows);
+        foreach (array_keys($snapshot['tables']) as $table) {
+            if (! Schema::hasTable($table)) {
+                throw new RuntimeException("snapshot table `{$table}` does not exist here — schemas are out of sync");
             }
-            if ($truncate) {
-                DB::table('refresh_tokens')->truncate();
-                DB::table('idempotency_keys')->truncate();
-            }
-        } finally {
-            Schema::enableForeignKeyConstraints();
         }
+
+        // Tables arrive in no particular order, so the foreign keys are checked at the end, not per row:
+        // MySQL switches the checks off for the session; PostgreSQL defers them (the keys are DEFERRABLE) to the commit
+        // of the surrounding transaction — which also makes the whole import all-or-nothing there.
+        $load = function () use ($snapshot, $truncate, $hash, &$counts) {
+            Schema::disableForeignKeyConstraints();
+            try {
+                if ($truncate) {
+                    // Everything is emptied BEFORE the first insert: PostgreSQL's TRUNCATE cascades to referencing
+                    // tables, so emptying table by table would wipe rows that were just imported.
+                    foreach ([...array_keys($snapshot['tables']), 'refresh_tokens', 'idempotency_keys'] as $table) {
+                        DB::table($table)->truncate();
+                    }
+                }
+                foreach ($snapshot['tables'] as $table => $spec) {
+                    $rows = [];
+                    foreach ($spec['rows'] as $row) {
+                        $out = [];
+                        foreach ($row as $field => $value) {
+                            $out[Str::snake($field)] = self::convert($value, $spec['columns'][$field] ?? 'String');
+                        }
+                        if ($table === 'users' && $hash !== null) {
+                            $out['password_hash'] = $hash;
+                        }
+                        $rows[] = $out;
+                    }
+                    foreach (array_chunk($rows, 200) as $chunk) {
+                        DB::table($table)->insert($chunk);
+                    }
+                    $counts[$table] = count($rows);
+                }
+            } finally {
+                if (DB::getDriverName() !== 'pgsql') {
+                    Schema::enableForeignKeyConstraints();
+                }
+            }
+        };
+        DB::getDriverName() === 'pgsql' ? DB::transaction($load) : $load();
 
         return $counts;
     }

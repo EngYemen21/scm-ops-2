@@ -5,9 +5,9 @@ Arabic-first (RTL) with English, multi-user, role-based.
 
 | Layer | Technology |
 |---|---|
-| API | Laravel 13 (PHP 8.3), MySQL 8, JWT access tokens + rotating refresh tokens |
+| API | Laravel 13 (PHP 8.3), MySQL 8 (primary) or PostgreSQL 17, JWT access tokens + rotating refresh tokens |
 | Client | Vue 3 (`<script setup>`), Vue Router, Pinia, TanStack Query, Tailwind CSS 4, Vite |
-| Tests | PHPUnit feature tests against a real MySQL database |
+| Tests | PHPUnit feature tests against real databases — the whole suite runs on MySQL **and** PostgreSQL in CI |
 
 This is a port of the validated NestJS/React reference system with the **same HTTP contract** (paths, payloads,
 permissions, error codes) and the same screens. Reference material lives in `docs/reference/`.

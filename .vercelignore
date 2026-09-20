@@ -1,0 +1,15 @@
+# Not needed by the deployed function (vendor/ is installed by the PHP runtime from composer.lock).
+/.git
+/.github
+/node_modules
+/vendor
+/tests
+/docs
+/docker
+/tools
+/database/seed-data
+/storage/logs
+/storage/framework
+/.env
+/.env.*
+!/.env.example

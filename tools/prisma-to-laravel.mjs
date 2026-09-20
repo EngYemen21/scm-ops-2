@@ -140,7 +140,7 @@ for (const mo of models) {
       const opt = f.rel.fields.every((n) => field(mo, n).optional);
       const act = f.rel.onDelete === 'Cascade' ? 'cascadeOnDelete' : opt ? 'nullOnDelete' : 'restrictOnDelete';
       return '            $table->foreign([' + f.rel.fields.map((n) => q(snake(n))).join(', ') + '], ' + q(idxName(mo.table, f.rel.fields.map(snake), 'fk')) + ')'
-        + '->references([' + f.rel.references.map((n) => q(snake(n))).join(', ') + '])->on(' + q(byName[f.type].table) + ')->' + act + '();';
+        + '->references([' + f.rel.references.map((n) => q(snake(n))).join(', ') + '])->on(' + q(byName[f.type].table) + ')->' + act + '()->deferrable();'; // deferrable: PostgreSQL bulk import defers the checks; MySQL ignores it
     });
     fk += '        Schema::table(' + q(mo.table) + ', function (Blueprint $table) {\n' + l.join('\n') + '\n        });\n';
   }

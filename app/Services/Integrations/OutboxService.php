@@ -7,6 +7,7 @@ use App\Services\Integrations\Adapters\AdapterFactory;
 use App\Services\Integrations\Adapters\ErpAdapter;
 use App\Services\Integrations\Adapters\Pending;
 use App\Support\Paging;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -81,7 +82,10 @@ class OutboxService
     {
         $target = $this->target();
         $result = ['target' => $target['kind'] ?? null, 'processed' => 0, 'sent' => 0, 'failed' => 0, 'pending' => 0];
-        if (! (int) (DB::selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::RUN_LOCK])->locked ?? 0)) {
+        // One run at a time. A cache lock works on every database engine and behind connection poolers; it expires
+        // by itself after 5 minutes if a run dies without releasing it.
+        $lock = Cache::lock(self::RUN_LOCK, 300);
+        if (! $lock->get()) {
             return $result;
         }
         try {
@@ -119,7 +123,7 @@ class OutboxService
 
             return $result;
         } finally {
-            DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [self::RUN_LOCK]);
+            $lock->release();
         }
     }
 

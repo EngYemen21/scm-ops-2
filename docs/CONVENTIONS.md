@@ -91,6 +91,10 @@ public function approve(Request $request, string $id)
 | `String[]` / `Json` | json column cast to `array` |
 | `new Date()` | `now()`; datetimes are stored in UTC with milliseconds |
 
+### SQL that runs on MySQL and PostgreSQL
+
+Use the query builder whenever possible — it is portable. In hand-written SQL: quote camelCase aliases with backticks (AS `onHand`), test booleans as `b.blocked` / `NOT b.blocked` (never `= 1`), take date arithmetic from `App\Support\Sql`, order NULLs explicitly (`ORDER BY eta IS NULL, eta`), and never rely on engine-specific locks or functions (`GET_LOCK`, `TIMESTAMPDIFF`, `GROUP_CONCAT` …). Run the suite on both engines before pushing SQL changes: `DB_CONNECTION=pgsql DB_PORT=… php artisan test` (CI does it anyway).
+
 ## Tests
 
 - Extend `Tests\ApiTestCase`: `getAs/postAs/patchAs/putAs/deleteAs($username, $url, $body)`, `expectOk()`, `expectRejected($res, 'CODE', [422])`.

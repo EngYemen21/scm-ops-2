@@ -103,12 +103,14 @@ class InventoryEngineTest extends ApiTestCase
         $this->inv->reserve(null, null, ['soId' => $lineA->so_id, 'soLineId' => $lineA->id, 'productId' => $product->id, 'warehouseId' => $wh->id, 'qty' => 80, 'referenceNumber' => 'SO-A']);
 
         DB::setDefaultConnection('mysql_b');                     // user B: reserve 50 while A still holds the row lock
-        DB::statement('SET SESSION innodb_lock_wait_timeout = 2');
+        // B gives up after 2 s instead of waiting for ever; each engine has its own switch and its own error text
+        $pg = DB::getDriverName() === 'pgsql';
+        DB::statement($pg ? "SET lock_timeout = '2s'" : 'SET SESSION innodb_lock_wait_timeout = 2');
         try {
             DB::transaction(fn () => $this->inv->reserve(null, null, ['soId' => $lineB->so_id, 'soLineId' => $lineB->id, 'productId' => $product->id, 'warehouseId' => $wh->id, 'qty' => 50, 'referenceNumber' => 'SO-B']));
             $this->fail('B must wait for A: the balance row is locked');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('Lock wait timeout', $e->getMessage());
+            $this->assertStringContainsString($pg ? 'lock timeout' : 'Lock wait timeout', $e->getMessage());
         }
 
         DB::setDefaultConnection($default);

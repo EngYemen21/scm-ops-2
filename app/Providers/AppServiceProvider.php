@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Database\PgConnection;
 use App\Services\Core\SettingsService;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Connection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -14,6 +16,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // One instance per request/process: it holds the settings cache.
         $this->app->singleton(SettingsService::class);
+
+        // PostgreSQL: searches stay case-insensitive, as they are on MySQL (see PgConnection).
+        Connection::resolverFor('pgsql', fn ($pdo, $database, $prefix, $config) => new PgConnection($pdo, $database, $prefix, $config));
     }
 
     public function boot(): void
