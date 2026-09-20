@@ -1,0 +1,1 @@
+import{Et as e,Ft as t,Lt as n,Zt as r}from"./app-DzGdZA7T.js";var i={__name:`Hint`,props:{tone:{type:String,default:null}},setup(i){return(a,o)=>(t(),e(`div`,{class:r([`hint`,i.tone])},[n(a.$slots,`default`)],2))}};export{i as default};

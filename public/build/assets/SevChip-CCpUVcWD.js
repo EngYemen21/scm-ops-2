@@ -1,1 +1,0 @@
-import{Nt as e,St as t,qt as n}from"./app-VOErIiWz.js";import{x as r}from"./components-CsCAC7VA.js";import{i}from"./shared-BBq4jG3n.js";var a={__name:`SevChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(e(),t(n(r),{map:n(i),k:a.k||`i`,small:a.small,class:`flex-none`},null,8,[`map`,`k`,`small`]))}};export{a as default};

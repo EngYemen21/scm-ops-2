@@ -1,1 +1,0 @@
-import{Nt as e,St as t,i as n,qt as r}from"./app-VOErIiWz.js";import{x as i}from"./components-CsCAC7VA.js";var a={__name:`StateChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(e(),t(r(i),{map:r(n),k:a.k,small:a.small},null,8,[`map`,`k`,`small`]))}};export{a as default};

@@ -11,6 +11,8 @@
 // Cell content, in order of precedence: slot `#cell-<key>="{ row, index }"` → `column.value(row, index)` → formatted `row[key]`.
 // Data: `paged` = server page { items, total, page, pageSize, pages } (emits `page`), or plain `rows` (+ optional `pageSize`).
 // Sorting: pass `sort` + listen to `sort` for server-side sorting; otherwise the visible rows are sorted client-side.
+// Phone: app.css turns every row into a card — the first column is the card title, each other cell shows its
+// header as a caption (`data-label`). A column can opt out of the caption with `bare: true` (chips, action buttons).
 import { computed, ref } from 'vue';
 import { bi, fmtNum, isBi, t } from '../i18n';
 import Icon from '../layout/Icon.vue';
@@ -92,6 +94,8 @@ function cellValue(c, r, i) {
   return String(v);
 }
 const keyOf = (r, i) => (props.rowKey ? props.rowKey(r, i) : i);
+/** Caption of a cell in the phone card layout; empty for the title column, headerless and `bare` columns. */
+const captionOf = (c, index) => (index === 0 || c.bare ? null : (isBi(c.header) ? bi(c.header) : c.header) || null);
 
 const pageWindow = computed(() => {
   const p = page.value; const n = pages.value;
@@ -122,7 +126,7 @@ const pageWindow = computed(() => {
       <template v-else>
         <div v-for="(r, i) in visible" :key="keyOf(r, i)" class="gt-row" :class="{ zebra, click: isClickable, sel: selectedKey != null && keyOf(r, i) === selectedKey }"
              :style="[{ padding: dense ? '8px 14px' : null, opacity: loading ? 0.6 : 1 }, rowStyle ? rowStyle(r, i) : null]" @click="onRowClick && onRowClick(r, i)">
-          <div v-for="c in cols" :key="c.key" :class="cellClass(c)"><slot :name="`cell-${c.key}`" :row="r" :index="i">{{ cellValue(c, r, i) }}</slot></div>
+          <div v-for="(c, ci) in cols" :key="c.key" :class="[cellClass(c), { 'gt-title': ci === 0 }]" :data-label="captionOf(c, ci)"><slot :name="`cell-${c.key}`" :row="r" :index="i">{{ cellValue(c, r, i) }}</slot></div>
         </div>
       </template>
     </div>

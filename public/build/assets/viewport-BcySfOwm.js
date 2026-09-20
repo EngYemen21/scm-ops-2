@@ -1,0 +1,1 @@
+import{Jt as e}from"./app-DzGdZA7T.js";var t,n=typeof window<`u`&&window.matchMedia?window.matchMedia(`(max-width: 767px)`):null,r=e(!!(n!=null&&n.matches));n==null||(t=n.addEventListener)==null||t.call(n,`change`,e=>{r.value=e.matches});export{r as t};

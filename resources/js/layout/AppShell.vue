@@ -1,17 +1,26 @@
 <script setup>
 // Application shell: sticky dark topbar (logo · search · bell · language · user menu · warehouse chips),
 // sidebar built from `user.nav`, main area with the page title bar, permission gate and error boundary.
+//
+// On a phone (composables/viewport.js) the same shell becomes the mobile app of the design: compact topbar
+// (logo · search · bell), warehouse chip in the title row, bottom tab bar, + quick actions; the sidebar and the
+// user menu move to the More screen (pages/MorePage.vue). Pages themselves are shared — app.css adapts them.
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { bi, isBi, lang, setLang, t, toggleLang } from '../i18n';
 import { NAV_LABELS, ROLE_LABELS } from '../shared';
+import { isMobile } from '../composables/viewport';
 import { useAuth } from '../stores/auth';
-import { pageHeader } from '../stores/ui';
+import { pageHeader, passwordDialogOpen } from '../stores/ui';
 import { useWarehouse } from '../stores/warehouse';
 import ChangePasswordModal from './ChangePasswordModal.vue';
 import ErrorBoundary from './ErrorBoundary.vue';
 import GlobalSearch from './GlobalSearch.vue';
 import Icon from './Icon.vue';
+import MobileQuickActions from './mobile/MobileQuickActions.vue';
+import MobileSearch from './mobile/MobileSearch.vue';
+import MobileTabBar from './mobile/MobileTabBar.vue';
+import WarehouseChip from './mobile/WarehouseChip.vue';
 import NotificationBell from './NotificationBell.vue';
 
 const auth = useAuth();
@@ -21,7 +30,7 @@ const router = useRouter();
 
 const sidebarOpen = ref(false);
 const menuOpen = ref(false);
-const passwordOpen = ref(false);
+const passwordOpen = passwordDialogOpen;
 watch(() => route.path, () => { sidebarOpen.value = false; menuOpen.value = false; });
 
 const user = computed(() => auth.user);
@@ -36,6 +45,8 @@ const routeParam = computed(() => (route.meta.param ? route.params[route.meta.pa
 const title = computed(() => (pageHeader.value.title ? (isBi(pageHeader.value.title) ? bi(pageHeader.value.title) : pageHeader.value.title) : null));
 const sub = computed(() => (pageHeader.value.sub ? (isBi(pageHeader.value.sub) ? bi(pageHeader.value.sub) : pageHeader.value.sub) : null));
 const allowed = computed(() => !route.meta.permission || auth.can(route.meta.permission));
+/** The + button belongs to the working screens; it would only cover content on the menu and on document pages. */
+const showFab = computed(() => isMobile.value && route.name !== 'more' && !route.meta.param);
 
 async function signOut() {
   menuOpen.value = false;
@@ -45,8 +56,18 @@ async function signOut() {
 </script>
 
 <template>
-  <div v-if="user" class="app">
-    <div class="topbar">
+  <div v-if="user" class="app" :class="{ 'is-mobile': isMobile }">
+    <div v-if="isMobile" class="topbar m-topbar">
+      <div class="topbar-row">
+        <div class="flex flex-none cursor-pointer items-center" role="link" @click="router.push(auth.homePath)">
+          <img src="/logo-white.png" alt="B2B ops — ERP System" class="block h-[30px] w-auto">
+        </div>
+        <div class="flex-1" />
+        <MobileSearch v-if="!isLite" />
+        <NotificationBell />
+      </div>
+    </div>
+    <div v-else class="topbar">
       <div class="topbar-row">
         <button type="button" class="tb-btn hamburger" aria-label="menu" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button>
         <div class="flex flex-none cursor-pointer items-center gap-[9px]" @click="router.push(auth.homePath)">
@@ -89,8 +110,8 @@ async function signOut() {
     </div>
 
     <div class="body-row">
-      <div class="sidebar-backdrop" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" />
-      <nav class="sidebar" :class="{ open: sidebarOpen }">
+      <div v-if="!isMobile" class="sidebar-backdrop" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" />
+      <nav v-if="!isMobile" class="sidebar" :class="{ open: sidebarOpen }">
         <RouterLink v-for="k in user.nav" :key="k" :to="`/${k}`" class="nav-item" active-class="active">
           <span class="nav-dot" />
           <Icon :nav="k" />
@@ -112,6 +133,7 @@ async function signOut() {
             <div v-show="sub || pageHeader.subSlot" class="page-sub"><span id="page-sub-slot" /><template v-if="!pageHeader.subSlot">{{ sub }}</template></div>
           </div>
           <div class="flex-1" />
+          <WarehouseChip v-if="isMobile && !route.meta.param" />
           <div id="page-actions" class="row wrap" />
         </div>
         <div v-else id="page-actions" class="hidden" />
@@ -125,6 +147,11 @@ async function signOut() {
         </ErrorBoundary>
       </main>
     </div>
+
+    <template v-if="isMobile">
+      <MobileQuickActions v-if="showFab" />
+      <MobileTabBar />
+    </template>
 
     <ChangePasswordModal :open="passwordOpen || user.mustChangePassword" :forced="user.mustChangePassword" @close="passwordOpen = false" />
   </div>

@@ -12,6 +12,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Chip, EmptyState, ErrorBanner, KpiCard, KpiGrid, PageHead, ProgressBar, SectionCard } from '@/components';
+import { isMobile } from '@/composables/viewport';
 import { fmtMoney, fmtNum, fmtTime, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { useWarehouse } from '@/stores/warehouse';
@@ -20,6 +21,7 @@ import CardTitle from './CardTitle.vue';
 import ExceptionActionModal from './ExceptionActionModal.vue';
 import ExceptionActions from './ExceptionActions.vue';
 import ListRow from './ListRow.vue';
+import MobileHomeHead from './MobileHomeHead.vue';
 import { useExceptionActions } from './shared';
 
 /** KPI value colour by key. */
@@ -51,10 +53,12 @@ const go = (path) => { if (path) router.push(path); };
 </script>
 
 <template>
-  <PageHead :sub="t('نظرة لحظية على المخزون والعمليات عبر المستودعات', 'Real-time view across all warehouses')" />
+  <!-- phone: the greeting block replaces the title bar and the KPI grid (same figures, the design's mobile home) -->
+  <PageHead :hidden="isMobile" :sub="t('نظرة لحظية على المخزون والعمليات عبر المستودعات', 'Real-time view across all warehouses')" />
   <ErrorBanner :error="q.error.value" :closable="false" />
 
-  <KpiGrid>
+  <MobileHomeHead v-if="isMobile" :d="d" :loading="loading" />
+  <KpiGrid v-else>
     <template v-if="loading"><KpiCard v-for="i in 8" :key="i" loading label="" /></template>
     <template v-else>
       <KpiCard v-for="k in d?.kpis || []" :key="k.key" :value="k.key === 'availableValue' ? fmtMoney(k.value) : k.value" :unit="k.key === 'availableValue' ? { ar: 'ر.س', en: 'SAR' } : null"

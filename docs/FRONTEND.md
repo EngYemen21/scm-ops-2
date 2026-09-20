@@ -86,3 +86,27 @@ page work. Need something new? Put it in your domain folder; propose shared chan
 Every tab, table, filter, drawer, form, action button, empty / loading / error state and deep link of the reference page
 exists and calls the same endpoint; `npm run build` passes; the page was opened in the browser against the running API
 with no console errors, and each action button was pressed once on demo data.
+
+## Phone layout
+
+Opening the system on a phone (viewport ≤ 767px) shows the mobile app of the design — same pages, same data, same
+permissions; nothing is a separate code base.
+
+| Piece | Where |
+|---|---|
+| The switch | `composables/viewport.js` → `isMobile` (one media query; `app.css` uses the same `@media (max-width: 767px)`) |
+| Shell | `layout/AppShell.vue`: compact topbar (logo · search · bell), warehouse chip in the title row, `MobileTabBar`, `MobileQuickActions` (+ button); the sidebar and user menu are not rendered |
+| Navigation model | `layout/mobile/nav.js` — tabs, "More" groups and quick actions are all derived from `user.nav`, so RBAC stays in one place |
+| Screens | `pages/MorePage.vue` (`/more`, redirects home on a wide screen) · `pages/dashboard/MobileHomeHead.vue` (greeting, fulfilment card, KPI strip, work queues — only figures of `GET /dashboard`, no decorative data) · `layout/mobile/MobileSearch.vue` (full-screen search, recent searches) |
+| Building blocks | `layout/mobile/BottomSheet.vue`, `WarehouseChip.vue`; CSS classes `m-*` in `app.css` |
+
+Rules for pages, so they keep working on a phone without extra work:
+
+- Use `DataTable` for lists: on a phone every row becomes a card (first column = title, other cells get their header as a
+  caption). Give a column `bare: true` when a caption makes no sense (chips, action buttons).
+- Use `Drawer` / `Modal` / `confirm()` / `ask()` for overlays: they become bottom sheets with a sticky footer.
+- Put command buttons in `<PageHead>`: they wrap under the title and get 44px touch height.
+- Do not hard-code widths for a desktop toolbar without a fallback; on a phone `min-w-[…]` utilities inside `.main` are
+  neutralised and wrapped rows stretch to the full width.
+- Inputs are 16px on phones on purpose (iOS zooms the page for anything smaller).
+- Check a page at 375px: no horizontal scroll, nothing under the tab bar (the shell pads `.main` for it).

@@ -52,3 +52,7 @@ export function ask(opts) {
 // ---------- page header ----------
 /** Title bar overrides set by the current page through <PageHead />. `{ title, sub, hidden }` */
 export const pageHeader = ref({});
+
+// ---------- change-password dialog ----------
+/** Opened from the desktop user menu and from the phone's More screen; rendered once by AppShell. */
+export const passwordDialogOpen = ref(false);

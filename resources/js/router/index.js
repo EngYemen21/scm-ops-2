@@ -20,6 +20,8 @@ const routes = [
       ...ALL_ROUTE_META.map((r) => ({ path: r.path.slice(1), name: r.key, component: pageOf(r.key), meta: { key: r.key, title: r.title, permission: r.permission, param: r.param } })),
       // UI kit: the worked example of the page pattern (not in the sidebar).
       { path: 'kit', name: 'kit', component: () => import('../pages/dev/KitPage.vue'), meta: { key: 'kit', title: { ar: 'UI Kit', en: 'UI kit' } } },
+      // Phone 'More' screen (menu of every page + account actions); on a wide screen it redirects home.
+      { path: 'more', name: 'more', component: () => import('../pages/MorePage.vue'), meta: { key: 'more', title: { ar: 'المزيد', en: 'More' } } },
       // No `redirect` here: a redirect is resolved before the guard has booted the session, so every role would land
       // on /dash (which a worker or driver may not open). The guard below sends them to their own home page instead.
       { path: '', name: 'home', component: ComingSoon },

@@ -59,6 +59,15 @@ const ICONS = {
   printer: ['M7 8V4h10v4M7 17H5v-7h14v7h-2M8 14h8v6H8z', 13, 1.8, null],
   truck: ['M3 16V7h11v9M14 10h4l3 3v3h-7M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', 14, 1.8, null],
   alert: ['M12 4l9 16H3L12 4zM12 10v4M12 17h.01', 14, 1.8, null],
+  // phone layout (tab bar, More screen, quick actions)
+  home: ['M4 11l8-7 8 7v9h-5v-6H9v6H4v-9z', 18, 1.7, null],
+  dots: ['M5 12h.01M12 12h.01M19 12h.01', 18, 2.6, null],
+  swap: ['M7 7h13M16 3l4 4-4 4M17 17H4M8 13l-4 4 4 4', 16, 1.8, null],
+  box: ['M3 8l9-5 9 5v8l-9 5-9-5V8zM12 13v8M12 13L3 8M12 13l9-5', 16, 1.7, null],
+  hash: ['M9 4L7 20M17 4l-2 16M4 9h16M3 15h16', 16, 1.8, null],
+  chevronLeft: ['M15 6l-6 6 6 6', 12, 1.8, null],
+  chevronRight: ['M9 6l6 6-6 6', 12, 1.8, null],
+  filter: ['M4 6h16M7 12h10M10 18h4', 15, 1.9, null],
 };
 
 const spec = computed(() => {
