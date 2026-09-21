@@ -25,6 +25,8 @@ class TripStop extends BaseModel
             'kg' => 'float',
             'map_x' => 'float',
             'map_y' => 'float',
+            'lat' => 'float',
+            'lng' => 'float',
             'arrived_at' => 'datetime',
             'completed_at' => 'datetime',
         ];

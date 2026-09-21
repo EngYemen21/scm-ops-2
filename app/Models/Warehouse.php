@@ -20,6 +20,8 @@ class Warehouse extends BaseModel
         return [
             'area_m2' => 'float',
             'docks' => 'integer',
+            'lat' => 'float',
+            'lng' => 'float',
             'open_date' => 'datetime',
             'active' => 'boolean',
         ];

@@ -20,7 +20,7 @@ import FleetVehiclesTab from './FleetVehiclesTab.vue';
 import FuelForm from './FuelForm.vue';
 import IncidentForm from './IncidentForm.vue';
 import MaintenanceForm from './MaintenanceForm.vue';
-import MapPlaceholder from './MapPlaceholder.vue';
+import FleetMap from './FleetMap.vue';
 import NewTripForm from './NewTripForm.vue';
 import OpsRequestForm from './OpsRequestForm.vue';
 import RouteForm from './RouteForm.vue';
@@ -83,7 +83,6 @@ const tabs = computed(() => [
   { k: 'maint', label: { ar: 'الصيانة والوقود', en: 'Maintenance & Fuel' }, badge: k.value?.maintenance.open }, { k: 'alerts', label: { ar: 'مركز التنبيهات', en: 'Alert Center' } },
   { k: 'opreq', label: { ar: 'الطلبات التشغيلية', en: 'Ops requests' } }, { k: 'routes', label: { ar: 'المسارات', en: 'Routes' } },
 ]);
-const LEGEND = [['#1d7a3e', { ar: 'متاحة', en: 'Available' }], ['#3C79F5', { ar: 'في الطريق', en: 'On route' }], ['#654e92', { ar: 'تحميل', en: 'Loading' }], ['#b26a16', { ar: 'متأخرة', en: 'Delayed' }], ['#b23b3b', { ar: 'عطل / حرج', en: 'Breakdown / critical' }], ['#a8a4b8', { ar: 'غير متصلة', en: 'Offline' }]];
 
 function newRoute() { editRoute.value = null; form.value = 'route'; }
 function editRouteRow(r) { editRoute.value = r; form.value = 'route'; }
@@ -110,13 +109,8 @@ function editRouteRow(r) { editRoute.value = r; form.value = 'route'; }
     </template>
   </KpiGrid>
 
-  <SectionCard small class="mt-3" :title="{ ar: 'الخريطة الحية — مواقع المركبات لحظيًا', en: 'Live map — real-time vehicle positions' }">
-    <template #actions>
-      <div class="row wrap !gap-2.5 text-[9px] font-extrabold text-muted">
-        <span v-for="[c, l] in LEGEND" :key="c" class="row !gap-1"><span class="inline-block h-2 w-2 rounded-full" :style="{ background: c }" />{{ t(l.ar, l.en) }}</span>
-      </div>
-    </template>
-    <MapPlaceholder :height="200" />
+  <SectionCard small class="mt-3" :title="{ ar: 'خريطة الأسطول والرحلات', en: 'Fleet & trips map' }">
+    <FleetMap :height="300" @trip="trip = $event" />
   </SectionCard>
 
   <div class="row wrap mb-2.5 mt-3.5">

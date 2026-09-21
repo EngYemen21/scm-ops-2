@@ -461,6 +461,7 @@ class TripsService
                     'trip_id' => $trip->id, 'seq' => $i + 1, 'customer_id' => $f->customer_id, 'customer_ar' => $f->customer->name_ar, 'customer_en' => $f->customer->name_en,
                     'so_id' => $f->so_id, 'fo_id' => $f->id, 'items' => (int) $f->lines->sum('qty'), 'kg' => $f->weight_kg, 'window' => $f->so?->window ?: $route?->window,
                     'contact' => $f->customer->contact, 'address' => $f->customer->address, 'planned_time' => $f->so?->window,
+                    'lat' => $f->customer->lat, 'lng' => $f->customer->lng,
                 ]);
                 TripOrder::create(['trip_id' => $trip->id, 'fo_id' => $f->id, 'stop_id' => $stop->id]);
                 $f->update(['trip_id' => $trip->id, 'seq' => $i + 1]);

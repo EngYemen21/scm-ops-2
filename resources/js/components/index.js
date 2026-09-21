@@ -25,6 +25,10 @@ export { default as StackedBar } from './StackedBar.vue';
 export { default as SectionCard } from './SectionCard.vue';
 export { default as EmptyState } from './EmptyState.vue';
 export { default as KV } from './KV.vue';
+// maps (Mapbox GL loads lazily, only when a map is shown)
+export { default as MapView } from './MapView.vue';
+export { default as LocationField } from './LocationField.vue';
+export { default as LocationPicker } from './LocationPicker.vue';
 // layout pieces pages use directly
 export { default as Drawer } from '../layout/Drawer.vue';
 export { default as Modal } from '../layout/Modal.vue';

@@ -15,6 +15,11 @@ class PendingMaps implements MapsAdapter
         return Pending::result();
     }
 
+    public function route(array $points, bool $geometry = true): array
+    {
+        return Pending::result();
+    }
+
     public function optimizeRoute(array $stops): array
     {
         return ['status' => Pending::STATUS, 'order' => array_values(array_column($stops, 'id')), 'detail' => Pending::DETAIL_EN];

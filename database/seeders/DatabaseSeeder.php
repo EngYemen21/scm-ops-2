@@ -30,6 +30,7 @@ class DatabaseSeeder extends Seeder
         }
         $counts = $importer->import(database_path('seed-data/snapshot.json'), resetPasswordTo: $password);
         $settings->ensureDefaults();
+        $this->call(DemoCoordinatesSeeder::class);
         $this->command?->info('[seed] imported '.array_sum($counts).' rows into '.count(array_filter($counts)).' tables');
         $this->command?->info('[seed] logins: admin, sales, wm, inv, proc, disp, worker, driver, gm, finance — password = SEED_PASSWORD');
     }

@@ -120,6 +120,7 @@ class WarehousesService
                 'code' => $code, 'name_ar' => $dto['nameAr'], 'name_en' => ($dto['nameEn'] ?? null) ?: $dto['nameAr'], 'city' => $dto['city'], 'type' => ($dto['type'] ?? null) ?: 'dc',
                 'area_m2' => $dto['areaM2'], 'docks' => $dto['docks'] ?? 4, 'temp_zones' => ($dto['tempZones'] ?? null) ?: 'all', 'hours' => ($dto['hours'] ?? null) ?: '06:00 – 22:00',
                 'open_date' => empty($dto['openDate']) ? null : self::day($dto['openDate'], 'WAREHOUSE_DATE'),
+                'lat' => $dto['lat'] ?? null, 'lng' => $dto['lng'] ?? null,
             ]);
             $this->audit->log($actor, ['action' => 'WAREHOUSE.CREATE', 'entityType' => 'Warehouse', 'entityId' => $r->id, 'entityNumber' => $code, 'newValue' => ['code' => $code] + $dto]);
 
@@ -144,6 +145,10 @@ class WarehousesService
         if (array_key_exists('nameEn', $dto)) {
             $data['nameEn'] = $dto['nameEn'] ?: (($dto['nameAr'] ?? null) ?: $w->name_ar);
         }
+        if (array_key_exists('lat', $dto) && array_key_exists('lng', $dto)) { // the map pin: both or neither (null clears it)
+            $data['lat'] = $dto['lat'];
+            $data['lng'] = $dto['lng'];
+        }
         if (array_key_exists('openDate', $dto)) {
             $data['openDate'] = $dto['openDate'] ? self::day($dto['openDate'], 'WAREHOUSE_DATE') : null;
         }
@@ -151,7 +156,7 @@ class WarehousesService
             throw AppError::validation('WAREHOUSE_AREA', 'المساحة يجب أن تكون أكبر من صفر', 'Area must be greater than zero');
         }
         DB::transaction(function () use ($actor, $w, $dto, $data) {
-            $old = ['nameAr' => $w->name_ar, 'nameEn' => $w->name_en, 'city' => $w->city, 'type' => $w->type, 'areaM2' => $w->area_m2, 'docks' => $w->docks, 'tempZones' => $w->temp_zones, 'hours' => $w->hours, 'active' => $w->active];
+            $old = ['nameAr' => $w->name_ar, 'nameEn' => $w->name_en, 'city' => $w->city, 'type' => $w->type, 'areaM2' => $w->area_m2, 'docks' => $w->docks, 'tempZones' => $w->temp_zones, 'hours' => $w->hours, 'active' => $w->active, 'lat' => $w->lat, 'lng' => $w->lng];
             $w->update(Shape::snake($data));
             $this->audit->log($actor, ['action' => 'WAREHOUSE.UPDATE', 'entityType' => 'Warehouse', 'entityId' => $w->id, 'entityNumber' => $w->code, 'oldValue' => $old, 'newValue' => $data]);
             if (isset($dto['active']) && (bool) $dto['active'] !== (bool) $old['active']) {

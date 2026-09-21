@@ -614,3 +614,26 @@
   .card, .kpi { border-color: #ccc; break-inside: avoid; }
   .gt-wrap { overflow: visible; } .gt { min-width: 0; }
 }
+
+/* ───────────────────────────── maps (Mapbox GL) ───────────────────────────── */
+.map-view { position: relative; overflow: hidden; border-radius: 14px; background: #EEF1F6; isolation: isolate; }
+.map-canvas { width: 100%; height: 100%; transition: opacity .25s; } /* not absolute: mapbox-gl.css forces position: relative on its container */
+.map-cover { position: absolute; inset: 0; border-radius: 14px; }
+.map-view .mapboxgl-map { font-family: inherit; }
+.map-view .mapboxgl-ctrl-group { border-radius: 10px; box-shadow: 0 1px 6px rgba(30, 33, 48, .18); overflow: hidden; }
+.map-view .mapboxgl-ctrl-group button { width: 30px; height: 30px; }
+.map-view .mapboxgl-popup-content { border-radius: 12px; padding: 9px 12px; box-shadow: 0 6px 22px rgba(30, 33, 48, .22); font-family: inherit; }
+.map-pop-title { font-size: 11.5px; font-weight: 800; color: #1e2130; }
+.map-pop-sub { margin-top: 2px; font-size: 10px; color: #7d7990; }
+
+.map-dot { --dot: #a8a4b8; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 999px; background: var(--dot); color: #fff; font-size: 10.5px; font-weight: 800; border: 2.5px solid #fff; box-shadow: 0 2px 7px rgba(30, 33, 48, .35); cursor: pointer; font-variant-numeric: tabular-nums; }
+.map-dot.warehouse { width: auto; min-width: 34px; height: 24px; padding: 0 7px; border-radius: 8px; background: #1e2130; font-size: 9.5px; letter-spacing: .4px; }
+.map-dot.fix { width: 16px; height: 16px; background: #3C79F5; box-shadow: 0 0 0 5px rgba(60, 121, 245, .22), 0 2px 7px rgba(30, 33, 48, .35); }
+.map-dot.vehicle { width: 30px; height: 30px; background: #fff; border-color: #6b4fd8; font-size: 15px; }
+.map-dot.legend { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0; border-width: 1.5px; box-shadow: none; cursor: default; border-radius: 999px; }
+.map-dot.warehouse.legend { border-radius: 3px; }
+
+.map-results { position: absolute; inset-inline: 0; top: 100%; z-index: 5; margin-top: 4px; max-height: 240px; overflow: auto; border-radius: 12px; border: 1px solid #e6e3ee; background: #fff; box-shadow: 0 10px 28px rgba(30, 33, 48, .16); }
+.map-result { display: block; width: 100%; padding: 9px 12px; text-align: start; font-size: 11px; cursor: pointer; border: none; background: none; border-top: 1px solid #f1eff6; }
+.map-result:first-child { border-top: none; }
+.map-result:hover { background: #f7f5fb; }

@@ -21,7 +21,7 @@ class DashboardService
         ['key' => 'b2b', 'labelAr' => 'منصة B2B', 'labelEn' => 'B2B platform', 'env' => 'B2B_WEBHOOK_URL'],
         ['key' => 'whatsapp', 'labelAr' => 'واتساب', 'labelEn' => 'WhatsApp', 'env' => 'WHATSAPP_API_URL'],
         ['key' => 'gps', 'labelAr' => 'تتبع GPS', 'labelEn' => 'GPS tracking', 'env' => 'GPS_PROVIDER_URL'],
-        ['key' => 'maps', 'labelAr' => 'الخرائط', 'labelEn' => 'Maps', 'env' => 'MAPS_API_KEY'],
+        ['key' => 'maps', 'labelAr' => 'الخرائط', 'labelEn' => 'Maps', 'env' => 'MAPBOX_PUBLIC_TOKEN', 'alt' => 'MAPS_API_KEY'],
         ['key' => 'storage', 'labelAr' => 'تخزين الملفات', 'labelEn' => 'Object storage', 'env' => 'OBJECT_STORAGE_ENDPOINT'],
         ['key' => 'erp', 'labelAr' => 'نظام ERP', 'labelEn' => 'ERP', 'env' => 'ERP_BASE_URL'],
     ];
@@ -424,7 +424,7 @@ class DashboardService
             // Honest status: "connected" only when the provider is configured in the environment, otherwise integration_pending.
             'integrations' => array_map(fn ($i) => [
                 'key' => $i['key'], 'labelAr' => $i['labelAr'], 'labelEn' => $i['labelEn'],
-                'status' => trim((string) config('integrations.'.$i['env'], '')) !== '' ? 'connected' : 'integration_pending', 'configVar' => $i['env'],
+                'status' => trim((string) config('integrations.'.$i['env'], '')).trim((string) config('integrations.'.($i['alt'] ?? $i['env']), '')) !== '' ? 'connected' : 'integration_pending', 'configVar' => $i['env'],
             ], self::INTEGRATIONS),
         ];
     }

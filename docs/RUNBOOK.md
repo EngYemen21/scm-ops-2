@@ -26,6 +26,11 @@ Databases: `scm_ops` (development), `scm_ops_test` (tests; rebuilt on every run)
 
 Shell gotcha: bash heredocs on this machine strip backslashes — never write PHP through a heredoc.
 
+Outbound HTTPS (maps, webhooks, storage) from a portable Windows PHP needs a CA bundle, otherwise every call fails with
+`cURL error 60: unable to get local issuer certificate`: copy a bundle next to PHP (Git for Windows ships one at
+`C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt`) and set `curl.cainfo` and `openssl.cafile` to it in `php.ini`.
+Linux servers, Docker and Vercel already have one.
+
 ## 2. Deploying to a server
 
 Any standard Laravel host works (VPS with Nginx/Apache + PHP-FPM, Laravel Forge / Cloud, Ploi, shared hosting with SSH).

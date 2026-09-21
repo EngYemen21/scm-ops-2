@@ -66,6 +66,12 @@ class GoogleMaps implements MapsAdapter
         return ['status' => 'ok', 'minutes' => (int) round($seconds / 60), 'distanceKm' => round(($el['distance']['value'] ?? 0) / 100) / 10];
     }
 
+    /** The route line is drawn by the Mapbox adapter only; with Google configured the client shows straight stop-to-stop links. */
+    public function route(array $points, bool $geometry = true): array
+    {
+        return ['status' => 'error', 'detail' => 'route geometry is not available from this provider'];
+    }
+
     public function optimizeRoute(array $stops): array
     {
         $stops = array_values($stops);

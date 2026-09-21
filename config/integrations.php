@@ -17,7 +17,9 @@ return [
     'GPS_PROVIDER_URL' => env('GPS_PROVIDER_URL'),
     'GPS_PROVIDER_TOKEN' => env('GPS_PROVIDER_TOKEN'),
 
-    // Maps / ETA
+    // Maps / ETA. Mapbox takes a PUBLIC token (pk.…): it also draws the map in the browser, so restrict it by URL in the
+    // Mapbox account and never put a secret (sk.…) token here. MAPS_API_KEY = Google Maps (server-side ETA only).
+    'MAPBOX_PUBLIC_TOKEN' => env('MAPBOX_PUBLIC_TOKEN'),
     'MAPS_API_KEY' => env('MAPS_API_KEY'),
 
     // Customer messaging

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Transport\FleetController;
+use App\Http\Controllers\Api\Transport\MapController;
 use App\Http\Controllers\Api\Transport\TripsController;
 use Illuminate\Support\Facades\Route;
 
@@ -10,6 +11,12 @@ Route::prefix('transport')->group(function () {
     // control tower / KPIs
     Route::get('tower', [TripsController::class, 'tower']);
     Route::get('fleet/kpis', [FleetController::class, 'kpis']);
+
+    // map: provider config for the browser, the tower / fleet overview, one trip's route, provider-optimised stop order
+    Route::get('map/config', [MapController::class, 'config']);
+    Route::get('map', [MapController::class, 'overview']);
+    Route::get('trips/{number}/map', [MapController::class, 'trip']);
+    Route::post('trips/{number}/optimize', [MapController::class, 'optimize'])->middleware('perm:trip.manage');
 
     // vehicles
     Route::get('vehicles', [FleetController::class, 'listVehicles']);

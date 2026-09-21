@@ -27,6 +27,6 @@ const head = computed(() => {
         <div class="mt-0.5 text-[10.5px] font-bold leading-[1.5]">{{ h.v }}</div>
       </div>
     </div>
-    <div class="mt-2.5 text-[9px] text-[#7FD6E5]">{{ t('التتبع الحي و ETA — Integration Pending (لم يُربط مزود الخرائط / Telematics)', 'Live tracking & ETA — Integration Pending (maps / telematics provider not connected)') }}</div>
+    <div class="mt-2.5 text-[9px] text-[#7FD6E5]">{{ t('التتبع الحي للمركبة و ETA اللحظي — Integration Pending (يتطلب مزود GPS / Telematics) · المسار والمسافة على الخريطة أدناه', 'Live vehicle tracking & live ETA — Integration Pending (needs a GPS / telematics provider) · route and distance are on the map below') }}</div>
   </div>
 </template>

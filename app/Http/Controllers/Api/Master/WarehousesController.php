@@ -31,7 +31,7 @@ class WarehousesController extends MasterController
             'code' => ['required', 'string', 'regex:/^[A-Za-z]{3}$/'], 'nameAr' => 'required|string|min:1', 'city' => 'required|string|min:1', 'areaM2' => 'required|numeric|gt:0',
         ] + self::warehouseOptionalRules(), ['code.regex' => 'الرمز 3 أحرف لاتينية']);
 
-        return $this->service->create(AuthUser::current(), self::typed($data, ['docks'], ['areaM2']));
+        return $this->service->create(AuthUser::current(), self::typed($data, ['docks'], ['areaM2', 'lat', 'lng']));
     }
 
     public function update(Request $request, string $code): array
@@ -40,7 +40,7 @@ class WarehousesController extends MasterController
             'nameAr' => 'sometimes|string|min:1', 'city' => 'sometimes|string|min:1', 'areaM2' => 'sometimes|numeric|gt:0', 'active' => 'sometimes|boolean',
         ] + self::warehouseOptionalRules());
 
-        return $this->service->update(AuthUser::current(), $code, self::typed($data, ['docks'], ['areaM2'], ['active']));
+        return $this->service->update(AuthUser::current(), $code, self::typed($data, ['docks'], ['areaM2', 'lat', 'lng'], ['active']));
     }
 
     // ── zones + racks ──
@@ -156,7 +156,7 @@ class WarehousesController extends MasterController
     {
         return [
             'nameEn' => 'nullable|string', 'type' => 'sometimes|in:dc,hub,cross,cold', 'docks' => 'nullable|integer|min:0', 'tempZones' => 'sometimes|in:all,dry,cold',
-            'hours' => 'nullable|string', 'openDate' => ['nullable', 'string', ...self::DATE],
+            'hours' => 'nullable|string', 'lat' => 'nullable|numeric|between:-90,90|required_with:lng', 'lng' => 'nullable|numeric|between:-180,180|required_with:lat', 'openDate' => ['nullable', 'string', ...self::DATE],
         ];
     }
 }

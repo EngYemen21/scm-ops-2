@@ -5,18 +5,18 @@ import { RouterLink } from 'vue-router';
 import { Chip, EmptyState } from '@/components';
 import { fmtDate, fmtNum, fmtTime, lang, t } from '@/i18n';
 import { STOP_LABELS } from '@/shared';
-import MapPlaceholder from './MapPlaceholder.vue';
+import { isMobile } from '@/composables/viewport';
+import TripMap from './TripMap.vue';
 import { STOP_DOT } from './tms';
 
 const props = defineProps({ trip: { type: Object, required: true } });
 const stops = computed(() => props.trip.stops || []);
-const mapLabel = computed(() => ({ ar: `خريطة المسار — ${props.trip.warehouse?.code || ''}`, en: `Route map — ${props.trip.warehouse?.code || ''}` }));
 const stopTime = (s) => s.actualTime || s.plannedTime || (s.arrivedAt ? fmtTime(s.arrivedAt) : '—');
 </script>
 
 <template>
   <div>
-    <MapPlaceholder :height="190" :label="mapLabel" />
+    <TripMap :number="trip.number" :height="isMobile ? 240 : 300" />
     <div class="col mt-3">
       <EmptyState v-if="stops.length === 0" tone="dashed" :text="{ ar: 'لا محطات على هذه الرحلة', en: 'No stops on this trip' }" />
       <div v-for="s in stops" :key="s.id" class="card sm px-[15px] py-3">

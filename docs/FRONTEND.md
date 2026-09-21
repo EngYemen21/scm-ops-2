@@ -143,3 +143,35 @@ Three libraries, chosen by the team: `picqer/php-barcode-generator` (CODE128), `
 The camera needs HTTPS (or localhost) and the user's permission; `BarcodeScanner` explains each failure. Round-trip
 checked: every code drawn by the API (bin, FO, shipment, EAN-13 digits, QR link, QR with Arabic) decodes to the same
 text with html5-qrcode's own decoder.
+
+## Maps (Mapbox)
+
+Provider: **Mapbox**, one variable — `MAPBOX_PUBLIC_TOKEN` (a *public* `pk.…` token; a secret `sk.…` token is refused by
+`AdapterFactory::maps()` and never reaches the browser). Restrict the token by URL in the Mapbox account. Without it
+every map shows the honest "Integration Pending" placeholder and the API answers `integration_pending`.
+
+| What | Where |
+|---|---|
+| Server adapter (Directions with live traffic, Optimization) | `app/Services/Integrations/Adapters/MapboxMaps.php` |
+| Transport map API | `app/Services/Transport/TransportMapService.php`, `routes/api/transport.php` (`map/config`, `map`, `trips/{n}/map`, `trips/{n}/optimize`) |
+| Client loader (config, lazy `mapbox-gl` chunk, place search) | `resources/js/composables/mapbox.js` |
+| Map component | `components/MapView.vue` — markers + lines in, `@marker` out; `pickable` + `v-model:pin` for picking |
+| Location control for forms | `components/LocationField.vue` → `LocationPicker.vue` (search in Saudi Arabia, tap, drag the pin) |
+| Screens | `pages/transport/TripMap.vue` (trip room), `pages/transport/FleetMap.vue` (transport tower, fleet) |
+
+Rules:
+
+- **Only stored facts are drawn**: warehouse / customer / stop coordinates, the GPS fix a driver's phone attached to a
+  proof of delivery, a vehicle position written by a telematics provider. A stop without coordinates is listed as
+  "not located" — it is never guessed from its address. Live vehicle tracking stays `integration_pending` until a GPS
+  provider is configured (`GPS_PROVIDER_URL`).
+- A trip's line is warehouse → located stops in sequence → warehouse, cached 15 minutes by its exact point list. When the
+  provider has no answer the client draws straight *dashed* links, which cannot be mistaken for a road.
+- "Optimise stop order" (`trip.manage`, planning stages only, ≤ 11 stops, every stop and the warehouse located) asks the
+  provider for the shortest round trip and applies it through the normal `reorderStops` rule — same audit, same lock.
+  `GET trips/{n}/map` carries `optimize: { allowed, code, reasonAr, reasonEn }`, so the button shows only when it can work.
+- A stop copies its customer's coordinates when the trip is created and falls back to the customer's current ones.
+- `mapbox-gl` (≈ 510 kB gzip) is its own chunk, loaded only when a map is on screen. On phones the map uses cooperative
+  gestures (two fingers to pan) so it never hijacks the page scroll; the picker, being a dialog, pans with one finger.
+- Demo coordinates: `DemoCoordinatesSeeder` (runs with the demo seed; on an existing database:
+  `php artisan db:seed --class='Database\Seeders\DemoCoordinatesSeeder' --force` — it never overwrites a set value).

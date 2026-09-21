@@ -7,7 +7,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, useAction, useGet, useList } from '@/api/client';
-import { Btn, Chip, DataTable, DateInput, ErrorBanner, PageHead, ProgressBar, SectionCard, SelectInput, TextInput } from '@/components';
+import { Btn, Chip, DataTable, DateInput, ErrorBanner, LocationPicker, PageHead, ProgressBar, SectionCard, SelectInput, TextInput } from '@/components';
 import { fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { confirm, showCustomLabel, showLabel, showLabels } from '@/stores/ui';
@@ -99,6 +99,15 @@ const binZone = ref('');
 const movePreset = ref(null);
 const statusBin = ref(null);
 const act = useAction({ invalidate: ['warehouses'] });
+
+// ── map pin: where this warehouse's trips start and return (null clears it) ──
+const locating = ref(false);
+async function saveLocation(p) {
+  locating.value = false;
+  await act.run(() => api.patch(`/warehouses/${enc(w.value.code)}`, { lat: p?.lat ?? null, lng: p?.lng ?? null }), {
+    success: p ? { ar: 'حُفظ موقع المستودع على الخريطة', en: 'Warehouse location saved' } : { ar: 'أُزيل موقع المستودع', en: 'Warehouse location cleared' }, invalidate: ['warehouses', 'transport'],
+  });
+}
 function openMove(preset) { movePreset.value = preset; form.value = 'move'; }
 function openBin(z) { binZone.value = z || ''; form.value = 'bin'; }
 function openForm(k) { if (k === 'bin') openBin(zone.value); else if (k === 'move') openMove(null); else form.value = k; }
@@ -244,6 +253,10 @@ const binZoneOpts = computed(() => zoneOpts(zones.value));
         <WhMeta :k="{ ar: 'تاريخ التشغيل', en: 'Open since' }"><span v-if="w.openDate" class="num ltr">{{ fmtDateOnly(w.openDate) }}</span><template v-else>—</template></WhMeta>
         <WhMeta :k="{ ar: 'استراتيجية الصرف', en: 'Pick strategy' }" :v="pickStrategies" />
         <WhMeta :k="{ ar: 'المستخدمون', en: 'Users' }"><span class="num">{{ fmtNum(w.counts?.users ?? 0) }}</span></WhMeta>
+        <WhMeta :k="{ ar: 'الموقع على الخريطة', en: 'Map location' }">
+          <bdi v-if="w.lat != null && w.lng != null" dir="ltr" class="num">{{ w.lat.toFixed(4) }}, {{ w.lng.toFixed(4) }}</bdi><span v-else class="text-warn">{{ t('غير محدَّد', 'Not set') }}</span>
+          <span v-if="canManage" :class="[LINK, 'ms-1.5 text-violet']" @click="locating = true">{{ w.lat != null ? t('تعديل', 'Edit') : t('تحديد', 'Pick') }}</span>
+        </WhMeta>
       </div>
       <div class="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2">
         <WhKpi :v="fmtNum(totalBins)" :l="{ ar: 'مواقع Bins', en: 'Bins' }" />
@@ -395,6 +408,7 @@ const binZoneOpts = computed(() => zoneOpts(zones.value));
   <div class="hint">{{ t('المناطق المبردة والمجمدة تُقيَّد آليًا: منتج مجمد لا يُخزن خارج FZ ولا يُخصص له موقع خارجها. المواقع المحظورة/الموقوفة تُستثنى من التخصيص والالتقاط، ولا يُوقف موقع يحوي رصيدًا. كل تغيير على الهيكل (مستودع، منطقة، موقع، تعيين، حجز رصيف) يُسجل في Audit Trail.', 'Cold zones are enforced automatically: frozen products never leave FZ. Blocked / inactive bins are skipped by allocation and picking; a bin holding stock cannot be deactivated. Every structural change is recorded in the audit trail.') }}</div>
 
   <!-- ── forms ── -->
+  <LocationPicker v-if="w" :open="locating" :value="w.lat != null ? { lat: w.lat, lng: w.lng } : null" :seed="w.city || ''" :title="{ ar: `موقع مستودع ${w.code} على الخريطة`, en: `${w.code} warehouse location` }" @close="locating = false" @pick="saveLocation" />
   <WarehouseForm :open="form === 'wh'" @close="form = null" @done="(x) => setSel(x.code)" />
   <ZoneForm :open="form === 'zone'" :warehouses="warehouses" :warehouse-code="sel" @close="form = null" @done="onZoneCreated" />
   <BinForm :open="form === 'bin'" :warehouses="warehouses" :warehouse-code="sel" :zones="zones" :zone="binZone" @close="form = null" @done="onBinCreated" />

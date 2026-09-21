@@ -84,7 +84,7 @@ function clear() { q.value = ''; status.value = ''; date.value = ''; quick.value
     <TripTable v-if="quick === 'delayed'" :rows="delayedRows" :loading="list.isLoading.value" :selected-key="openTrip" :empty-text="{ ar: 'لا رحلات متأخرة ✓', en: 'No delayed trips ✓' }" @open="setOpenTrip" />
     <TripTable v-else :paged="list.data.value" :loading="list.isLoading.value" :selected-key="openTrip" :empty-text="{ ar: 'لا رحلات مطابقة', en: 'No matching trips' }" @page="page = $event" @open="setOpenTrip" />
   </div>
-  <div class="hint teal !mt-2.5">{{ t('ETA والتتبع الحي تظهر بحالة Integration Pending حتى ربط مزود الخرائط / Telematics. الحمولة تُشتق من الطلبات المجهزة (Packed) والتكلفة تُحتسب عند الإقفال.', 'ETA and live tracking show as Integration Pending until a maps / telematics provider is connected. Load derives from packed orders; cost is computed at close.') }}</div>
+  <div class="hint teal !mt-2.5">{{ t('ETA اللحظي والتتبع الحي للمركبات يظهران بحالة Integration Pending حتى ربط مزود GPS / Telematics؛ مسار الرحلة ومسافتها يظهران على خريطتها. الحمولة تُشتق من الطلبات المجهزة (Packed) والتكلفة تُحتسب عند الإقفال.', 'Live ETA and vehicle tracking show as Integration Pending until a GPS / telematics provider is connected; the trip route and distance are on its map. Load derives from packed orders; cost is computed at close.') }}</div>
 
   <TripRoom :number="openTrip" @close="setOpenTrip(null)" />
   <NewTripForm :open="form === 'trip'" @close="form = null" @done="(trip) => { if (trip?.number) setOpenTrip(trip.number); }" />

@@ -43,6 +43,10 @@ final class AdapterFactory
 
     public static function maps(?array $env = null): MapsAdapter
     {
+        $token = self::v($env, 'MAPBOX_PUBLIC_TOKEN');
+        if ($token && str_starts_with($token, 'pk.')) { // a secret (sk.) token is refused: this value is handed to browsers
+            return new MapboxMaps($token);
+        }
         $key = self::v($env, 'MAPS_API_KEY');
 
         return $key ? new GoogleMaps($key) : new PendingMaps;

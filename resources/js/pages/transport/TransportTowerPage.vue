@@ -16,7 +16,7 @@ import DriverDrawer from './DriverDrawer.vue';
 import DriverForm from './DriverForm.vue';
 import FuelForm from './FuelForm.vue';
 import MaintenanceForm from './MaintenanceForm.vue';
-import MapPlaceholder from './MapPlaceholder.vue';
+import FleetMap from './FleetMap.vue';
 import NewTripForm from './NewTripForm.vue';
 import RouteForm from './RouteForm.vue';
 import { ALERT_SEV_LABELS, DRIVER_STATE_LABELS, PENDING, TEMP_LABELS, delayLabel, drvName, entityKind, etaText, labelOf, safetyColor, todayIso, tripProgress } from './tms';
@@ -113,7 +113,7 @@ const sevChipLabel = (ks) => `${bi(ALERT_SEV_LABELS[ks[0]])} ${sum(tw.value?.ope
 
   <div class="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3.5">
     <div class="col !gap-3.5">
-      <SectionCard small :title="{ ar: 'الخريطة الحية', en: 'Live map' }"><MapPlaceholder :height="240" /></SectionCard>
+      <SectionCard small :title="{ ar: 'خريطة الرحلات', en: 'Trips map' }"><FleetMap :height="280" :warehouse="wh.whParams.warehouse || null" @trip="trip = $event" /></SectionCard>
 
       <SectionCard small :padded="false" :title="{ ar: 'الرحلات النشطة والمتأخرة', en: 'Active & delayed trips' }" :count="active.data.value?.total">
         <div v-if="active.isLoading.value" class="skel m-3 h-[60px]" />
