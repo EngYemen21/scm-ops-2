@@ -116,15 +116,29 @@ Rules for pages, so they keep working on a phone without extra work:
 ## Barcodes and QR codes
 
 Three libraries, chosen by the team: `picqer/php-barcode-generator` (CODE128), `endroid/qr-code` (QR) on the API,
-`html5-qrcode` (camera scanning) in the client.
+`html5-qrcode` (camera scanning) in the client. Desktop and phone share all of it.
+
+### Reading (scanning)
 
 | Piece | Where |
 |---|---|
-| Label images | `GET /api/barcodes/code128?text=…` and `GET /api/barcodes/qr?text=…` → SVG (`app/Services/Barcodes/BarcodeService.php`). SVG on purpose: sharp at any label size and no GD extension needed (the Vercel PHP runtime has none). CODE128 refuses non-ASCII text; QR carries UTF-8 (Arabic). |
-| Printing | `showLabel({ type: 'code128' \| 'qr', text, title, sub })` from `stores/ui.js` opens `layout/LabelHost.vue` (preview, copies, print). A label print job prints ONLY the labels (`body.printing-label` rules in `app.css`), one per page — set the paper size of the label printer in the print dialog. |
-| What gets which code | CODE128 = shipping and shelf labels: bin (warehouses page → «ملصق»), fulfilment order, inbound shipment, product (primary barcode, else SKU). QR = runs and customers: trip and sales order; the QR holds `appLink('/trip/…')`, a link into this application. |
-| Camera scanner | `components/BarcodeScanner.vue` (html5-qrcode, loaded only when it opens — it is its own ~360 KB chunk). Back camera, torch when the phone has one, the phone's native detector when available. 1D codes must be read twice in a row before they are accepted (a single bad frame of a damaged label can decode to a wrong number); QR is accepted at once. |
-| Where scanning is offered | Every `ScanInput` (receiving, put-away, worker receive, dispatch, form drawers) shows a camera button on phones and touch devices — a camera read is exactly a typed code + Enter. The phone search has a scan button: a QR printed by this system opens its document directly, anything else is searched for. Handheld / USB scanners keep working as before (they type into the focused field). |
+| The one scan button | `components/ScanButton.vue` — opens `BarcodeScanner.vue` (html5-qrcode, its own lazy ~360 KB chunk) and emits `detected(code, format)`. Rendered wherever the browser can open a camera (https / localhost): phones, tablets, handhelds and desktops with a webcam. USB / Bluetooth scanners need no button — they type into the focused field. |
+| Any text field | `<TextInput scan …>` puts the button inside the field; a read replaces the value and fires `enter`, exactly like a handheld scanner. **Give `scan` to every field that takes a SKU, barcode, bin, batch or document number.** |
+| Scan-first fields | `ScanInput` (receiving, put-away, worker receive, dispatch, count entry, form drawers) always has it. |
+| Searches | Desktop `GlobalSearch` and phone `MobileSearch`: a QR printed by this system opens its document directly; any other code is searched for. |
+| Worker / driver | They have no global search, so the topbar carries a scan button: a system QR opens the document, anything else is delivered to the scan field of the page on screen (`registerScanTarget` / `deliverScan` in `stores/ui.js`). |
+| Pickers | Both `ProductPicker`s: a scanned barcode that matches exactly one product is picked without another tap. |
+| Accuracy | 1D codes must be read twice in a row before they are accepted (one bad frame of a damaged label can decode to a wrong number); QR / DataMatrix are accepted at once. Back camera, torch when the phone has one, native `BarcodeDetector` when available. |
+
+### Issuing (labels)
+
+| Piece | Where |
+|---|---|
+| Images | `GET /api/barcodes/code128?text=`, `GET /api/barcodes/qr?text=`, `POST /api/barcodes/batch { items: [{ type, text }] }` (≤ 300, one round trip for a whole zone) → SVG (`app/Services/Barcodes/BarcodeService.php`). SVG on purpose: sharp at any label size, no GD extension needed (the Vercel PHP runtime has none). CODE128 refuses non-ASCII text; QR carries UTF-8 (Arabic). |
+| Dialog | `showLabel(spec)`, `showLabels(specs, caption)`, `showCustomLabel()` from `stores/ui.js` → `layout/LabelHost.vue`: preview, copies, print. A label print job prints ONLY the labels (`body.printing-label` rules in `app.css`), one per page — pick the label printer's paper size in the print dialog. |
+| CODE128 — shipping and shelves | bin (row «ملصق» + «طباعة ملصقات المواقع» for every bin of the current filter), batch (row), product (primary barcode, else SKU), inbound shipment, GRN, fulfilment order, transfer, return. |
+| QR — runs and customers | trip, sales order, purchase order (the QR holds `appLink('/trip/…')`, a link into this application), customer (its code). |
+| Free text | «ملصق مخصص»: warehouses page, the desktop user menu and the phone's quick actions. |
 
 The camera needs HTTPS (or localhost) and the user's permission; `BarcodeScanner` explains each failure. Round-trip
 checked: every code drawn by the API (bin, FO, shipment, EAN-13 digits, QR link, QR with Arabic) decodes to the same

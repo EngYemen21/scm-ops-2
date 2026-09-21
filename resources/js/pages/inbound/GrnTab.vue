@@ -24,7 +24,7 @@ const sumOf = (g, key) => g.lines.reduce((a, l) => a + l[key], 0);
 
 <template>
   <div class="row wrap mb-2.5">
-    <TextInput v-model="q" small type="search" class="!w-[240px]" :placeholder="{ ar: 'بحث: GRN / PO / ملخص', en: 'Search: GRN / PO / summary' }" />
+    <TextInput scan v-model="q" small type="search" class="!w-[240px]" :placeholder="{ ar: 'بحث: GRN / PO / ملخص', en: 'Search: GRN / PO / summary' }" />
     <Btn v-if="sel" size="sm" tone="soft" :label="{ ar: '← كل الإشعارات', en: '← All GRNs' }" @click="emit('update:sel', null)" />
   </div>
   <ErrorBanner :error="list.error.value" :closable="false" />

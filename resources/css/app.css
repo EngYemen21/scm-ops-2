@@ -541,11 +541,20 @@
 
 /* ---------- barcode scanner + printable labels ---------- */
 @layer components {
-  .scan-wrap .inp.scan { padding-inline-end: 12px; }
-  .scan-wrap:has(.scan-cam) .inp.scan { padding-inline-end: 50px; }
-  .scan-cam { position: absolute; inset-inline-end: 5px; top: 50%; transform: translateY(-50%); width: 38px; height: calc(100% - 10px); max-height: 40px; border: none; border-radius: 10px; background: #efeaf8; color: #654e92; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-  .scan-cam:active { opacity: .75; }
-  .m-search-scan { width: 34px; height: 34px; border-radius: 10px; border: none; background: #efeaf8; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+  /* one camera button for the whole application (components/ScanButton.vue) */
+  .scan-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+  .scan-wrap > .inp { flex: 1 1 auto; min-width: 0; }
+  .scan-wrap.has-btn:has(.scan-btn) > .inp { padding-inline-end: 44px; }
+  .scan-btn { width: 34px; height: 34px; border-radius: 10px; border: none; background: #efeaf8; color: #654e92; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+  .scan-btn:hover { background: #e4dbf5; }
+  .scan-btn:active { opacity: .75; }
+  .scan-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .scan-btn.inside { position: absolute; inset-inline-end: 4px; top: 50%; transform: translateY(-50%); width: 34px; height: calc(100% - 8px); max-height: 38px; min-height: 22px; border-radius: 8px; }
+  .scan-btn.dark { background: transparent; color: #8b90a5; width: 26px; height: 26px; }
+  .scan-btn.dark:hover { background: #363b54; color: #fff; }
+  .tb-scan { display: inline-flex; flex: none; }
+  .tb-scan .scan-btn { width: 32px; height: 32px; border-radius: 9px; background: #2a2e42; color: #c9cde0; }
+  .m-topbar .tb-scan .scan-btn { width: 40px; height: 40px; border-radius: 12px; }
 
   .scn { position: fixed; inset: 0; z-index: 96; background: #0f111a; display: flex; flex-direction: column; color: #c9cde0; }
   .scn-bar { display: flex; align-items: center; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 14px 12px; background: #1e2130; }

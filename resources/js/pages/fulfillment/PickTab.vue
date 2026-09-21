@@ -52,7 +52,7 @@ const columns = [
 <template>
   <div>
     <div class="row wrap mb-2.5">
-      <TextInput v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر / العميل / أمر البيع…', en: 'Search FO / customer / SO…' }" @update:model-value="page = 1" />
+      <TextInput scan v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر / العميل / أمر البيع…', en: 'Search FO / customer / SO…' }" @update:model-value="page = 1" />
       <Tabs v-model="status" :tabs="FO_FILTERS" variant="pill" class="!mb-0" @update:model-value="page = 1" />
     </div>
     <ErrorBanner :error="list.error.value" :closable="false" />

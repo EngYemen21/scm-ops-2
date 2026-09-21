@@ -58,9 +58,22 @@ export const pageHeader = ref({});
 export const passwordDialogOpen = ref(false);
 
 // ---------- printable labels ----------
-/** Label shown by <LabelHost /> (null = closed). `{ type: 'code128' | 'qr', text, title?, sub?, caption? }` */
+/** What <LabelHost /> shows (null = closed): `{ items: Label[], caption? }` or `{ custom: true }`.
+ *  Label = `{ type: 'code128' | 'qr', text, title?, sub?, caption? }` — `text` is exactly what a scanner will read. */
 export const labelState = ref(null);
-/** CODE128 for shipping / shelf labels, QR for runs and customers. `text` is exactly what a scanner will read. */
-export function showLabel(spec) { labelState.value = { type: 'code128', ...spec }; }
+/** One label. CODE128 for shipping / shelf labels, QR for runs and customers. */
+export function showLabel(spec) { labelState.value = { items: [{ type: 'code128', ...spec }] }; }
+/** Many labels in one print job (a rack, a zone, every batch of a receipt). */
+export function showLabels(specs, caption = null) { labelState.value = { items: specs.map((s) => ({ type: 'code128', ...s })), caption }; }
+/** Free-text label: the user types what the code holds. */
+export function showCustomLabel() { labelState.value = { custom: true }; }
 /** Absolute link into this application — what a QR label carries, so the phone scanner opens the document directly. */
 export const appLink = (path) => `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+
+// ---------- page scan target ----------
+// The scan field of the page on screen (the first mounted ScanInput). The topbar scan button of the task-focused
+// roles hands a camera read to it, so "scan" is one tap from anywhere in the page.
+const scanTargets = [];
+export function registerScanTarget(handler) { scanTargets.push(handler); return () => { const i = scanTargets.indexOf(handler); if (i >= 0) scanTargets.splice(i, 1); }; }
+/** Returns false when the page has no scan field to take the code. */
+export function deliverScan(code) { const h = scanTargets[0]; if (!h) return false; h(code); return true; }

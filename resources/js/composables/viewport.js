@@ -8,6 +8,5 @@ const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedi
 export const isMobile = ref(!!mq?.matches);
 mq?.addEventListener?.('change', (e) => { isMobile.value = e.matches; });
 
-/** A device worth offering the camera scanner on: a phone, or anything driven by touch (tablets, handhelds). */
-export const canScanWithCamera = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
-  && (isMobile.value || (typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches));
+/** Can this browser open a camera at all? (needs https / localhost; phones, tablets, handhelds, desktops with a webcam) */
+export const canScanWithCamera = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;

@@ -35,6 +35,23 @@ class BarcodesTest extends ApiTestCase
         $this->assertGreaterThan(10, $bars($svc->code128('FO-3311')));
     }
 
+    public function test_a_batch_draws_every_label_in_order_in_one_request(): void
+    {
+        $items = [['type' => 'code128', 'text' => 'A-01-1-B1'], ['type' => 'qr', 'text' => 'TRP-2026-0031'], ['type' => 'code128', 'text' => 'A-01-1-B2']];
+        $res = $this->expectOk($this->postAs('worker', '/api/barcodes/batch', ['items' => $items]));
+        $this->assertCount(3, $res['items']);
+        $svc = app(BarcodeService::class);
+        $this->assertSame($svc->code128('A-01-1-B1', 72, 2), $res['items'][0]);
+        $this->assertSame($svc->qr('TRP-2026-0031', 260), $res['items'][1]);
+        $this->assertSame($svc->code128('A-01-1-B2', 72, 2), $res['items'][2]);
+
+        // one bad label refuses the whole job instead of printing a sheet with a hole in it
+        $this->expectRejected($this->postAs('admin', '/api/barcodes/batch', ['items' => [['type' => 'code128', 'text' => 'OK-1'], ['type' => 'code128', 'text' => 'رف']]]), 'BARCODE_ASCII', [400]);
+        $this->expectRejected($this->postAs('admin', '/api/barcodes/batch', ['items' => []]), 'INVALID_INPUT', [400]);
+        $tooMany = array_fill(0, BarcodeService::BATCH_MAX + 1, ['type' => 'code128', 'text' => 'X']);
+        $this->expectRejected($this->postAs('admin', '/api/barcodes/batch', ['items' => $tooMany]), 'INVALID_INPUT', [400]);
+    }
+
     public function test_input_is_validated(): void
     {
         $this->expectRejected($this->getAs('admin', '/api/barcodes/code128'), 'BARCODE_TEXT', [400]);

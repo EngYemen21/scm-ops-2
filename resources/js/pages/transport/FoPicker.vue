@@ -25,7 +25,7 @@ const toggle = (n) => emit('update:modelValue', props.modelValue.includes(n) ? p
 <template>
   <div>
     <div class="field-l">{{ t('الطلبات المجهزة (Packed)', 'Packed orders') }} <span class="text-bad">*</span> <span class="num text-violet">{{ modelValue.length }}</span></div>
-    <TextInput v-model="q" small :placeholder="{ ar: 'بحث برقم الطلب / العميل', en: 'Search FO / customer' }" />
+    <TextInput scan v-model="q" small :placeholder="{ ar: 'بحث برقم الطلب / العميل', en: 'Search FO / customer' }" />
     <div class="mt-1.5 max-h-[220px] overflow-y-auto rounded-[10px] border border-line">
       <div v-if="fos.isLoading.value" class="skel m-2 h-10" />
       <div v-else-if="items.length === 0" class="empty !p-3.5">{{ t('لا طلبات مجهزة في هذا المستودع', 'No packed orders in this warehouse') }}</div>

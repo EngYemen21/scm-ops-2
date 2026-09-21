@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { bi, t } from '../../i18n';
 import { useAuth } from '../../stores/auth';
+import { showCustomLabel } from '../../stores/ui';
 import Icon from '../Icon.vue';
 import BottomSheet from './BottomSheet.vue';
 import { quickActions } from './nav';
@@ -16,7 +17,8 @@ const open = ref(false);
 const actions = computed(() => quickActions(auth.user));
 watch(() => route.fullPath, () => { open.value = false; });
 
-function run(a) { open.value = false; router.push(a.to); }
+function run(a) { open.value = false; if (a.to) router.push(a.to); }
+function label() { open.value = false; showCustomLabel(); }
 </script>
 
 <template>
@@ -27,6 +29,10 @@ function run(a) { open.value = false; router.push(a.to); }
         <button v-for="a in actions" :key="a.key" type="button" class="m-action" @click="run(a)">
           <span class="m-action-ico" :style="{ background: a.tint[0], color: a.tint[1] }"><Icon :name="a.icon" :size="20" :color="a.tint[1]" /></span>
           <span class="m-action-l">{{ bi(a.label) }}</span>
+        </button>
+        <button type="button" class="m-action" @click="label">
+          <span class="m-action-ico" style="background: #f1eff6; color: #55506a"><Icon name="scan" :size="20" color="#55506a" /></span>
+          <span class="m-action-l">{{ t('طباعة ملصق', 'Print a label') }}</span>
         </button>
       </div>
     </BottomSheet>

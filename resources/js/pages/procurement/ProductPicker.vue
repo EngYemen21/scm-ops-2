@@ -1,7 +1,7 @@
 <script setup>
 // Product search box with a dropdown of hits (name / SKU / barcode). Enter picks the first hit, a click picks that row.
 //   <ProductPicker @pick="(product) => …" />
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useList } from '@/api/client';
 import { TextInput } from '@/components';
 import { fmtMoney, t } from '@/i18n';
@@ -20,12 +20,15 @@ const hits = computed(() => (searching.value ? list.data.value?.items || [] : []
 
 function onType(v) { q.value = v; open.value = true; }
 function pick(p) { emit('pick', p); q.value = ''; open.value = false; }
-function pickFirst() { if (hits.value[0]) pick(hits.value[0]); }
+/** Enter — typed or fired by a scan — picks the first hit; when the hits are still loading, the pick waits for them. */
+const pending = ref(false);
+function pickFirst() { if (hits.value[0] && !list.isFetching.value) pick(hits.value[0]); else pending.value = true; }
+watch(hits, (h) => { if (pending.value && !list.isFetching.value && h.length) { pending.value = false; if (h.length === 1) pick(h[0]); } });
 </script>
 
 <template>
   <div class="relative">
-    <TextInput :model-value="q" :label="label" :placeholder="{ ar: 'اكتب للبحث…', en: 'Type to search…' }" @update:model-value="onType" @enter="pickFirst" />
+    <TextInput scan :model-value="q" :label="label" :placeholder="{ ar: 'اكتب للبحث…', en: 'Type to search…' }" @update:model-value="onType" @enter="pickFirst" />
     <div v-if="open && q.trim()" class="absolute inset-x-0 top-full z-[5] max-h-[240px] overflow-y-auto rounded-xl border border-line bg-white shadow-[0_12px_30px_rgba(30,33,48,.12)]">
       <div v-if="list.isFetching.value && hits.length === 0" class="empty !p-3">{{ t('جارٍ البحث…', 'Searching…') }}</div>
       <div v-else-if="hits.length === 0" class="empty !p-3">{{ t('لا نتائج مطابقة.', 'No matching results.') }}</div>

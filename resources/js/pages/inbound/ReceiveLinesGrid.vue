@@ -2,6 +2,7 @@
 // Receiving lines grid (desktop): per-line accepted / damaged / rejected quantities, batch, mfg / expiry dates, QC note.
 // Read-only once the shipment is no longer being inspected.
 //   <ReceiveLinesGrid v-model:drafts="drafts" :lines="shipment.lines" :editable="editable" />
+import { ScanButton } from '@/components';
 import { fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { draftSum, emptyDraft, parseQty, pn } from './shared';
 
@@ -50,7 +51,7 @@ const suggestion = (l) => (lang.value === 'ar' ? l.suggestionAr : l.suggestionEn
           </div>
           <div><input :value="draftOf(l).damagedQty ?? ''" :placeholder="t('تالف', 'damaged')" dir="ltr" inputmode="numeric" class="inp sm num !h-[30px] !w-[64px] !border-[#F3C4C4] !px-2 !text-[10.5px]" @input="onQty($event, l, 'damagedQty')"></div>
           <div><input :value="draftOf(l).rejectedQty ?? ''" :placeholder="t('مرفوض', 'rejected')" dir="ltr" inputmode="numeric" class="inp sm num !h-[30px] !w-[64px] !border-[#F0DEB8] !px-2 !text-[10.5px]" @input="onQty($event, l, 'rejectedQty')"></div>
-          <div><input :value="draftOf(l).batchNo" :placeholder="t('الدفعة', 'Batch')" dir="ltr" class="inp sm num !h-[30px] !w-[100px]" :class="{ '!border-[#F0DEB8]': l.product.tracksExpiry && !draftOf(l).batchNo }" @input="set(l, { batchNo: $event.target.value })"></div>
+          <div class="row !gap-1"><ScanButton :title="{ ar: 'امسح رقم الدفعة', en: 'Scan the batch number' }" @detected="(code) => set(l, { batchNo: code })" /><input :value="draftOf(l).batchNo" :placeholder="t('الدفعة', 'Batch')" dir="ltr" class="inp sm num !h-[30px] !w-[100px]" :class="{ '!border-[#F0DEB8]': l.product.tracksExpiry && !draftOf(l).batchNo }" @input="set(l, { batchNo: $event.target.value })"></div>
           <div class="col !gap-1">
             <input type="date" :value="draftOf(l).mfgDate" dir="ltr" class="inp sm num !h-7 !w-[112px] !text-[9.5px]" :title="t('تاريخ الإنتاج', 'Production date')" @input="set(l, { mfgDate: $event.target.value })">
             <input type="date" :value="draftOf(l).expiryDate" dir="ltr" class="inp sm num !h-7 !w-[112px] !text-[9.5px]" :class="{ '!border-[#F0DEB8]': l.product.tracksExpiry && !draftOf(l).expiryDate }" :title="t('تاريخ الانتهاء', 'Expiry date')" @input="set(l, { expiryDate: $event.target.value })">

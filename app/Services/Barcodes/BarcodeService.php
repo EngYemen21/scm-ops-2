@@ -27,6 +27,9 @@ class BarcodeService
 
     public const QR_MAX = 600;
 
+    /** Labels per print job. */
+    public const BATCH_MAX = 300;
+
     /** @return string standalone SVG document */
     public function code128(string $text, int $height = 64, int $module = 2): string
     {

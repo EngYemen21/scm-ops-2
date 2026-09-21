@@ -39,7 +39,7 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
     <div class="field-l">{{ t('الأصناف من رصيد المصدر', 'Lines from source stock') }} <span class="text-bad">*</span> <span class="num text-violet">{{ modelValue.length }}</span></div>
     <div v-if="!warehouse" class="hint amber !mt-0">{{ t('اختر مستودع المصدر أولًا', 'Pick the source warehouse first') }}</div>
     <template v-else>
-      <TextInput v-model="q" small :placeholder="{ ar: 'بحث SKU / اسم / موقع / دفعة', en: 'Search SKU / name / bin / batch' }" />
+      <TextInput scan v-model="q" small :placeholder="{ ar: 'بحث SKU / اسم / موقع / دفعة', en: 'Search SKU / name / bin / batch' }" />
       <div class="mt-1.5 max-h-[200px] overflow-y-auto rounded-[10px] border border-line">
         <div v-if="bal.isLoading.value" class="skel m-2 h-10" />
         <ErrorBanner :error="bal.error.value" :closable="false" class="m-2" />
@@ -60,7 +60,7 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
         <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name }}</div><div class="cell-sub num">{{ l.sku }} · {{ l.fromBin }}{{ l.batchNo ? ` · ${l.batchNo}` : '' }}</div></div>
         <div class="num text-[10px] text-ok" :data-label="t('المتاح', 'Available')">{{ fmtNum(l.available) }}</div>
         <NumberInput :label="cap('الكمية', 'Qty')" :model-value="l.qty" small :min="1" :max="l.available" :error="Number(l.qty) > l.available ? t('يتجاوز المتاح', 'Exceeds available') : null" @update:model-value="set(l.key, { qty: $event })" />
-        <TextInput :label="cap('إلى موقع', 'To bin')" :model-value="l.toBin" small dir="ltr" mono :placeholder="{ ar: 'Bin *', en: 'Bin *' }" @update:model-value="set(l.key, { toBin: $event })" />
+        <TextInput scan :label="cap('إلى موقع', 'To bin')" :model-value="l.toBin" small dir="ltr" mono :placeholder="{ ar: 'Bin *', en: 'Bin *' }" @update:model-value="set(l.key, { toBin: $event })" />
         <button type="button" class="x-btn" aria-label="remove" @click="remove(l.key)">✕</button>
       </div>
     </div>

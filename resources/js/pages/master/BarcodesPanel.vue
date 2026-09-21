@@ -44,7 +44,7 @@ async function remove(b) {
       <span v-if="canManage" class="cursor-pointer text-[8.5px] font-extrabold text-bad" @click="remove(b)">{{ t('حذف', 'Remove') }}</span>
     </div>
     <div v-if="canManage" class="row wrap mt-2 !items-end">
-      <div class="min-w-[150px] flex-[2]"><TextInput v-model="bc" small :label="{ ar: 'باركود جديد', en: 'New barcode' }" dir="ltr" mono placeholder="628…" @enter="add" /></div>
+      <div class="min-w-[150px] flex-[2]"><TextInput v-model="bc" scan small :label="{ ar: 'باركود جديد', en: 'New barcode' }" dir="ltr" mono placeholder="628…" @enter="add" /></div>
       <div class="min-w-[100px] flex-1"><SelectInput v-model="uom" small :label="{ ar: 'الوحدة', en: 'UoM' }" :options="uoms" :placeholder="{ ar: '—', en: '—' }" /></div>
       <label class="row h-[34px] !gap-[5px] text-[9.5px] font-extrabold text-muted"><input v-model="primary" type="checkbox">{{ t('أساسي', 'Primary') }}</label>
       <Btn tone="softPurple" size="sm" class="!h-[34px]" :loading="act.pending.value" :label="{ ar: '+ إضافة', en: '+ Add' }" @click="add" />

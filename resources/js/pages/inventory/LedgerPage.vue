@@ -84,7 +84,7 @@ const cols = [
 <template>
   <PageHead :sub="t('سجل append-only — كل حركة موثقة بالمستند والمستخدم والوقت · لا حذف ولا تعديل', 'Append-only log — every movement carries its document, user and time · no delete, no edit')">
     <div class="row !gap-1.5">
-      <TextInput v-model="traceInput" small dir="ltr" mono class="min-w-[230px]" :placeholder="{ ar: 'تتبع مستند: GRN-… / SO-… / TRF-…', en: 'Trace: GRN-… / SO-… / TRF-…' }" @enter="runTrace" />
+      <TextInput scan v-model="traceInput" small dir="ltr" mono class="min-w-[230px]" :placeholder="{ ar: 'تتبع مستند: GRN-… / SO-… / TRF-…', en: 'Trace: GRN-… / SO-… / TRF-…' }" @enter="runTrace" />
       <Btn tone="dark" size="sm" :label="{ ar: 'تتبع', en: 'Trace' }" @click="runTrace" />
     </div>
   </PageHead>
@@ -94,10 +94,10 @@ const cols = [
     <button v-for="(l, k) in MOVEMENT_LABELS" :key="k" type="button" class="pill" :class="{ active: type === k }" :style="type === k ? null : { color: l.fg }" @click="setParams({ type: type === k ? undefined : k })">{{ t(l.ar, l.en) }}</button>
   </div>
   <div class="row wrap items-end">
-    <div class="min-w-[250px] flex-1"><TextInput v-model="txt.q" small type="search" :placeholder="{ ar: 'بحث: رقم حركة / مستند / SKU / دفعة / ملاحظة', en: 'Search: tx / doc / SKU / batch / note' }" /></div>
-    <TextInput v-model="txt.sku" small dir="ltr" mono class="!w-[120px]" placeholder="SKU" />
-    <TextInput v-model="txt.bin" small dir="ltr" mono class="!w-[110px]" :placeholder="{ ar: 'موقع Bin', en: 'Bin' }" />
-    <TextInput v-model="txt.referenceNumber" small dir="ltr" mono class="!w-[140px]" :placeholder="{ ar: 'رقم المستند', en: 'Reference no.' }" />
+    <div class="min-w-[250px] flex-1"><TextInput scan v-model="txt.q" small type="search" :placeholder="{ ar: 'بحث: رقم حركة / مستند / SKU / دفعة / ملاحظة', en: 'Search: tx / doc / SKU / batch / note' }" /></div>
+    <TextInput scan v-model="txt.sku" small dir="ltr" mono class="!w-[120px]" placeholder="SKU" />
+    <TextInput scan v-model="txt.bin" small dir="ltr" mono class="!w-[110px]" :placeholder="{ ar: 'موقع Bin', en: 'Bin' }" />
+    <TextInput scan v-model="txt.referenceNumber" small dir="ltr" mono class="!w-[140px]" :placeholder="{ ar: 'رقم المستند', en: 'Reference no.' }" />
     <TextInput v-model="txt.user" small class="!w-[110px]" :placeholder="{ ar: 'المستخدم', en: 'User' }" />
     <DateInput small :model-value="from" :label="{ ar: 'من', en: 'From' }" @update:model-value="setParams({ from: $event })" />
     <DateInput small :model-value="to" :label="{ ar: 'إلى', en: 'To' }" @update:model-value="setParams({ to: $event })" />

@@ -182,7 +182,7 @@ const formInitial = computed(() => ({ warehouseCode: wh.isAll ? wh.warehouses[0]
       <div class="flex-1" />
       <SelectInput v-model="zone" small class="min-w-[190px]" :options="zoneOpts" :disabled="wh.isAll" :placeholder="wh.isAll ? { ar: 'المنطقة — اختر مستودعًا أولًا', en: 'Zone — pick a warehouse first' } : { ar: 'كل المناطق', en: 'All zones' }" />
       <SelectInput v-model="storage" small class="min-w-[150px]" :options="storageOpts" :placeholder="{ ar: 'كل فئات التخزين', en: 'All storage classes' }" />
-      <TextInput v-model="q" small type="search" class="min-w-[240px]" :placeholder="{ ar: 'بحث: SKU / اسم / موقع / دفعة', en: 'Search: SKU / name / bin / batch' }" />
+      <TextInput scan v-model="q" small type="search" class="min-w-[240px]" :placeholder="{ ar: 'بحث: SKU / اسم / موقع / دفعة', en: 'Search: SKU / name / bin / batch' }" />
     </div>
     <SectionCard class="mt-3" :padded="false" :title="{ ar: 'الأرصدة حسب المنتج × المستودع × الموقع × الدفعة', en: 'Balances by product × warehouse × bin × batch' }">
       <template #actions><span class="text-[10px] text-faint"><b class="num text-ink">{{ fmtNum(list.data.value?.total ?? 0) }}</b> {{ t('موقع مخزون', 'stock locations') }}</span></template>

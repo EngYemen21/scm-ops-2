@@ -137,7 +137,7 @@ const pgTo = computed(() => (pg.value ? Math.min(pg.value.total, pg.value.page *
 
   <!-- filters -->
   <div class="row wrap mt-1">
-    <TextInput v-model="qLive" small class="w-[260px]" :placeholder="{ ar: 'بحث SKU / اسم / باركود / علامة…', en: 'Search SKU / name / barcode / brand…' }" @enter="submitSearch" />
+    <TextInput scan v-model="qLive" small class="w-[260px]" :placeholder="{ ar: 'بحث SKU / اسم / باركود / علامة…', en: 'Search SKU / name / barcode / brand…' }" @enter="submitSearch" />
     <Btn tone="soft" size="sm" :label="{ ar: 'بحث', en: 'Search' }" @click="submitSearch" />
     <Btn v-if="q" tone="ghost" size="sm" :label="{ ar: 'إزالة الفلتر', en: 'Clear' }" @click="clearSearch" />
     <SelectInput v-model="active" small class="w-[110px]" :options="activeOpts" @update:model-value="page = 1" />

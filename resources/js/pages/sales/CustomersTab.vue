@@ -7,6 +7,7 @@ import { Btn, Chip, DataTable, Drawer, ErrorBanner, KV, ProgressBar, Tabs, TextI
 import { fmtDateOnly, fmtMoney, num, t } from '@/i18n';
 import { SO_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
+import { showLabel } from '@/stores/ui';
 import CustomerForm from './CustomerForm.vue';
 import { CASH_TERMS, custName, priceListLabel } from './shared';
 
@@ -45,7 +46,7 @@ const columns = [
   { key: 'use', header: { ar: 'الاستخدام', en: 'Usage' }, width: 'minmax(120px,1fr)' },
   { key: 'sos', header: { ar: 'أوامر', en: 'SOs' }, width: '60px', kind: 'num' },
   { key: 'price', header: { ar: 'قائمة الأسعار', en: 'Price list' }, width: '120px' },
-  { key: 'act', header: '', width: '90px' },
+  { key: 'act', header: '', width: '150px', bare: true },
 ];
 
 function newQuote(code) { sel.value = null; emit('new-quote', code); }
@@ -73,7 +74,7 @@ function newSo(code) { sel.value = null; emit('new-so', code); }
         </template>
         <template #cell-sos="{ row }"><span class="muted">{{ row._count?.orders ?? '—' }}</span></template>
         <template #cell-price="{ row }"><span class="muted text-[9px]">{{ priceListLabel(row.priceList) }}</span></template>
-        <template #cell-act="{ row }"><Btn v-if="auth.can('sales.manage')" tone="softPurple" size="sm" :label="{ ar: 'عرض سعر', en: 'Quote' }" @click.stop="emit('new-quote', row.code)" /></template>
+        <template #cell-act="{ row }"><span class="row justify-end !gap-1.5"><Btn tone="soft" size="sm" label="QR" @click.stop="showLabel({ type: 'qr', text: row.code, title: row.code, sub: row.nameAr })" /><Btn v-if="auth.can('sales.manage')" tone="softPurple" size="sm" :label="{ ar: 'عرض سعر', en: 'Quote' }" @click.stop="emit('new-quote', row.code)" /></span></template>
       </DataTable>
     </div>
 

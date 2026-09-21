@@ -21,7 +21,7 @@ const pages = computed(() => list.data.value?.pages || 1);
 <template>
   <div>
     <div class="row wrap mb-2.5">
-      <TextInput v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر / العميل…', en: 'Search FO / customer…' }" @update:model-value="page = 1" />
+      <TextInput scan v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر / العميل…', en: 'Search FO / customer…' }" @update:model-value="page = 1" />
     </div>
     <ErrorBanner :error="list.error.value" :closable="false" />
     <div class="card">

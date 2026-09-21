@@ -50,7 +50,7 @@ const columns = [
 <template>
   <div>
     <div class="row wrap mb-2.5">
-      <TextInput v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر أو العميل…', en: 'Search order / customer…' }" @update:model-value="page = 1" />
+      <TextInput scan v-model="q" small class="w-[260px]" :placeholder="{ ar: 'بحث برقم الأمر أو العميل…', en: 'Search order / customer…' }" @update:model-value="page = 1" />
       <Tabs v-model="filter" :tabs="filterTabs" variant="pill" class="!mb-0" @update:model-value="page = 1" />
     </div>
     <ErrorBanner :error="list.error.value" :closable="false" />

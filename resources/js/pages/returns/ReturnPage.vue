@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, ErrorBanner, PageHead } from '@/components';
 import { bi, t } from '@/i18n';
+import { showLabel } from '@/stores/ui';
 import ReturnDetail from './ReturnDetail.vue';
 import { RETURN_TYPE_LABELS, labelOf, sourceOf } from './shared';
 
@@ -21,6 +22,7 @@ const sub = computed(() => (r.value ? `${bi(labelOf(RETURN_TYPE_LABELS, r.value.
   <div>
     <PageHead :title="r?.number || number" :sub="sub">
       <Btn tone="ghost" :label="{ ar: 'كل المرتجعات', en: 'All returns' }" @click="router.push('/returns')" />
+      <Btn v-if="r" tone="soft" :label="{ ar: 'ملصق المرتجع', en: 'Return label' }" @click="showLabel({ type: 'code128', text: r.number, title: r.number, sub: { ar: 'مرتجع', en: 'Return' } })" />
     </PageHead>
     <ErrorBanner :error="q.error.value" :closable="false" />
     <div v-if="q.isLoading.value && !r" class="skel h-40" />

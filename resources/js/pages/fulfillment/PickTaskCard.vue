@@ -49,8 +49,8 @@ async function recordShort() {
       <div class="min-w-[90px] flex-1 text-[11px] font-extrabold">{{ fmtNum(task.qty) }}<div class="num text-[8.5px] text-warn">{{ t(`مجهز ${task.pickedQty} / ${task.qty}`, `Picked ${task.pickedQty} / ${task.qty}`) }}</div></div>
       <template v-if="canDo">
         <div class="row flex-wrap !gap-1.5">
-          <TextInput v-model="bin" small mono dir="ltr" class="w-[104px]" placeholder="Scan Bin" @enter="onEnter" />
-          <TextInput v-model="sku" small mono dir="ltr" class="w-24" placeholder="Scan SKU" @enter="onEnter" />
+          <TextInput scan v-model="bin" small mono dir="ltr" class="w-[104px]" placeholder="Scan Bin" @enter="onEnter" />
+          <TextInput scan v-model="sku" small mono dir="ltr" class="w-24" placeholder="Scan SKU" @enter="onEnter" />
           <NumberInput v-model="qty" small class="w-14" :min="1" :max="remaining" :placeholder="String(remaining)" @enter="onEnter" />
         </div>
         <Btn tone="primary" class="!h-[38px] !rounded-[11px] !text-[11px]" :loading="act.pending.value" :disabled="!bin.trim() || !sku.trim()" :label="{ ar: 'تأكيد', en: 'Confirm' }" @click="confirmPick">

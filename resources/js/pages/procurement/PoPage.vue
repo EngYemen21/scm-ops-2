@@ -6,6 +6,7 @@ import { useGet } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, PageHead, SectionCard, Stepper } from '@/components';
 import { fmtDate, fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { PO_LABELS, SHIPMENT_LABELS } from '@/shared';
+import { appLink, showLabel } from '@/stores/ui';
 import ApprovalsTimeline from './ApprovalsTimeline.vue';
 import PoActions from './PoActions.vue';
 import { pname, sname } from './shared';
@@ -53,6 +54,7 @@ const columns = [
   <PageHead :sub="sub">
     <Btn tone="outline" :label="{ ar: '← أوامر الشراء', en: '← Purchase orders' }" @click="router.push('/procurement?tab=po')" />
     <PoActions v-if="po" :po="po" size="md" @changed="poQ.refetch()" />
+    <Btn v-if="po" tone="soft" :label="{ ar: 'رمز QR', en: 'QR code' }" @click="showLabel({ type: 'qr', text: appLink(`/po/${encodeURIComponent(po.number)}`), title: po.number, sub: { ar: 'أمر شراء', en: 'Purchase order' } })" />
   </PageHead>
   <ErrorBanner :error="poQ.error.value" :closable="false" />
   <div v-if="poQ.isLoading.value" class="skel min-h-[240px]" />

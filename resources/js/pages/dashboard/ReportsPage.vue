@@ -107,7 +107,7 @@ function exportCsv() {
             <Btn tone="ghost" size="sm" :label="{ ar: '7 أيام', en: '7d' }" @click="lastDays(7)" />
             <Btn tone="ghost" size="sm" :label="{ ar: '30 يوم', en: '30d' }" @click="lastDays(30)" />
           </template>
-          <TextInput v-model="q" small class="w-[190px]" :label="{ ar: 'بحث', en: 'Search' }" :placeholder="{ ar: 'SKU / رقم / اسم…', en: 'SKU / number / name…' }" @enter="qs.setParam('q', q || null)" />
+          <TextInput scan v-model="q" small class="w-[190px]" :label="{ ar: 'بحث', en: 'Search' }" :placeholder="{ ar: 'SKU / رقم / اسم…', en: 'SKU / number / name…' }" @enter="qs.setParam('q', q || null)" />
           <Btn tone="dark" size="sm" :label="{ ar: 'تطبيق', en: 'Apply' }" @click="qs.setParam('q', q || null)" />
           <Btn v-if="hasFilters" tone="ghost" size="sm" :label="{ ar: 'إزالة الفلتر', en: 'Clear' }" @click="clearFilters" />
         </div>

@@ -8,7 +8,7 @@ import { Btn, Chip, DataTable, ErrorBanner, KV, Modal, NumberInput, PageHead, Se
 import { fmtDate, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { MOVEMENT_LABELS, TRANSFER_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
-import { confirm } from '@/stores/ui';
+import { confirm, showLabel } from '@/stores/ui';
 import Hint from './Hint.vue';
 import ProductCell from './ProductCell.vue';
 import StatusTimeline from './StatusTimeline.vue';
@@ -123,6 +123,7 @@ const excText = (x) => (lang.value === 'ar' ? x.textAr : x.textEn || x.textAr);
   <!-- No `title`: the shell's default for /trf/:number is already "تحويل · <number>" with the number in Quicksand. -->
   <PageHead :sub="tr ? t(`${wname(tr.fromWarehouse)} ← ${wname(tr.toWarehouse)}`, `${wname(tr.fromWarehouse)} → ${wname(tr.toWarehouse)}`) : null">
     <Btn tone="soft" size="sm" :label="{ ar: '← كل التحويلات', en: '← All transfers' }" @click="router.push('/returns?tab=trf')" />
+    <Btn v-if="tr" tone="soft" size="sm" :label="{ ar: 'ملصق التحويل', en: 'Transfer label' }" @click="showLabel({ type: 'code128', text: tr.number, title: tr.number, sub: `${tr.fromWarehouse?.code || ''} → ${tr.toWarehouse?.code || ''}` })" />
   </PageHead>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <ErrorBanner v-if="!reject" :error="act.error.value" @close="act.clearError()" />

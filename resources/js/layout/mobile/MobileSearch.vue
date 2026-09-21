@@ -4,9 +4,8 @@
 // A scanned barcode typed by a hardware scanner lands in the same field, so scanning works without extra UI.
 import { nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import BarcodeScanner from '../../components/BarcodeScanner.vue';
+import ScanButton from '../../components/ScanButton.vue';
 import { useScrollLock } from '../../composables/scrollLock';
-import { canScanWithCamera } from '../../composables/viewport';
 import { t } from '../../i18n';
 import Icon from '../Icon.vue';
 import { useGlobalSearch } from '../useGlobalSearch';
@@ -34,9 +33,7 @@ function go(h) { remember(q.value); close(); if (h?.path) router.push(h.path); }
 function onEnter() { if (flat.value[0]) go(flat.value[0]); }
 
 // camera: a QR printed by this system holds a link into it and opens directly; anything else is searched for
-const camera = ref(false);
 function onCamera(code) {
-  camera.value = false;
   if (code.startsWith(`${window.location.origin}/`)) { close(); router.push(code.slice(window.location.origin.length)); return; }
   q.value = code; input.value?.focus();
 }
@@ -62,7 +59,7 @@ const HINTS = [
             <input ref="input" v-model="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
                    :placeholder="t('ابحث: طلب · منتج · باركود · عميل · رحلة…', 'Search: order · product · barcode · customer · trip…')" @keydown.enter.prevent="onEnter">
             <button v-if="q" type="button" class="m-search-clear" :aria-label="t('مسح', 'Clear')" @click="q = ''; input?.focus()">✕</button>
-            <button v-else-if="canScanWithCamera()" type="button" class="m-search-scan" :aria-label="t('مسح بالكاميرا', 'Scan with the camera')" @click="camera = true"><Icon name="scan" :size="18" color="#654e92" /></button>
+            <ScanButton v-else @detected="onCamera" />
           </div>
           <button type="button" class="m-search-cancel" @click="close">{{ t('إلغاء', 'Cancel') }}</button>
         </div>
@@ -113,5 +110,4 @@ const HINTS = [
       </div>
     </div>
   </Teleport>
-  <BarcodeScanner :open="camera" @detected="onCamera" @close="camera = false" />
 </template>

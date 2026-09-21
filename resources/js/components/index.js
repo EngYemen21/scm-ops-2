@@ -12,6 +12,8 @@ export { default as SelectInput } from './SelectInput.vue';
 export { default as TextArea } from './TextArea.vue';
 export { default as DateInput } from './DateInput.vue';
 export { default as ScanInput } from './ScanInput.vue';
+export { default as ScanButton } from './ScanButton.vue';
+export { default as BarcodeScanner } from './BarcodeScanner.vue';
 export { default as PillChoice } from './PillChoice.vue';
 export { optL, optV } from './options';
 export { default as FormDrawer } from './FormDrawer.vue';

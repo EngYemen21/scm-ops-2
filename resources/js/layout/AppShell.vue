@@ -11,8 +11,9 @@ import { bi, isBi, lang, setLang, t, toggleLang } from '../i18n';
 import { NAV_LABELS, ROLE_LABELS } from '../shared';
 import { isMobile } from '../composables/viewport';
 import { useAuth } from '../stores/auth';
-import { pageHeader, passwordDialogOpen } from '../stores/ui';
+import { deliverScan, pageHeader, passwordDialogOpen, showCustomLabel, toast } from '../stores/ui';
 import { useWarehouse } from '../stores/warehouse';
+import ScanButton from '../components/ScanButton.vue';
 import ChangePasswordModal from './ChangePasswordModal.vue';
 import ErrorBoundary from './ErrorBoundary.vue';
 import GlobalSearch from './GlobalSearch.vue';
@@ -48,6 +49,13 @@ const allowed = computed(() => !route.meta.permission || auth.can(route.meta.per
 /** The + button belongs to the working screens; it would only cover content on the menu and on document pages. */
 const showFab = computed(() => isMobile.value && route.name !== 'more' && !route.meta.param);
 
+/** Topbar scan of the task-focused roles: a QR printed by this system opens its document; any other code goes to the
+ *  scan field of the page on screen. */
+function onTopbarScan(code) {
+  if (code.startsWith(`${window.location.origin}/`)) { router.push(code.slice(window.location.origin.length)); return; }
+  if (!deliverScan(code)) toast.say(t(`قُرئ ${code} — لا يوجد حقل مسح في هذه الصفحة`, `Read ${code} — this page has no scan field`), 4000);
+}
+
 async function signOut() {
   menuOpen.value = false;
   await auth.logout();
@@ -64,6 +72,7 @@ async function signOut() {
         </div>
         <div class="flex-1" />
         <MobileSearch v-if="!isLite" />
+        <span v-else class="tb-scan"><ScanButton dark @detected="onTopbarScan" /></span>
         <NotificationBell />
       </div>
     </div>
@@ -76,6 +85,7 @@ async function signOut() {
         </div>
         <div class="flex-1" />
         <GlobalSearch v-if="!isLite" />
+        <span v-else class="tb-scan"><ScanButton dark @detected="onTopbarScan" /></span>
         <NotificationBell />
         <button type="button" class="tb-btn pad" :title="t('English', 'عربي')" @click="toggleLang"><Icon name="globe" />{{ lang === 'ar' ? 'EN' : 'عربي' }}</button>
         <div class="relative flex-none">
@@ -93,6 +103,7 @@ async function signOut() {
                 <div class="text-[11px] font-extrabold">{{ userName }}</div>
                 <div class="mt-0.5 text-[9px] text-muted">{{ roleName }} · <span class="num">{{ user.username }}</span></div>
               </div>
+              <button type="button" class="menu-item" @click="menuOpen = false; showCustomLabel()"><Icon name="scan" color="#7d7990" />{{ t('طباعة ملصق باركود / QR', 'Print a barcode / QR label') }}</button>
               <button type="button" class="menu-item" @click="menuOpen = false; passwordOpen = true"><Icon name="lock" color="#7d7990" />{{ t('تغيير كلمة المرور', 'Change password') }}</button>
               <button type="button" class="menu-item" @click="setLang(lang === 'ar' ? 'en' : 'ar'); menuOpen = false"><Icon name="globe" color="#7d7990" />{{ t('اللغة: English', 'Language: عربي') }}</button>
               <button type="button" class="menu-item danger" @click="signOut"><Icon name="logout" />{{ t('تسجيل الخروج', 'Sign out') }}</button>

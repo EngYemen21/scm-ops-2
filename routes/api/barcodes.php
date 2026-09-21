@@ -7,4 +7,6 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('barcodes')->group(function () {
     Route::get('code128', [BarcodesController::class, 'code128']);
     Route::get('qr', [BarcodesController::class, 'qr']);
+    // a whole rack / zone in one request: { items: [{ type, text }] } -> { items: [svg, …] } in the same order
+    Route::post('batch', [BarcodesController::class, 'batch']);
 });

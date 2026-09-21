@@ -4,6 +4,7 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { t } from '../i18n';
+import ScanButton from '../components/ScanButton.vue';
 import Icon from './Icon.vue';
 import { useGlobalSearch } from './useGlobalSearch';
 
@@ -12,6 +13,12 @@ const { q, state, groups, flat } = useGlobalSearch(12);
 const open = ref(false);
 const hi = ref(0);
 watch(state, (s) => { if (s === 'loading') open.value = true; else if (s === 'idle') open.value = false; else hi.value = 0; });
+
+/** A QR printed by this system holds a link into it and opens directly; any other code is searched for. */
+function onScan(code) {
+  if (code.startsWith(`${window.location.origin}/`)) { open.value = false; q.value = ''; router.push(code.slice(window.location.origin.length)); return; }
+  q.value = code;
+}
 
 function go(h) { open.value = false; q.value = ''; if (h?.path) router.push(h.path); }
 function onKey(e) {
@@ -27,6 +34,7 @@ function onKey(e) {
     <div class="gs-box">
       <Icon name="search" />
       <input v-model="q" :placeholder="t('بحث شامل: SKU · باركود · طلب · مورد · عميل · رحلة…', 'Search: SKU · barcode · order · supplier · customer · trip…')" @focus="q.trim().length >= 2 && (open = true)" @keydown="onKey">
+      <ScanButton dark @detected="onScan" />
     </div>
     <template v-if="open">
       <div class="fixed inset-0 z-[80]" @click="open = false" />

@@ -10,7 +10,7 @@ import { api, useAction, useGet, useList } from '@/api/client';
 import { Btn, Chip, DataTable, DateInput, ErrorBanner, PageHead, ProgressBar, SectionCard, SelectInput, TextInput } from '@/components';
 import { fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
-import { confirm, showLabel } from '@/stores/ui';
+import { confirm, showCustomLabel, showLabel, showLabels } from '@/stores/ui';
 import { useWarehouse } from '@/stores/warehouse';
 import BinForm from './BinForm.vue';
 import BinStatusForm from './BinStatusForm.vue';
@@ -182,6 +182,16 @@ const binCols = [
   { key: 'bal', header: { ar: 'أرصدة', en: 'Rows' }, width: '56px', align: 'center' },
   { key: 'act', header: '', width: '170px', align: 'end', bare: true },
 ];
+/** Labels of EVERY bin matching the current filter (not only the visible page), up to the print limit. */
+const printingBins = ref(false);
+async function printBinLabels() {
+  printingBins.value = true;
+  try {
+    const r = await api.get('/bins', { warehouse: sel.value, zone: zone.value || undefined, status: status.value || undefined, q: q.value || undefined, page: 1, pageSize: 300 });
+    showLabels((r.items || []).map((b) => ({ type: 'code128', text: b.code, title: b.code, sub: `${b.zone?.code || ''} · ${lbl(BIN_TYPE_LABELS, b.type)}` })), sel.value);
+  } finally { printingBins.value = false; }
+}
+
 const capText = (x) => `${x.capacityUnits != null ? fmtNum(x.capacityUnits) : '—'} u · ${x.maxKg != null ? fmtNum(x.maxKg) : '—'} kg`;
 const tempText = (z) => (z.minTempC != null || z.maxTempC != null ? `${z.minTempC ?? '—'}° … ${z.maxTempC ?? '—'}°` : '—');
 const binZoneOpts = computed(() => zoneOpts(zones.value));
@@ -190,6 +200,7 @@ const binZoneOpts = computed(() => zoneOpts(zones.value));
 <template>
   <PageHead :sub="t('Warehouse ← Zone ← Aisle ← Rack ← Bin — لكل موقع باركود وسعة ونوع تخزين', 'Warehouse → zone → aisle → rack → bin — every bin has a barcode, capacity and storage type')">
     <Btn v-for="c in commands" :key="c.k" :tone="c.tone" size="sm" class="!h-[34px] !rounded-[10px]" :disabled="c.k !== 'wh' && !sel" :label="c.label" @click="openForm(c.k)" />
+    <Btn tone="soft" size="sm" class="!h-[34px] !rounded-[10px]" :label="{ ar: 'ملصق مخصص', en: 'Custom label' }" @click="showCustomLabel()" />
   </PageHead>
 
   <!-- ── warehouse cards ── -->
@@ -350,11 +361,12 @@ const binZoneOpts = computed(() => zoneOpts(zones.value));
     <SectionCard class="mt-3" :title="{ ar: 'المواقع Bins', en: 'Bins' }" :count="bins.data.value?.total" :padded="false">
       <template #actions>
         <div class="row wrap !gap-1.5">
-          <TextInput v-model="qLive" small class="w-[200px]" :placeholder="{ ar: 'بحث رمز الموقع / SKU…', en: 'Search bin / SKU…' }" @enter="submitSearch" />
+          <TextInput scan v-model="qLive" small class="w-[200px]" :placeholder="{ ar: 'بحث رمز الموقع / SKU…', en: 'Search bin / SKU…' }" @enter="submitSearch" />
           <Btn tone="soft" size="sm" :label="{ ar: 'بحث', en: 'Search' }" @click="submitSearch" />
           <SelectInput v-model="zone" small class="w-[150px]" :options="binZoneOpts" :placeholder="{ ar: 'كل المناطق', en: 'All zones' }" @update:model-value="page = 1" />
           <SelectInput v-model="status" small class="w-[120px]" :options="opts(BIN_STATUS_LABELS)" :placeholder="{ ar: 'كل الحالات', en: 'All statuses' }" @update:model-value="page = 1" />
           <Btn v-if="q || zone || status" tone="ghost" size="sm" :label="{ ar: 'إزالة الفلتر', en: 'Clear' }" @click="clearBinFilters" />
+          <Btn tone="softPurple" size="sm" class="!h-[30px]" :loading="printingBins" :disabled="!bins.data.value?.total" :label="{ ar: `طباعة ملصقات المواقع (${bins.data.value?.total ?? 0})`, en: `Print bin labels (${bins.data.value?.total ?? 0})` }" @click="printBinLabels" />
           <Btn v-if="canManage" tone="dark" size="sm" class="!h-[30px]" :label="{ ar: '+ موقع Bin', en: '+ Bin' }" @click="openBin(zone)" />
         </div>
       </template>

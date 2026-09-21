@@ -4,7 +4,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, useGet, useList } from '@/api/client';
-import { Chip, ErrorBanner, Icon, PageHead, ScanInput } from '@/components';
+import { Chip, ErrorBanner, Icon, PageHead, ScanButton, ScanInput } from '@/components';
 import { fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { useWarehouse } from '@/stores/warehouse';
@@ -154,6 +154,7 @@ const kpis = computed(() => [
           <WorkerQtyInput :model-value="draftOf(l).damagedQty" color="#b23b3b" border="#F3C4C4" :label="t('تالف', 'Damaged')" @update:model-value="set(l, { damagedQty: $event })" />
           <WorkerQtyInput :model-value="draftOf(l).rejectedQty" color="#b26a16" border="#F0DEB8" :label="t('مرفوض', 'Rejected')" @update:model-value="set(l, { rejectedQty: $event })" />
           <div v-if="l.product.tracksExpiry" class="row !gap-1.5">
+            <ScanButton :title="{ ar: 'امسح رقم الدفعة', en: 'Scan the batch number' }" @detected="(code) => set(l, { batchNo: code })" />
             <input :value="draftOf(l).batchNo" :placeholder="t('الدفعة *', 'Batch *')" dir="ltr" class="inp num !h-10 !w-[100px]" :class="{ '!border-[#F0DEB8]': !draftOf(l).batchNo }" @input="set(l, { batchNo: $event.target.value })">
             <input type="date" :value="draftOf(l).expiryDate" dir="ltr" class="inp num !h-10 !w-[130px] !text-[11px]" :class="{ '!border-[#F0DEB8]': !draftOf(l).expiryDate }" :title="t('تاريخ الانتهاء *', 'Expiry *')" @input="set(l, { expiryDate: $event.target.value })">
           </div>

@@ -5,7 +5,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, useAction, useGet, useList } from '@/api/client';
-import { Btn, Chip, DataTable, ErrorBanner, NumberInput, PageHead, ProgressBar, SectionCard, Tabs, TextInput } from '@/components';
+import { Btn, Chip, DataTable, ErrorBanner, NumberInput, PageHead, ProgressBar, ScanInput, SectionCard, Tabs, TextInput } from '@/components';
 import { fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { MOVEMENT_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
@@ -98,6 +98,14 @@ async function onCloseCount() {
 }
 
 // ---- presentation ----
+/** Count entry: a scanned (or typed) bin / SKU / batch narrows the sheet to its lines. */
+const lineScan = ref('');
+const shownLines = computed(() => {
+  const s = lineScan.value.trim().toLowerCase();
+  const all = c.value?.lines || [];
+  return s ? all.filter((l) => [l.bin?.code, l.product?.sku, l.batch?.batchNo, ...(l.product?.barcodes || []).map((b) => b.barcode)].some((x) => String(x || '').toLowerCase() === s)) : all;
+});
+
 const lineCols = [
   { key: 'product', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(180px,1.5fr)' },
   { key: 'bin', header: { ar: 'الموقع Bin', en: 'Bin' }, width: '110px' },
@@ -166,8 +174,13 @@ const defaultWh = computed(() => (wh.isAll ? wh.warehouses[0]?.code || '' : wh.w
           <div class="flex-1"><ProgressBar :pct="pct(c.progress)" :label="{ ar: `المعدود ${fmtNum(c.progress.counted)} / ${fmtNum(c.progress.total)}`, en: `Counted ${fmtNum(c.progress.counted)} / ${fmtNum(c.progress.total)}` }" show-pct /></div>
           <Chip v-if="c.progress.variances != null" :label="{ ar: `فروقات: ${fmtNum(c.progress.variances)}`, en: `Variances: ${fmtNum(c.progress.variances)}` }" :fg="c.progress.variances ? '#b23b3b' : '#1d7a3e'" :bg="c.progress.variances ? '#fdecec' : '#e6f9ec'" />
         </div>
+        <div v-if="canEnter" class="row mt-3.5 !items-end">
+          <ScanInput v-model="lineScan" small :clear-on-submit="false" field-class="min-w-[220px] flex-1" :placeholder="{ ar: 'امسح الموقع أو الصنف أو الدفعة لإظهار سطره فقط', en: 'Scan a bin, SKU or batch to show only its lines' }" />
+          <Btn v-if="lineScan" size="sm" tone="ghost" :label="{ ar: 'عرض كل الأسطر', en: 'Show all lines' }" @click="lineScan = ''" />
+          <span v-if="lineScan" class="text-[10.5px] font-extrabold text-muted"><span class="num">{{ shownLines.length }}</span> / <span class="num">{{ c.lines.length }}</span></span>
+        </div>
         <div class="mt-3.5">
-          <DataTable :columns="lineCols" :rows="c.lines" dense :min-width="640" :row-key="(l) => l.id" :page-size="50" :row-style="lineRowStyle">
+          <DataTable :columns="lineCols" :rows="shownLines" dense :min-width="640" :row-key="(l) => l.id" :page-size="50" :row-style="lineRowStyle">
             <template #cell-product="{ row }"><ProductCell :p="row.product">{{ row.product.sku }}{{ row.batch ? ` · ${row.batch.batchNo}` : '' }}</ProductCell></template>
             <template #cell-bin="{ row }"><span class="cell-id">{{ row.bin.code }}<span class="muted text-[8.5px]"> · {{ row.bin.zone.code }}</span></span></template>
             <template #cell-sys="{ row }">

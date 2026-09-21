@@ -26,7 +26,7 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
     <div class="field-l">{{ t('الأصناف', 'Lines') }} <span class="text-bad">*</span></div>
     <div :class="GRID" class="le-head px-0.5 pb-1 text-[9px] font-extrabold text-faint"><div>SKU</div><div>{{ t('الكمية', 'Qty') }}</div><div>{{ t('الدفعة', 'Batch') }}</div><div /></div>
     <div v-for="(r, i) in rows" :key="i" :class="GRID" class="le-row mb-1.5 items-center">
-      <TextInput :label="cap('الصنف SKU', 'SKU')" :model-value="r.sku" small dir="ltr" placeholder="SKU" mono @update:model-value="set(i, { sku: $event })" />
+      <TextInput scan :label="cap('الصنف SKU', 'SKU')" :model-value="r.sku" small dir="ltr" placeholder="SKU" mono @update:model-value="set(i, { sku: $event })" />
       <NumberInput :label="cap('الكمية', 'Qty')" :model-value="r.qty" small :min="1" @update:model-value="set(i, { qty: $event })" />
       <TextInput :label="cap('الدفعة', 'Batch')" :model-value="r.batchNo" small dir="ltr" :placeholder="{ ar: 'اختياري', en: 'optional' }" @update:model-value="set(i, { batchNo: $event })" />
       <button type="button" class="x-btn" aria-label="remove" @click="remove(i)">✕</button>

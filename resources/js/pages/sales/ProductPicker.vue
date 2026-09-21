@@ -24,13 +24,16 @@ const term = computed(() => q.value.trim());
 const list = useList('/products', () => ({ q: term.value, pageSize: 8, active: 'true' }), { enabled: () => open.value && term.value.length >= 2 });
 const hits = computed(() => list.data.value?.items || []);
 
-function onType(v) { q.value = v; open.value = true; emit('pick', null, v); }
+function onType(v) { q.value = v; open.value = true; scanned.value = false; emit('pick', null, v); }
+const scanned = ref(false);
+function onScanned() { scanned.value = true; open.value = true; }
+watch(hits, (h) => { if (scanned.value && !list.isFetching.value && h.length === 1) { scanned.value = false; choose(h[0]); } });
 function choose(p) { emit('pick', p, p.sku); q.value = p.sku; open.value = false; }
 </script>
 
 <template>
   <div class="relative">
-    <TextInput :model-value="q" :label="label" :small="small" :disabled="disabled" mono :placeholder="{ ar: 'SKU / اسم المنتج / باركود', en: 'SKU / name / barcode' }" @update:model-value="onType" />
+    <TextInput scan :model-value="q" :label="label" :small="small" :disabled="disabled" mono :placeholder="{ ar: 'SKU / اسم المنتج / باركود', en: 'SKU / name / barcode' }" @update:model-value="onType" @enter="onScanned" />
     <template v-if="open && term.length >= 2">
       <div class="fixed inset-0 z-[5]" @click="open = false" />
       <div class="popover !z-[6] start-0 top-full mt-1 max-h-60 w-[min(360px,90vw)] !overflow-y-auto !rounded-xl !shadow-[0_12px_30px_rgba(30,33,48,.15)]">

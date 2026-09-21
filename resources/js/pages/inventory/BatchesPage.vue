@@ -8,6 +8,7 @@ import { Btn, Chip, DataTable, ErrorBanner, KpiCard, KpiGrid, PageHead, SectionC
 import { fmtDateOnly, fmtNum, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { useWarehouse } from '@/stores/warehouse';
+import { showLabel } from '@/stores/ui';
 import DaysChip from './DaysChip.vue';
 import Hint from './Hint.vue';
 import ProductCell from './ProductCell.vue';
@@ -62,7 +63,7 @@ const cols = computed(() => [
   { key: 'expiry', header: { ar: 'الانتهاء', en: 'Expiry' }, width: '96px', sortable: true },
   { key: 'daysLeft', header: { ar: 'متبقٍ', en: 'Days left' }, width: '96px' },
   { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '150px' },
-  { key: 'act', header: '', width: '92px', hidden: !auth.can('inventory.adjust') },
+  { key: 'act', header: '', width: '150px', bare: true },
 ]);
 
 /** `[warehouseCode, { onHand, reserved, quarantine, bins }]` entries that hold stock. */
@@ -91,7 +92,7 @@ const rowStyle = (r) => (r.status === 'expired' || r.anyQuarantine ? { backgroun
   <div class="row wrap mt-3">
     <Tabs v-model="status" :tabs="PILLS" variant="pill" class="!mb-0" />
     <div class="flex-1" />
-    <TextInput v-model="q" small type="search" class="min-w-[240px]" :placeholder="{ ar: 'بحث: دفعة / SKU / اسم', en: 'Search: batch / SKU / name' }" />
+    <TextInput scan v-model="q" small type="search" class="min-w-[240px]" :placeholder="{ ar: 'بحث: دفعة / SKU / اسم', en: 'Search: batch / SKU / name' }" />
   </div>
 
   <SectionCard class="mt-3" :padded="false" :title="{ ar: 'الدفعات مرتبة FEFO — الأقرب انتهاءً أولًا', en: 'Batches in FEFO order — earliest expiry first' }" :count="list.data.value?.total">
@@ -111,7 +112,10 @@ const rowStyle = (r) => (r.status === 'expired' || r.anyQuarantine ? { backgroun
       <template #cell-daysLeft="{ row }"><DaysChip :days="row.daysLeft" /></template>
       <template #cell-status="{ row }"><Chip small :map="BATCH_STATUS" :k="batchStatusKey(row.daysLeft, row.anyQuarantine)" /></template>
       <template #cell-act="{ row }">
-        <Btn v-if="stocked(row).length" :tone="row.anyQuarantine ? 'softGreen' : 'softRed'" size="sm" :label="row.anyQuarantine ? { ar: 'رفع الحجر', en: 'Release' } : { ar: 'حجر', en: 'Quarantine' }" @click.stop="openQuarantine(row)" />
+        <span class="row justify-end !gap-1.5">
+        <Btn tone="soft" size="sm" :label="{ ar: 'ملصق', en: 'Label' }" @click.stop="showLabel({ type: 'code128', text: row.batchNo, title: row.batchNo, sub: `${row.product?.sku || ''}${row.expiryDate ? ' · EXP ' + String(row.expiryDate).slice(0, 10) : ''}` })" />
+        <Btn v-if="auth.can('inventory.adjust') && stocked(row).length" :tone="row.anyQuarantine ? 'softGreen' : 'softRed'" size="sm" :label="row.anyQuarantine ? { ar: 'رفع الحجر', en: 'Release' } : { ar: 'حجر', en: 'Quarantine' }" @click.stop="openQuarantine(row)" />
+        </span>
       </template>
     </DataTable>
   </SectionCard>
