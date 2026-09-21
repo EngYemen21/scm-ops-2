@@ -72,19 +72,19 @@ const tabs = computed(() => [
 ]);
 
 const cols = [
-  { key: 'sku', header: 'SKU', width: '105px', kind: 'id' },
-  { key: 'name', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(150px,1.4fr)' },
+  { key: 'sku', header: 'SKU', width: '92px', kind: 'id' },
+  { key: 'name', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(168px,2fr)' },
   { key: 'warehouse', header: { ar: 'المستودع', en: 'WH' }, width: '64px' },
   { key: 'zone', header: { ar: 'المنطقة', en: 'Zone' }, width: '64px' },
   { key: 'rack', header: { ar: 'الرف', en: 'Rack' }, width: '60px', kind: 'muted' },
-  { key: 'bin', header: { ar: 'الموقع Bin', en: 'Bin' }, width: '92px', kind: 'id', sortable: true },
-  { key: 'batch', header: { ar: 'الدفعة', en: 'Batch' }, width: '95px' },
-  { key: 'expiry', header: { ar: 'الانتهاء / متبقٍ', en: 'Expiry / days' }, width: '128px', sortable: true },
+  { key: 'bin', header: { ar: 'الموقع Bin', en: 'Bin' }, width: '90px', kind: 'id', sortable: true },
+  { key: 'batch', header: { ar: 'الدفعة', en: 'Batch' }, width: '88px' },
+  { key: 'expiry', header: { ar: 'الانتهاء / متبقٍ', en: 'Expiry / days' }, width: '124px', sortable: true },
   { key: 'onHand', header: { ar: 'فعلي', en: 'On hand' }, width: '68px', kind: 'num', sortable: true },
   { key: 'reserved', header: { ar: 'محجوز', en: 'Reserved' }, width: '68px', kind: 'num' },
   { key: 'allocated', header: { ar: 'مخصص', en: 'Allocated' }, width: '68px', kind: 'num' },
   { key: 'available', header: { ar: 'متاح', en: 'Available' }, width: '68px', kind: 'num' },
-  { key: 'flags', header: { ar: 'الحالة', en: 'Status' }, width: 'minmax(130px,1fr)' },
+  { key: 'flags', header: { ar: 'الحالة', en: 'Status' }, width: '124px' },
 ];
 const whCols = computed(() => [
   { key: 'code', header: { ar: 'المستودع', en: 'Warehouse' }, width: 'minmax(140px,1.2fr)' },

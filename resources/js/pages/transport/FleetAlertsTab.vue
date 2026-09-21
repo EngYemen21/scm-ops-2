@@ -48,16 +48,16 @@ const generate = () => act.run(() => api.postIdempotent('/transport/alerts/gener
 
 const categoryOpts = optsOf(ALERT_CATEGORY_LABELS);
 const columns = [
-  { key: 'severity', header: { ar: 'الخطورة', en: 'Severity' }, width: '80px' },
-  { key: 'category', header: { ar: 'الفئة', en: 'Category' }, width: '100px' },
-  { key: 'entity', header: { ar: 'الكيان', en: 'Entity' }, width: '110px' },
-  { key: 'text', header: { ar: 'الوصف', en: 'Description' }, width: 'minmax(220px,1.6fr)' },
-  { key: 'due', header: { ar: 'الاستحقاق', en: 'Due' }, width: '95px', kind: 'date', value: (a) => (a.dueDate ? fmtDateOnly(a.dueDate) : '—') },
-  { key: 'days', header: { ar: 'متبقٍ', en: 'Days' }, width: '70px', kind: 'num' },
-  { key: 'owner', header: { ar: 'المسؤول', en: 'Owner' }, width: '100px', kind: 'muted', value: (a) => a.owner || '—' },
-  { key: 'rec', header: { ar: 'الإجراء الموصى', en: 'Recommended' }, width: 'minmax(160px,1.2fr)' },
-  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '95px' },
-  { key: 'act', header: '', width: '230px' },
+  { key: 'severity', header: { ar: 'الخطورة', en: 'Severity' }, width: '72px' },
+  { key: 'category', header: { ar: 'الفئة', en: 'Category' }, width: '92px' },
+  { key: 'entity', header: { ar: 'الكيان', en: 'Entity' }, width: '84px' },
+  { key: 'text', header: { ar: 'الوصف', en: 'Description' }, width: 'minmax(200px,1.6fr)' },
+  { key: 'due', header: { ar: 'الاستحقاق', en: 'Due' }, width: '88px', kind: 'date', value: (a) => (a.dueDate ? fmtDateOnly(a.dueDate) : '—') },
+  { key: 'days', header: { ar: 'متبقٍ', en: 'Days' }, width: '60px', kind: 'num' },
+  { key: 'owner', header: { ar: 'المسؤول', en: 'Owner' }, width: '96px', kind: 'muted', value: (a) => a.owner || '—' },
+  { key: 'rec', header: { ar: 'الإجراء الموصى', en: 'Recommended' }, width: 'minmax(150px,1.2fr)' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '84px' },
+  { key: 'act', header: '', width: '200px' },
 ];
 const viewRows = computed(() => {
   const a = view.value;

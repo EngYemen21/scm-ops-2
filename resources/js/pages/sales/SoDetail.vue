@@ -52,7 +52,7 @@ function lineStock(l) {
   if (rsv > 0) return { l: t(`محجوز ${rsv} / ${l.qty}`, `Reserved ${rsv} / ${l.qty}`), c: '#b26a16' };
   return { l: t('بانتظار التخصيص', 'Awaiting allocation'), c: '#b23b3b' };
 }
-const LINE_GRID = 'grid grid-cols-[minmax(180px,1.5fr)_90px_100px_110px_120px] gap-2';
+const LINE_GRID = 'bgrid grid grid-cols-[minmax(180px,1.5fr)_90px_100px_110px_120px] gap-2';
 const TRACE_ROW = 'row wrap !gap-2.5 rounded-[11px] border border-line-2 px-[13px] py-2';
 </script>
 

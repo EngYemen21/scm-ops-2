@@ -11,6 +11,8 @@
 // Cell content, in order of precedence: slot `#cell-<key>="{ row, index }"` → `column.value(row, index)` → formatted `row[key]`.
 // Data: `paged` = server page { items, total, page, pageSize, pages } (emits `page`), or plain `rows` (+ optional `pageSize`).
 // Sorting: pass `sort` + listen to `sort` for server-side sorting; otherwise the visible rows are sorted client-side.
+// Look: the "balanced grid" of the products master table — column dividers, fixed-width columns centred under a centred
+// header, flexible (`fr`) text columns starting at the column edge, plain values on one line with an ellipsis (full text in the tooltip). `align` overrides the default per column.
 // Phone: app.css turns every row into a card — the first column is the card title, each other cell shows its
 // header as a caption (`data-label`). A column can opt out of the caption with `bare: true` (chips, action buttons).
 import { computed, ref } from 'vue';
@@ -31,9 +33,12 @@ const props = defineProps({
   serverSort: { type: Boolean, default: false },
   pageSize: { type: Number, default: null },
   emptyText: { type: [String, Object], default: null },
+  /** @deprecated ignored — the minimum width is derived from the column tracks, so a table never scrolls while its columns still fit. */
   minWidth: { type: Number, default: null },
   zebra: { type: Boolean, default: true },
   dense: { type: Boolean, default: false },
+  /** Narrower cell padding for very wide tables (14+ columns) so they still fit a laptop screen. */
+  compact: { type: Boolean, default: false },
   stickyHead: { type: Boolean, default: false },
   maxHeight: { type: [Number, String], default: null },
   rowStyle: { type: Function, default: null },
@@ -83,8 +88,25 @@ function clickSort(c) {
 }
 
 const template = computed(() => cols.value.map((c) => c.width || '1fr').join(' '));
+/**
+ * The narrowest the grid can be without a column spilling out of the card: the sum of the fixed tracks and of the
+ * minimum of every flexible one (+ the row's side padding). Below that width the table scrolls instead of breaking.
+ */
+const FLEX_MIN = 110;
+const ROW_PADDING = 28;
+const trackMin = (w) => {
+  const s = String(w || '1fr').trim();
+  const mm = s.match(/^minmax\(\s*([\d.]+)px/);
+  if (mm) return Number(mm[1]);
+  const px = s.match(/^([\d.]+)px$/);
+  return px ? Number(px[1]) : FLEX_MIN;
+};
+const minWidthPx = computed(() => cols.value.reduce((sum, c) => sum + trackMin(c.width), ROW_PADDING));
 const kindClass = (c) => ({ id: 'cell-id', name: 'cell-name', num: 'cell-num', date: 'cell-date', muted: 'muted' }[c.kind] || '');
-const cellClass = (c) => ['gt-cell', { ltr: c.ltr || ['num', 'date', 'id'].includes(c.kind), c: c.align === 'center', e: c.align === 'end' }, kindClass(c), c.class];
+/** Fixed-width columns (codes, numbers, dates, chips, actions) sit centred under a centred header; flexible text columns (`fr`) and names start at the column edge. */
+const alignOf = (c) => c.align || (c.kind === 'name' || String(c.width || '1fr').includes('fr') ? 'start' : 'center');
+const alignClass = (c) => ({ c: alignOf(c) === 'center', e: alignOf(c) === 'end' });
+const cellClass = (c) => ['gt-cell', { ltr: c.ltr || ['num', 'date', 'id'].includes(c.kind) }, alignClass(c), kindClass(c), c.class];
 function cellValue(c, r, i) {
   if (c.value) return c.value(r, i);
   const v = r[c.key];
@@ -109,24 +131,24 @@ const pageWindow = computed(() => {
 
 <template>
   <div class="gt-wrap" :style="{ maxHeight: typeof maxHeight === 'number' ? maxHeight + 'px' : maxHeight, overflowY: maxHeight ? 'auto' : null }">
-    <div class="gt" :style="{ '--gt-cols': template, '--gt-min': minWidth ? minWidth + 'px' : null }">
-      <div class="gt-head" :style="{ position: stickyHead ? 'sticky' : 'static', padding: dense ? '7px 14px' : null }">
-        <div v-for="c in cols" :key="c.key" class="gt-cell" :class="{ c: c.align === 'center', e: c.align === 'end' }">
+    <div class="gt" :class="{ dense, compact }" :style="{ '--gt-cols': template, '--gt-min': minWidthPx + 'px' }">
+      <div class="gt-head" :style="{ position: stickyHead ? 'sticky' : 'static' }">
+        <div v-for="c in cols" :key="c.key" class="gt-cell" :class="alignClass(c)">
           <span v-if="c.sortable" class="sortable" @click="clickSort(c)"><slot :name="`head-${c.key}`">{{ isBi(c.header) ? bi(c.header) : c.header }}</slot><Icon name="sort" :dir="effSort?.key === c.key ? effSort.order : null" /></span>
           <slot v-else :name="`head-${c.key}`">{{ isBi(c.header) ? bi(c.header) : c.header }}</slot>
         </div>
       </div>
 
       <template v-if="loading && source.length === 0">
-        <div v-for="i in 6" :key="i" class="gt-row" :style="{ padding: dense ? '8px 14px' : null }">
+        <div v-for="i in 6" :key="i" class="gt-row">
           <div v-for="c in cols" :key="c.key" class="gt-cell"><div class="skel h-3" :style="{ width: `${55 + ((i * 17 + c.key.length * 7) % 40)}%` }" /></div>
         </div>
       </template>
       <slot v-else-if="visible.length === 0" name="empty"><div class="gt-empty"><EmptyState :text="emptyText" class="!p-0" /></div></slot>
       <template v-else>
         <div v-for="(r, i) in visible" :key="keyOf(r, i)" class="gt-row" :class="{ zebra, click: isClickable, sel: selectedKey != null && keyOf(r, i) === selectedKey }"
-             :style="[{ padding: dense ? '8px 14px' : null, opacity: loading ? 0.6 : 1 }, rowStyle ? rowStyle(r, i) : null]" @click="onRowClick && onRowClick(r, i)">
-          <div v-for="(c, ci) in cols" :key="c.key" :class="[cellClass(c), { 'gt-title': ci === 0 }]" :data-label="captionOf(c, ci)"><slot :name="`cell-${c.key}`" :row="r" :index="i">{{ cellValue(c, r, i) }}</slot></div>
+             :style="[{ opacity: loading ? 0.6 : 1 }, rowStyle ? rowStyle(r, i) : null]" @click="onRowClick && onRowClick(r, i)">
+          <div v-for="(c, ci) in cols" :key="c.key" :class="[cellClass(c), { 'gt-title': ci === 0, plain: !$slots[`cell-${c.key}`] }]" :data-label="captionOf(c, ci)" :title="$slots[`cell-${c.key}`] ? null : cellValue(c, r, i)"><slot :name="`cell-${c.key}`" :row="r" :index="i">{{ cellValue(c, r, i) }}</slot></div>
         </div>
       </template>
     </div>

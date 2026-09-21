@@ -204,6 +204,29 @@
   .gt-cell { min-width: 0; }
   .gt-cell.ltr { direction: ltr; text-align: start; }
   .gt-cell.c { text-align: center; } .gt-cell.e { text-align: end; }
+  /* Desktop look = the products master table: column dividers, cells centred vertically, header band. (Phones turn rows into cards below.) */
+  @media (min-width: 768px) {
+    .gt-head, .gt-row { gap: 0; align-items: stretch; padding: 0 14px; }
+    .gt-head { background: #F7F6FA; border-top: none; border-bottom: 1.5px solid #E9E6F0; font-size: 9px; }
+    .gt-head + .gt-row { border-top: none; }
+    .gt-head > .gt-cell { padding: 11px 8px; border-inline-start: 1px solid #EFEDF4; align-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gt-row > .gt-cell { padding: 9px 8px; border-inline-start: 1px solid #F4F2F8; align-content: center; overflow-x: clip; }
+    .gt-head > .gt-cell:first-child, .gt-row > .gt-cell:first-child { border-inline-start: none; }
+    .gt.dense .gt-head > .gt-cell { padding: 8px; } .gt.dense .gt-row > .gt-cell { padding: 7px 8px; }
+    .gt.compact .gt-head > .gt-cell, .gt.compact .gt-row > .gt-cell { padding-inline: 5px; }
+    .gt-row > .gt-cell.plain { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gt-row.click:hover { background: #F3F0FA; }
+    .gt-cell.c > .row, .gt-cell.c > .flex { justify-content: center; }
+    /* The same balanced look for hand-written header / row grids: add `bgrid` to both (text column = 1st; `s2` / `s3` when it is the 2nd / 3rd). */
+    .bgrid { gap: 0 !important; align-items: stretch !important; padding-block: 0 !important; }
+    .bgrid > * { min-width: 0; padding: 8px; border-inline-start: 1px solid #F4F2F8; align-content: center; text-align: center; }
+    .bgrid > :first-child { border-inline-start: none; }
+    .bgrid:not(.s2):not(.s3) > :first-child, .bgrid.s2 > :nth-child(2), .bgrid.s3 > :nth-child(3) { text-align: start; }
+    .bgrid > * > .row, .bgrid > * > .flex { justify-content: center; }
+    html[dir="rtl"] .bgrid:not(.s2):not(.s3) > :first-child .cell-sub { text-align: right; }
+    html[dir="rtl"] .gt-row > .gt-cell.ltr:not(.c):not(.e), html[dir="rtl"] .gt-row > .gt-cell:not(.c):not(.e) .cell-sub { text-align: right; } /* an LTR value still starts where its RTL header starts */
+    .gt-head .gt-cell.c .sortable { justify-content: center; }
+  }
   .gt-foot { display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-top: 1px solid #F1EFF6; font-size: 9.5px; color: #7d7990; }
   .gt-empty { padding: 24px; text-align: center; font-size: 11px; color: #a8a4b8; border-top: 1px solid #F1EFF6; }
   .pg-btn { height: 26px; min-width: 26px; padding: 0 8px; border-radius: 8px; background: #fff; border: 1px solid #E9E6F0; color: #55506a; font-size: 10px; font-weight: 800; font-family: 'Quicksand', sans-serif; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

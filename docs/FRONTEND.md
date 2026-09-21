@@ -175,3 +175,21 @@ Rules:
   gestures (two fingers to pan) so it never hijacks the page scroll; the picker, being a dialog, pans with one finger.
 - Demo coordinates: `DemoCoordinatesSeeder` (runs with the demo seed; on an existing database:
   `php artisan db:seed --class='Database\Seeders\DemoCoordinatesSeeder' --force` — it never overwrites a set value).
+
+## Tables — the balanced grid
+
+Every table follows the products master table: a header band, column dividers, cells centred vertically, fixed-width
+columns (codes, numbers, dates, chips, actions) centred under a centred header, flexible text columns starting at the
+column edge, plain values on one line with an ellipsis and the full text in the tooltip.
+
+- `DataTable` does it for you. Alignment comes from the column: `align` if set, otherwise `start` for `kind: 'name'` and
+  any `fr` width, `center` for everything else. The header always uses the same alignment as its cells.
+- **The minimum width is derived from the tracks** (fixed px + the `minmax()` minimum of each flexible column + row
+  padding). `:min-width` is ignored — it used to force a scrollbar on tables that still fitted. A table scrolls only
+  when its columns really do not fit; budget: **1150 px of tracks** fits a 1440 screen beside the sidebar.
+- Very wide tables (14+ columns, e.g. trips) take `compact`: narrower cell padding so they still fit.
+- Widths: give codes 90–110 px, numbers 56–72, dates 82–96, chips 84–140, two buttons 120–150; keep ONE or two flexible
+  columns (`minmax(…px, …fr)`) for names / descriptions so the slack lands where text needs it.
+- Hand-written header / row grids opt into the same look with the `bgrid` class on both (text column = first child;
+  `s2` / `s3` when it is the second / third).
+- Phones are untouched: below 768 px rows become cards (see Phone layout).

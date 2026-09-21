@@ -16,8 +16,8 @@ const emit = defineEmits(['move']);
 
 const columns = computed(() => [
   { key: 'warehouse', header: { ar: 'المستودع', en: 'WH' }, width: '60px', kind: 'id' },
-  { key: 'bin', header: { ar: 'الموقع Bin', en: 'Bin' }, width: '110px' },
-  { key: 'batch', header: { ar: 'الدفعة', en: 'Batch' }, width: '110px' },
+  { key: 'bin', header: { ar: 'الموقع Bin', en: 'Bin' }, width: 'minmax(90px,1fr)', align: 'center' },
+  { key: 'batch', header: { ar: 'الدفعة', en: 'Batch' }, width: 'minmax(90px,1fr)', align: 'center' },
   { key: 'onHand', header: { ar: 'فعلي', en: 'On hand' }, width: '64px', kind: 'num', align: 'center' },
   { key: 'reserved', header: { ar: 'محجوز', en: 'Reserved' }, width: '64px', kind: 'num', align: 'center' },
   { key: 'available', header: { ar: 'متاح', en: 'Avail.' }, width: '64px', kind: 'num', align: 'center' },

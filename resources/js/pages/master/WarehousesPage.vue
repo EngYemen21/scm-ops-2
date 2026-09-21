@@ -28,9 +28,9 @@ import { BIN_STATUS_LABELS, BIN_TYPE_LABELS, DOCK_TYPE_LABELS, SHIFT_LABELS, STA
 
 const LINK = 'cursor-pointer whitespace-nowrap text-[9px] font-extrabold';
 const STAFF_COLS = 'grid-cols-[minmax(120px,1.3fr)_110px_100px_80px_60px]';
-const DOCK_COLS = 'grid-cols-[60px_80px_minmax(130px,1.3fr)_100px_110px_50px]';
-const SUB_HEAD = 'grid gap-2 border-t border-line-2 bg-soft px-4 py-[7px] text-[9px] font-extrabold text-faint';
-const SUB_ROW = 'grid items-center gap-2 border-t border-line-2 px-4 py-2';
+const DOCK_COLS = 's3 grid-cols-[64px_84px_minmax(130px,1.3fr)_120px_120px_64px]';
+const SUB_HEAD = 'bgrid grid gap-2 border-t border-line-2 bg-soft px-4 py-[7px] text-[9px] font-extrabold text-faint';
+const SUB_ROW = 'bgrid grid items-center gap-2 border-t border-line-2 px-4 py-2';
 
 const auth = useAuth();
 const whStore = useWarehouse();
@@ -181,14 +181,14 @@ const aggCols = [
   { key: 'quarantine', header: { ar: 'محجور', en: 'Quarantine' }, width: '70px', kind: 'num', align: 'center' },
 ];
 const binCols = [
-  { key: 'zone', header: { ar: 'المنطقة', en: 'Zone' }, width: '110px' },
-  { key: 'rack', header: { ar: 'الرف', en: 'Rack' }, width: '80px', kind: 'muted', ltr: true, value: (b) => b.rack?.code || '—' },
-  { key: 'code', header: { ar: 'الموقع Bin', en: 'Bin' }, width: '120px', kind: 'id' },
+  { key: 'zone', header: { ar: 'المنطقة', en: 'Zone' }, width: '90px' },
+  { key: 'rack', header: { ar: 'الرف', en: 'Rack' }, width: 'minmax(80px,.8fr)', align: 'center', kind: 'muted', ltr: true, value: (b) => b.rack?.code || '—' },
+  { key: 'code', header: { ar: 'الموقع Bin', en: 'Bin' }, width: 'minmax(120px,1fr)', align: 'center', kind: 'id' },
   { key: 'type', header: { ar: 'النوع', en: 'Type' }, width: '84px' },
   { key: 'cap', header: { ar: 'السعة', en: 'Capacity' }, width: '104px', ltr: true },
   { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '84px' },
-  { key: 'fixed', header: { ar: 'تخصيص ثابت', en: 'Fixed product' }, width: 'minmax(150px,1.2fr)' },
-  { key: 'bal', header: { ar: 'أرصدة', en: 'Rows' }, width: '56px', align: 'center' },
+  { key: 'fixed', header: { ar: 'تخصيص ثابت', en: 'Fixed product' }, width: 'minmax(140px,1.2fr)' },
+  { key: 'bal', header: { ar: 'أرصدة', en: 'Rows' }, width: '64px', align: 'center' },
   { key: 'act', header: '', width: '170px', align: 'end', bare: true },
 ];
 /** Labels of EVERY bin matching the current filter (not only the visible page), up to the print limit. */

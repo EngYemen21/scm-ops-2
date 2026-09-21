@@ -25,7 +25,7 @@ import VehicleDrawer from './VehicleDrawer.vue';
 import VehicleForm from './VehicleForm.vue';
 
 const sum = (m, keys) => keys.reduce((a, k) => a + (m?.[k] || 0), 0);
-const RANK_GRID = 'grid grid-cols-[30px_minmax(120px,1.4fr)_80px_70px_70px_70px_70px_90px] gap-1.5 px-3.5 py-2';
+const RANK_GRID = 'bgrid s2 grid grid-cols-[30px_minmax(110px,1.4fr)_68px_60px_60px_60px_56px_88px] px-3';
 const SEV_GROUPS = [['c', 'high'], ['w', 'med'], ['i', 'low']];
 const DRIVER_STATES = ['available', 'onroute', 'off', 'blocked'];
 
@@ -133,7 +133,7 @@ const sevChipLabel = (ks) => `${bi(ALERT_SEV_LABELS[ks[0]])} ${sum(tw.value?.ope
       </SectionCard>
 
       <SectionCard small :padded="false" :title="{ ar: 'ترتيب السائقين', en: 'Driver ranking' }">
-        <div class="overflow-x-auto"><div class="min-w-[520px]">
+        <div class="overflow-x-auto"><div class="min-w-[556px]">
           <div :class="RANK_GRID" class="bg-soft text-[9px] font-extrabold text-faint">
             <div>#</div><div>{{ t('الاسم', 'Name') }}</div><div>{{ t('في الموعد', 'On-time') }}</div><div>{{ t('نجاح', 'Success') }}</div><div>{{ t('السلامة', 'Safety') }}</div><div>{{ t('التقييم', 'Rating') }}</div><div>{{ t('وقود', 'Fuel') }}</div><div>{{ t('الحالة', 'State') }}</div>
           </div>

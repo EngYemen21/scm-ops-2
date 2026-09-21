@@ -42,7 +42,7 @@ async function duplicate() {
 const print = () => window.print();
 function onConverted(so) { det.refetch(); emit('open-so', so.number); }
 
-const LINE_GRID = 'grid grid-cols-[minmax(180px,1.5fr)_90px_100px_80px_110px] gap-2';
+const LINE_GRID = 'bgrid grid grid-cols-[minmax(180px,1.5fr)_90px_100px_80px_110px] gap-2';
 </script>
 
 <template>

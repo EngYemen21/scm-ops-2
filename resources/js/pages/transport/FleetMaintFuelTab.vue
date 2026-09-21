@@ -28,19 +28,19 @@ const M_STATUS = [['open', { ar: 'مفتوحة', en: 'Open' }], ['closed', { ar:
 const openVehicle = (code) => { if (code) emit('open-vehicle', code); };
 
 const mCols = [
-  { key: 'number', header: { ar: 'أمر الصيانة', en: 'Order' }, width: '120px', kind: 'id' },
-  { key: 'vehicle', header: { ar: 'المركبة', en: 'Vehicle' }, width: '110px' },
-  { key: 'kind', header: { ar: 'النوع', en: 'Kind' }, width: '110px' },
-  { key: 'desc', header: { ar: 'الوصف', en: 'Description' }, width: 'minmax(200px,1.5fr)' },
-  { key: 'shop', header: { ar: 'الورشة', en: 'Workshop' }, width: '130px', kind: 'muted', value: (m) => m.shop || '—' },
-  { key: 'dates', header: { ar: 'البدء ← الإنهاء', en: 'Start → end' }, width: '160px', kind: 'date', value: (m) => `${fmtDateOnly(m.startDate)}${m.endDate ? ` ← ${fmtDateOnly(m.endDate)}` : ''}` },
-  { key: 'odometer', header: { ar: 'العداد', en: 'Odo' }, width: '80px', kind: 'num', value: (m) => fmtNum(m.odometer) },
-  { key: 'cost', header: { ar: 'التكلفة ر.س', en: 'Cost SAR' }, width: '85px', kind: 'num', value: (m) => fmtNum(m.cost) },
-  { key: 'parts', header: { ar: 'قطع', en: 'Parts' }, width: '70px', kind: 'num', value: (m) => fmtNum(m.parts) },
-  { key: 'labor', header: { ar: 'عمالة', en: 'Labor' }, width: '70px', kind: 'num', value: (m) => fmtNum(m.labor) },
-  { key: 'down', header: { ar: 'التوقف', en: 'Downtime' }, width: '80px' },
-  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '90px' },
-  { key: 'act', header: '', width: '90px' },
+  { key: 'number', header: { ar: 'أمر الصيانة', en: 'Order' }, width: '100px', kind: 'id' },
+  { key: 'vehicle', header: { ar: 'المركبة', en: 'Vehicle' }, width: '70px' },
+  { key: 'kind', header: { ar: 'النوع', en: 'Kind' }, width: '88px' },
+  { key: 'desc', header: { ar: 'الوصف', en: 'Description' }, width: 'minmax(160px,1.5fr)' },
+  { key: 'shop', header: { ar: 'الورشة', en: 'Workshop' }, width: 'minmax(100px,1fr)', kind: 'muted', value: (m) => m.shop || '—' },
+  { key: 'dates', header: { ar: 'البدء ← الإنهاء', en: 'Start → end' }, width: '126px', kind: 'date', value: (m) => `${fmtDateOnly(m.startDate)}${m.endDate ? ` ← ${fmtDateOnly(m.endDate)}` : ''}` },
+  { key: 'odometer', header: { ar: 'العداد', en: 'Odo' }, width: '72px', kind: 'num', value: (m) => fmtNum(m.odometer) },
+  { key: 'cost', header: { ar: 'التكلفة ر.س', en: 'Cost SAR' }, width: '78px', kind: 'num', value: (m) => fmtNum(m.cost) },
+  { key: 'parts', header: { ar: 'قطع', en: 'Parts' }, width: '62px', kind: 'num', value: (m) => fmtNum(m.parts) },
+  { key: 'labor', header: { ar: 'عمالة', en: 'Labor' }, width: '62px', kind: 'num', value: (m) => fmtNum(m.labor) },
+  { key: 'down', header: { ar: 'التوقف', en: 'Downtime' }, width: '70px' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '84px' },
+  { key: 'act', header: '', width: '76px' },
 ];
 const fCols = [
   { key: 'vehicle', header: { ar: 'المركبة', en: 'Vehicle' }, width: '80px' },

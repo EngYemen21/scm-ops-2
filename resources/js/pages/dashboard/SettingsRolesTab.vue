@@ -36,7 +36,7 @@ watch(() => props.roles, (roles, old) => {
 const filter = ref('');
 const editable = computed(() => props.roles.filter((r) => r.key !== 'super'));
 const groups = computed(() => groupPermissions(props.permissions, filter.value, lang.value));
-const gridCols = computed(() => `minmax(200px,1.4fr) repeat(${editable.value.length}, 96px)`);
+const gridCols = computed(() => `minmax(200px,1.4fr) repeat(${editable.value.length}, minmax(84px,1fr))`);
 
 const isOn = (r, p) => local.value[r.key]?.has(p) ?? false;
 const isChanged = (r, p) => isOn(r, p) !== r.permissions.includes(p);
@@ -70,8 +70,8 @@ async function save(r) {
     </CardTitle>
     <div v-if="act.error.value" class="mx-[18px]"><ErrorBanner :error="act.error.value" @close="act.clearError()" /></div>
     <div class="gt-wrap">
-      <div :style="{ minWidth: `${200 + editable.length * 96 + 36}px` }">
-        <div class="sticky top-0 z-[1] grid items-end gap-1.5 bg-soft px-[18px] py-2" :style="{ gridTemplateColumns: gridCols }">
+      <div :style="{ minWidth: `${200 + editable.length * 84 + 36}px` }">
+        <div class="bgrid sticky top-0 z-[1] grid items-end gap-1.5 bg-soft px-[18px] py-2" :style="{ gridTemplateColumns: gridCols }">
           <div class="text-[9.5px] font-extrabold text-muted">{{ t('الصلاحية', 'Permission') }}</div>
           <div v-for="r in editable" :key="r.key" class="text-center">
             <div class="text-[9.5px] font-extrabold leading-[1.4] text-violet">{{ roleName(r, lang) }}</div>
@@ -81,7 +81,7 @@ async function save(r) {
         </div>
         <template v-for="g in groups" :key="g.key">
           <div class="border-t border-line-2 bg-white px-[18px] pt-2 pb-1 text-[10px] font-extrabold text-brand-dark">{{ lang === 'ar' ? g.label.ar : g.label.en }}</div>
-          <div v-for="p in g.perms" :key="p" class="grid items-center gap-1.5 border-t border-[#F7F6FA] px-[18px] py-[5px]" :style="{ gridTemplateColumns: gridCols }">
+          <div v-for="p in g.perms" :key="p" class="bgrid grid items-center gap-1.5 border-t border-[#F7F6FA] px-[18px] py-[5px] *:!py-[5px]" :style="{ gridTemplateColumns: gridCols }">
             <div class="text-[10.5px] text-sec">{{ permLabel(p, lang) }} <span class="num text-[9px] text-faint" dir="ltr">{{ p }}</span></div>
             <div v-for="r in editable" :key="r.key" class="text-center">
               <input type="checkbox" class="h-[15px] w-[15px] cursor-pointer" :checked="isOn(r, p)" :style="{ accentColor: isChanged(r, p) ? '#b26a16' : '#654e92' }" :aria-label="`${roleName(r, lang)} · ${p}`" @change="toggle(r.key, p)">

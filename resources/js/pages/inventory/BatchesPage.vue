@@ -53,17 +53,17 @@ const kQtn = kpiCount('quarantine');
 const kAll = kpiCount(undefined);
 
 const cols = computed(() => [
-  { key: 'batchNo', header: { ar: 'الدفعة', en: 'Batch' }, width: '110px', kind: 'id', sortable: true },
-  { key: 'product', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(170px,1.5fr)' },
-  { key: 'perWarehouse', header: { ar: 'المستودع · الكمية', en: 'Warehouse · qty' }, width: 'minmax(150px,1fr)' },
-  { key: 'onHand', header: { ar: 'الكمية', en: 'Qty' }, width: '70px', kind: 'num' },
-  { key: 'reserved', header: { ar: 'محجوز', en: 'Reserved' }, width: '70px', kind: 'num' },
-  { key: 'quarantine', header: { ar: 'محجور', en: 'Quarantined' }, width: '70px', kind: 'num' },
-  { key: 'mfgDate', header: { ar: 'الإنتاج', en: 'Mfg' }, width: '92px', kind: 'date', value: (r) => fmtDateOnly(r.mfgDate) },
-  { key: 'expiry', header: { ar: 'الانتهاء', en: 'Expiry' }, width: '96px', sortable: true },
-  { key: 'daysLeft', header: { ar: 'متبقٍ', en: 'Days left' }, width: '96px' },
-  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '150px' },
-  { key: 'act', header: '', width: '150px', bare: true },
+  { key: 'batchNo', header: { ar: 'الدفعة', en: 'Batch' }, width: '96px', kind: 'id', sortable: true },
+  { key: 'product', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(180px,1.6fr)' },
+  { key: 'perWarehouse', header: { ar: 'المستودع · الكمية', en: 'Warehouse · qty' }, width: 'minmax(120px,1fr)' },
+  { key: 'onHand', header: { ar: 'الكمية', en: 'Qty' }, width: '62px', kind: 'num' },
+  { key: 'reserved', header: { ar: 'محجوز', en: 'Reserved' }, width: '62px', kind: 'num' },
+  { key: 'quarantine', header: { ar: 'محجور', en: 'Quarantined' }, width: '62px', kind: 'num' },
+  { key: 'mfgDate', header: { ar: 'الإنتاج', en: 'Mfg' }, width: '86px', kind: 'date', value: (r) => fmtDateOnly(r.mfgDate) },
+  { key: 'expiry', header: { ar: 'الانتهاء', en: 'Expiry' }, width: '90px', sortable: true },
+  { key: 'daysLeft', header: { ar: 'متبقٍ', en: 'Days left' }, width: '90px' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '140px' },
+  { key: 'act', header: '', width: '124px', bare: true },
 ]);
 
 /** `[warehouseCode, { onHand, reserved, quarantine, bins }]` entries that hold stock. */

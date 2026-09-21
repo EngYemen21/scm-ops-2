@@ -69,14 +69,14 @@ const statusTabs = computed(() => [
 const kindFilterOpts = computed(() => (tw.value?.exceptions.byKind || []).map((r) => ({ v: r.kind, l: { ar: `${KIND_LABELS[r.kind]?.ar || r.kind} (${r.count})`, en: `${KIND_LABELS[r.kind]?.en || r.kind} (${r.count})` } })));
 
 const excCols = computed(() => [
-  { key: 'severity', header: { ar: 'الخطورة', en: 'Sev.' }, width: '74px' },
+  { key: 'severity', header: { ar: 'الخطورة', en: 'Sev.' }, width: '66px' },
   { key: 'number', header: '#', width: '92px', kind: 'id' },
-  { key: 'text', header: { ar: 'الاستثناء', en: 'Exception' }, width: 'minmax(220px,2fr)' },
-  { key: 'ownerRole', header: { ar: 'المسؤول', en: 'Owner' }, width: '110px' },
-  { key: 'sla', header: 'SLA', width: '150px' },
-  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '96px' },
-  { key: 'createdAt', header: { ar: 'منذ', en: 'Age' }, width: '70px' },
-  { key: 'act', header: '', width: '150px', hidden: !exc.manage },
+  { key: 'text', header: { ar: 'الاستثناء', en: 'Exception' }, width: 'minmax(190px,2fr)' },
+  { key: 'ownerRole', header: { ar: 'المسؤول', en: 'Owner' }, width: '104px' },
+  { key: 'sla', header: 'SLA', width: '132px' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '78px' },
+  { key: 'createdAt', header: { ar: 'منذ', en: 'Age' }, width: '62px' },
+  { key: 'act', header: '', width: '138px', hidden: !exc.manage },
 ]);
 const throughputCols = [
   { key: 'code', header: { ar: 'المستودع', en: 'Warehouse' } },
