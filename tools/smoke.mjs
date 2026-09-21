@@ -31,8 +31,8 @@ const urls = [...new Set([...routes, ...reports, '/search?q=PO&limit=5'])].sort(
 
 const results = [];
 for (let i = 0; i < urls.length; i += 6) results.push(...await Promise.all(urls.slice(i, i + 6).map(get)));
-// Correct refusals, not failures: an administrator is not a driver; the attachment list needs entityType + entityId.
-const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400 };
+// Correct refusals, not failures: an administrator is not a driver; the attachment list needs entityType + entityId; a label needs its text.
+const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400, '/barcodes/code128': 400, '/barcodes/qr': 400 };
 const bad = results.filter((r) => r.status !== (EXPECTED[r.url] ?? 200));
 for (const r of bad) console.log(`✗ ${r.status} GET ${r.url}  ${r.body.slice(0, 220).replace(/\s+/g, ' ')}`);
 const ms = results.map((r) => r.ms).sort((a, b) => a - b);
