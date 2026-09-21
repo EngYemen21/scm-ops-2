@@ -6,7 +6,8 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, ErrorBanner, PageHead, SectionCard } from '@/components';
-import { fmtDate, t } from '@/i18n';
+import { fmtDate, lang, t } from '@/i18n';
+import { appLink, showLabel } from '@/stores/ui';
 import SoDetail from './SoDetail.vue';
 import { custName } from './shared';
 
@@ -25,6 +26,7 @@ const sub = computed(() => (so.value
   <PageHead :title="number" :sub="sub">
     <Btn tone="outline" :label="{ ar: '← أوامر البيع', en: '← Sales orders' }" @click="router.push({ path: '/sales', query: { tab: 'so' } })" />
     <Btn v-if="firstFo" tone="softBlue" :label="{ ar: `أمر التنفيذ ${firstFo.number}`, en: `Fulfillment ${firstFo.number}` }" @click="router.push(`/fo/${encodeURIComponent(firstFo.number)}`)" />
+    <Btn v-if="so" tone="soft" :label="{ ar: 'رمز QR', en: 'QR code' }" @click="showLabel({ type: 'qr', text: appLink(`/so/${encodeURIComponent(so.number)}`), title: so.number, sub: so.customer ? (lang === 'ar' ? so.customer.nameAr : so.customer.nameEn || so.customer.nameAr) : null })" />
   </PageHead>
   <ErrorBanner :error="det.error.value" :closable="false" />
   <div v-if="det.isLoading.value && !so" class="skel min-h-[240px]" />

@@ -1,1 +1,0 @@
-import{$t as e,Lt as t,Ot as n,zt as r}from"./app-DKmfz-P4.js";var i={__name:`KpiGrid`,props:{compact:{type:Boolean,default:!1}},setup(i){return(a,o)=>(t(),n(`div`,{class:e([`kpi-grid`,{compact:i.compact}])},[r(a.$slots,`default`)],2))}};export{i as t};

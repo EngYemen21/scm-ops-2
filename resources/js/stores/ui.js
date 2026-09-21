@@ -56,3 +56,11 @@ export const pageHeader = ref({});
 // ---------- change-password dialog ----------
 /** Opened from the desktop user menu and from the phone's More screen; rendered once by AppShell. */
 export const passwordDialogOpen = ref(false);
+
+// ---------- printable labels ----------
+/** Label shown by <LabelHost /> (null = closed). `{ type: 'code128' | 'qr', text, title?, sub?, caption? }` */
+export const labelState = ref(null);
+/** CODE128 for shipping / shelf labels, QR for runs and customers. `text` is exactly what a scanner will read. */
+export function showLabel(spec) { labelState.value = { type: 'code128', ...spec }; }
+/** Absolute link into this application — what a QR label carries, so the phone scanner opens the document directly. */
+export const appLink = (path) => `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;

@@ -40,7 +40,8 @@ class PlatformTest extends ApiTestCase
         $this->assertSame(4, $this->expectOk($this->getAs('sales', "/api/activity?q={$tag}&user=syst"))['total']);
         $this->assertSame(0, $this->expectOk($this->getAs('sales', "/api/activity?q={$tag}&user=nobody"))['total']);
 
-        $today = now()->toDateString();
+        // activity_logs.at is stamped by the DATABASE clock (column default), not by the anchored test clock
+        $today = gmdate('Y-m-d');
         $this->assertSame(4, $this->expectOk($this->getAs('sales', "/api/activity?q={$tag}&from={$today}&to={$today}"))['total']);
         $this->assertSame(0, $this->expectOk($this->getAs('sales', "/api/activity?q={$tag}&to=2020-01-01"))['total']);
         $this->expectRejected($this->getAs('sales', '/api/activity?from=not-a-date'), 'INVALID_DATE', [400]);

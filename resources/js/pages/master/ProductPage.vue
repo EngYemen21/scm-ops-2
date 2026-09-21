@@ -5,8 +5,9 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, useGet, useList } from '@/api/client';
 import { Btn, Chip, ErrorBanner, KV, KpiCard, KpiGrid, PageHead, SectionCard } from '@/components';
-import { fmtDate, fmtMoney, fmtNum, t } from '@/i18n';
+import { fmtDate, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
+import { showLabel } from '@/stores/ui';
 import BarcodesPanel from './BarcodesPanel.vue';
 import EditProductForm from './EditProductForm.vue';
 import MovementsTable from './MovementsTable.vue';
@@ -48,6 +49,7 @@ const submitReason = (reason) => api.postIdempotent(`/products/${p.value.id}/${r
 <template>
   <PageHead :title="p ? p.nameAr : sku" :sub="headSub">
     <Btn tone="outline" size="sm" :label="{ ar: '← المنتجات Master', en: '← Product Master' }" @click="router.push('/products')" />
+    <Btn v-if="p" tone="soft" size="sm" :label="{ ar: 'ملصق الصنف', en: 'Item label' }" @click="showLabel({ type: 'code128', text: p.primaryBarcode?.barcode || p.sku, title: p.sku, sub: lang === 'ar' ? p.nameAr : p.nameEn || p.nameAr })" />
     <Btn v-if="p && canManage" tone="dark" size="sm" :label="{ ar: 'تعديل', en: 'Edit' }" @click="edit = true" />
     <template v-if="p && canManage">
       <Btn v-if="p.active" tone="dangerOutline" size="sm" :label="{ ar: 'إيقاف الصنف', en: 'Deactivate' }" @click="reasonMode = 'deactivate'" />

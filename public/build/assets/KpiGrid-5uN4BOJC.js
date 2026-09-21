@@ -1,0 +1,1 @@
+import{D as e,ht as t,u as n,w as r}from"./runtime-core.esm-bundler-BMzhbq6t.js";var i={__name:`KpiGrid`,props:{compact:{type:Boolean,default:!1}},setup(i){return(a,o)=>(r(),n(`div`,{class:t([`kpi-grid`,{compact:i.compact}])},[e(a.$slots,`default`)],2))}};export{i as t};

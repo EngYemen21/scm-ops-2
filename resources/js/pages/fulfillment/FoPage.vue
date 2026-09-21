@@ -5,8 +5,9 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, KV, PageHead, ProgressBar, SectionCard, Stepper, Timeline } from '@/components';
-import { fmtDate, fmtDateOnly, fmtNum, t } from '@/i18n';
+import { fmtDate, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { FO_LABELS, MOVEMENT_LABELS, RETURN_LABELS, SO_LABELS, TRIP_LABELS } from '@/shared';
+import { showLabel } from '@/stores/ui';
 import PackRow from './PackRow.vue';
 import PickTaskCard from './PickTaskCard.vue';
 import { FO_STEPS, custName, foStepIndex, historyItems, pickProgress, prodName } from './shared';
@@ -70,6 +71,7 @@ const UNIT = 'font-sans text-[9px] text-faint';
     <Btn v-if="fo?.trip" tone="softBlue" :label="{ ar: `الرحلة ${fo.trip.number}`, en: `Trip ${fo.trip.number}` }" @click="router.push(`/trip/${enc(fo.trip.number)}`)" />
     <Btn v-if="fo && ['alloc', 'picking', 'picked'].includes(fo.status)" tone="primary" :label="{ ar: 'فتح في التجهيز', en: 'Open in picking' }" @click="router.push({ path: '/picking', query: { fo: fo.number } })" />
     <Btn v-if="fo && fo.status === 'packed' && fo.trip" tone="dark" :label="{ ar: 'فتح في التحميل', en: 'Open in loading' }" @click="router.push({ path: '/dispatch', query: { trip: fo.trip.number } })" />
+    <Btn v-if="fo" tone="soft" :label="{ ar: 'ملصق الشحن', en: 'Shipping label' }" @click="showLabel({ type: 'code128', text: fo.number, title: fo.number, sub: fo.customer ? (lang === 'ar' ? fo.customer.nameAr : fo.customer.nameEn || fo.customer.nameAr) : null })" />
   </PageHead>
   <ErrorBanner :error="det.error.value" :closable="false" />
   <div v-if="det.isLoading.value && !fo" class="skel min-h-[240px]" />

@@ -7,6 +7,7 @@ import { useGet } from '@/api/client';
 import { Btn, Chip, ErrorBanner, PageHead } from '@/components';
 import { fmtDateOnly, t } from '@/i18n';
 import { TRIP_LABELS } from '@/shared';
+import { appLink, showLabel } from '@/stores/ui';
 import { useTripActions } from './tmsComposables';
 import TripBody from './TripBody.vue';
 import TripHead from './TripHead.vue';
@@ -31,6 +32,7 @@ const sub = computed(() => (trip.value
     <Btn v-if="canClose" tone="success" :loading="act.pending.value" :label="{ ar: 'إقفال الرحلة', en: 'Close trip' }" @click="closeTrip" />
     <Btn v-if="canCancel" tone="dangerOutline" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="cancelTrip" />
     <Btn tone="outline" :label="{ ar: 'لوحة التحميل والإرسال', en: 'Load & dispatch' }" @click="router.push(`/dispatch?trip=${encodeURIComponent(number)}`)" />
+    <Btn v-if="trip" tone="soft" :label="{ ar: 'رمز QR', en: 'QR code' }" @click="showLabel({ type: 'qr', text: appLink(`/trip/${encodeURIComponent(trip.number)}`), title: trip.number, sub: { ar: 'رحلة توصيل', en: 'Delivery run' } })" />
     <Btn tone="ghost" :label="{ ar: 'كل الرحلات', en: 'All trips' }" @click="router.push('/trips')" />
   </PageHead>
 

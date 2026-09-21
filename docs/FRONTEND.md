@@ -112,3 +112,20 @@ Rules for pages, so they keep working on a phone without extra work:
   neutralised and wrapped rows stretch to the full width.
 - Inputs are 16px on phones on purpose (iOS zooms the page for anything smaller).
 - Check a page at 375px: no horizontal scroll, nothing under the tab bar (the shell pads `.main` for it).
+
+## Barcodes and QR codes
+
+Three libraries, chosen by the team: `picqer/php-barcode-generator` (CODE128), `endroid/qr-code` (QR) on the API,
+`html5-qrcode` (camera scanning) in the client.
+
+| Piece | Where |
+|---|---|
+| Label images | `GET /api/barcodes/code128?text=…` and `GET /api/barcodes/qr?text=…` → SVG (`app/Services/Barcodes/BarcodeService.php`). SVG on purpose: sharp at any label size and no GD extension needed (the Vercel PHP runtime has none). CODE128 refuses non-ASCII text; QR carries UTF-8 (Arabic). |
+| Printing | `showLabel({ type: 'code128' \| 'qr', text, title, sub })` from `stores/ui.js` opens `layout/LabelHost.vue` (preview, copies, print). A label print job prints ONLY the labels (`body.printing-label` rules in `app.css`), one per page — set the paper size of the label printer in the print dialog. |
+| What gets which code | CODE128 = shipping and shelf labels: bin (warehouses page → «ملصق»), fulfilment order, inbound shipment, product (primary barcode, else SKU). QR = runs and customers: trip and sales order; the QR holds `appLink('/trip/…')`, a link into this application. |
+| Camera scanner | `components/BarcodeScanner.vue` (html5-qrcode, loaded only when it opens — it is its own ~360 KB chunk). Back camera, torch when the phone has one, the phone's native detector when available. 1D codes must be read twice in a row before they are accepted (a single bad frame of a damaged label can decode to a wrong number); QR is accepted at once. |
+| Where scanning is offered | Every `ScanInput` (receiving, put-away, worker receive, dispatch, form drawers) shows a camera button on phones and touch devices — a camera read is exactly a typed code + Enter. The phone search has a scan button: a QR printed by this system opens its document directly, anything else is searched for. Handheld / USB scanners keep working as before (they type into the focused field). |
+
+The camera needs HTTPS (or localhost) and the user's permission; `BarcodeScanner` explains each failure. Round-trip
+checked: every code drawn by the API (bin, FO, shipment, EAN-13 digits, QR link, QR with Arabic) decodes to the same
+text with html5-qrcode's own decoder.

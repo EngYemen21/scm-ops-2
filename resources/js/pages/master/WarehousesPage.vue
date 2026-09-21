@@ -10,7 +10,7 @@ import { api, useAction, useGet, useList } from '@/api/client';
 import { Btn, Chip, DataTable, DateInput, ErrorBanner, PageHead, ProgressBar, SectionCard, SelectInput, TextInput } from '@/components';
 import { fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
-import { confirm } from '@/stores/ui';
+import { confirm, showLabel } from '@/stores/ui';
 import { useWarehouse } from '@/stores/warehouse';
 import BinForm from './BinForm.vue';
 import BinStatusForm from './BinStatusForm.vue';
@@ -180,7 +180,7 @@ const binCols = [
   { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '84px' },
   { key: 'fixed', header: { ar: 'تخصيص ثابت', en: 'Fixed product' }, width: 'minmax(150px,1.2fr)' },
   { key: 'bal', header: { ar: 'أرصدة', en: 'Rows' }, width: '56px', align: 'center' },
-  { key: 'act', header: '', width: '130px', align: 'end' },
+  { key: 'act', header: '', width: '170px', align: 'end', bare: true },
 ];
 const capText = (x) => `${x.capacityUnits != null ? fmtNum(x.capacityUnits) : '—'} u · ${x.maxKg != null ? fmtNum(x.maxKg) : '—'} kg`;
 const tempText = (z) => (z.minTempC != null || z.maxTempC != null ? `${z.minTempC ?? '—'}° … ${z.maxTempC ?? '—'}°` : '—');
@@ -371,6 +371,7 @@ const binZoneOpts = computed(() => zoneOpts(zones.value));
         <template #cell-bal="{ row }"><span class="num text-[10px]" :class="row._count?.balances ? 'text-ink' : 'text-faint'">{{ fmtNum(row._count?.balances || 0) }}</span></template>
         <template #cell-act="{ row }">
           <span class="row justify-end !gap-2.5">
+            <span :class="LINK" class="text-sec" @click.stop="showLabel({ type: 'code128', text: row.code, title: row.code, sub: `${row.zone?.code || ''} · ${lbl(BIN_TYPE_LABELS, row.type)}` })">{{ t('ملصق', 'Label') }}</span>
             <span v-if="canMove && !!row._count?.balances" :class="LINK" class="text-brand-dark" @click.stop="openMove({ fromBin: row.code })">{{ t('نقل', 'Move') }}</span>
             <span v-if="canManage" :class="LINK" class="text-violet" @click.stop="statusBin = row">{{ t('تغيير الحالة', 'Status') }}</span>
           </span>

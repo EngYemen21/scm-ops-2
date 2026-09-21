@@ -7,3 +7,7 @@ export const MOBILE_QUERY = '(max-width: 767px)';
 const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(MOBILE_QUERY) : null;
 export const isMobile = ref(!!mq?.matches);
 mq?.addEventListener?.('change', (e) => { isMobile.value = e.matches; });
+
+/** A device worth offering the camera scanner on: a phone, or anything driven by touch (tablets, handhelds). */
+export const canScanWithCamera = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  && (isMobile.value || (typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches));

@@ -1,1 +1,0 @@
-import{$t as e,Lt as t,Ot as n,zt as r}from"./app-DKmfz-P4.js";var i={__name:`ListRow`,props:{clickable:{type:Boolean,default:!1}},setup(i){return(a,o)=>(t(),n(`div`,{class:e([`list-row flex items-center gap-2.5 border-t border-line-2 px-[18px] py-2.5`,{"cursor-pointer hover:bg-soft":i.clickable}])},[r(a.$slots,`default`)],2))}};export{i as default};

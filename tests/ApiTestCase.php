@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Services\Core\SettingsService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Assert;
@@ -28,9 +29,23 @@ abstract class ApiTestCase extends TestCase
     /** @var array<string,string> username => access token */
     private static array $tokens = [];
 
+    /**
+     * The suite runs on a clock anchored to the day the demo snapshot was taken. The stories use literal dates
+     * ("close date 2026-09-20", "valid until 2026-10-15") and the seed has dated documents; on the real clock those
+     * rules start failing the day a literal date falls into the past. The anchored clock still ticks (it is the real
+     * clock minus a constant), so durations, ordering and token lifetimes behave normally.
+     */
+    private const CLOCK_ANCHOR = '2026-09-18 10:00:00';
+
+    private static ?int $clockOffset = null;
+
     protected function setUp(): void
     {
         parent::setUp();
+        self::$clockOffset ??= time() - Carbon::parse(self::CLOCK_ANCHOR, 'UTC')->getTimestamp();
+        $offset = self::$clockOffset;
+        // Carbon hands the closure the real "now"; building a date inside it any other way would ask for "now" again
+        Carbon::setTestNow(static fn ($realNow) => $realNow->subSeconds($offset));
         $needsPristine = static::PRISTINE_SEED && self::$pristineFor !== static::class;
         if (! self::$databaseReady || $needsPristine) {
             Artisan::call('migrate:fresh', ['--seed' => true, '--force' => true]);

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, ErrorBanner, PageHead, SectionCard } from '@/components';
 import { fmtDate, t } from '@/i18n';
+import { showLabel } from '@/stores/ui';
 import PutawayList from './PutawayList.vue';
 import ShipmentHistory from './ShipmentHistory.vue';
 import ShipmentPanel from './ShipmentPanel.vue';
@@ -31,6 +32,7 @@ const historySub = computed(() => {
   <PageHead :sub="sub">
     <Btn tone="outline" :label="{ ar: '← الاستلام', en: '← Receiving' }" @click="router.push('/receiving')" />
     <Btn v-if="s" tone="softPurple" :label="{ ar: `أمر الشراء ${s.po.number}`, en: `PO ${s.po.number}` }" @click="router.push(`/po/${encodeURIComponent(s.po.number)}`)" />
+    <Btn v-if="s" tone="soft" :label="{ ar: 'ملصق الشحنة', en: 'Shipment label' }" @click="showLabel({ type: 'code128', text: s.number, title: s.number, sub: s.po?.number })" />
   </PageHead>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <div v-if="q.isLoading.value" class="skel min-h-[240px]" />

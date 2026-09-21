@@ -1,1 +1,0 @@
-import{Lt as e,Ot as t,Qt as n,X as r,it as i,tn as a}from"./app-DKmfz-P4.js";var o=[`title`],s={__name:`Ago`,props:{at:{type:String,default:null}},setup(s){return(c,l)=>(e(),t(`span`,{class:`num flex-none text-[9px] text-faint`,title:s.at||null},a(n(r)(s.at,n(i))),9,o))}};export{s as default};
