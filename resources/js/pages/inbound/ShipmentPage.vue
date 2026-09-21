@@ -32,13 +32,12 @@ const historySub = computed(() => {
   <PageHead :sub="sub">
     <Btn tone="outline" :label="{ ar: '← الاستلام', en: '← Receiving' }" @click="router.push('/receiving')" />
     <Btn v-if="s" tone="softPurple" :label="{ ar: `أمر الشراء ${s.po.number}`, en: `PO ${s.po.number}` }" @click="router.push(`/po/${encodeURIComponent(s.po.number)}`)" />
-    <Btn v-if="s" tone="soft" :label="{ ar: 'ملصق الشحنة', en: 'Shipment label' }" @click="showLabel({ type: 'code128', text: s.number, title: s.number, sub: s.po?.number })" />
   </PageHead>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <div v-if="q.isLoading.value" class="skel min-h-[240px]" />
 
   <template v-if="s">
-    <div class="-mt-3.5"><ShipmentPanel :shipment="s" @changed="q.refetch()" @grn-posted="q.refetch()" /></div>
+    <div class="-mt-3.5"><ShipmentPanel :shipment="s" @changed="q.refetch()" @grn-posted="q.refetch()" @open="(n) => router.push(`/shipments/${encodeURIComponent(n)}`)" /></div>
     <PutawayList v-if="['putaway', 'done'].includes(s.status)" :params="{ grn: s.grns[0]?.number, status: s.status === 'done' ? 'done' : 'open' }" />
     <div class="grid-2 mt-3.5">
       <SectionCard :title="{ ar: 'إشعارات الاستلام GRN', en: 'Goods receipts' }" :count="s.grns.length">

@@ -10,6 +10,8 @@ Route::prefix('inbound')->group(function () {
     Route::get('shipments/{id}', [InboundController::class, 'shipment']);
     Route::post('shipments/{id}/arrive', [InboundController::class, 'arrive'])->middleware('perm:shipment.receive');
     Route::post('shipments/{id}/inspect', [InboundController::class, 'inspect'])->middleware('perm:shipment.receive');
+    // the follow-up shipment of a partially received (or cancelled) delivery: { po, eta? }
+    Route::post('shipments/backorder', [InboundController::class, 'backorder'])->middleware('perm:shipment.receive', 'idempotent');
     Route::post('shipments/{id}/cancel', [InboundController::class, 'cancel'])->middleware('perm:po.cancel');
     Route::post('shipments/{id}/grn', [InboundController::class, 'postGrn'])->middleware('perm:grn.post');
 

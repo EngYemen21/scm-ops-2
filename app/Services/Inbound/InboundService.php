@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PutawayTask;
 use App\Models\QcResult;
+use App\Models\ShipmentLine;
 use App\Models\StagingEntry;
 use App\Models\StatusHistory;
 use App\Services\Core\AuditService;
@@ -88,7 +89,79 @@ class InboundService
             ?? throw AppError::notFound('SHIPMENT_NOT_FOUND', 'الشحنة غير موجودة', 'Shipment not found');
         $history = StatusHistory::where('entity_type', 'InboundShipment')->where('entity_id', $s->id)->orderBy('at')->orderBy('id')->get();
 
-        return $this->decorate($s) + ['history' => $history->toArray()];
+        return $this->decorate($s) + ['history' => $history->toArray(), 'backorder' => $this->backorderState($s->po_id)];
+    }
+
+    /** Statuses in which a shipment is still waiting for goods: only one such shipment may exist per purchase order. */
+    private const AWAITING_GOODS = ['expected', 'arrived', 'inspecting'];
+
+    /** Purchase-order statuses that can still receive goods. */
+    private const PO_RECEIVABLE = ['sent', 'confirmed', 'partial'];
+
+    /**
+     * Can a follow-up shipment be opened for what is still undelivered on the purchase order?
+     *
+     * @return array{allowed:bool, openQty:int, openLines:int, reasonAr:?string, reasonEn:?string, shipment:?string}
+     */
+    public function backorderState(string $poId): array
+    {
+        $po = PurchaseOrder::with('lines')->find($poId);
+        $open = $po ? $po->lines->map(fn ($l) => max(0, $l->qty - $l->received_qty - $l->damaged_qty - $l->rejected_qty)) : collect();
+        $state = ['allowed' => false, 'openQty' => (int) $open->sum(), 'openLines' => $open->filter()->count(), 'reasonAr' => null, 'reasonEn' => null, 'shipment' => null];
+        if (! $po || $state['openQty'] === 0) {
+            return ['reasonAr' => 'لا كميات متبقية على أمر الشراء', 'reasonEn' => 'Nothing is left open on the purchase order'] + $state;
+        }
+        if (! in_array($po->status, self::PO_RECEIVABLE, true)) {
+            return ['reasonAr' => "أمر الشراء بحالة «{$po->status}» ولا يقبل استلامًا", 'reasonEn' => "The purchase order is {$po->status} and cannot receive goods"] + $state;
+        }
+        $waiting = InboundShipment::where('po_id', $po->id)->whereIn('status', self::AWAITING_GOODS)->orderBy('created_at')->value('number');
+        if ($waiting) {
+            return ['reasonAr' => "توجد شحنة مفتوحة لهذا الأمر: {$waiting}", 'reasonEn' => "An open shipment already exists for this order: {$waiting}", 'shipment' => $waiting] + $state;
+        }
+
+        return ['allowed' => true] + $state;
+    }
+
+    /**
+     * Opens the follow-up ("backorder") shipment of a purchase order: an expected shipment whose lines are exactly the
+     * quantities still undelivered. Needed after a partial receipt (the supplier delivers the rest later) and after an
+     * expected shipment was cancelled. One waiting shipment per order — the order row is locked, so two clicks or two
+     * users can never open two.
+     */
+    public function createBackorder(AuthUser $user, string $poNumberOrId, ?string $eta = null): array
+    {
+        $id = DB::transaction(function () use ($user, $poNumberOrId, $eta) {
+            $po = PurchaseOrder::with(['lines' => fn ($q) => $q->orderBy('line_no'), 'supplier:id,code,name_ar', 'warehouse:id,code,name_ar'])
+                ->where(fn ($w) => $w->where('id', $poNumberOrId)->orWhere('number', $poNumberOrId))->lockForUpdate()->first()
+                ?? throw AppError::notFound('PO_NOT_FOUND', 'أمر الشراء غير موجود', 'Purchase order not found');
+            $state = $this->backorderState($po->id);
+            if (! $state['allowed']) {
+                throw $state['shipment']
+                    ? AppError::conflict('SHIPMENT_OPEN_EXISTS', $state['reasonAr'], $state['reasonEn'], ['shipment' => $state['shipment']])
+                    : AppError::rule($state['openQty'] === 0 ? 'PO_NOTHING_OPEN' : 'PO_NOT_RECEIVABLE', $state['reasonAr'], $state['reasonEn']);
+            }
+            $number = $this->numbering->next('SHP');
+            $due = $eta ? Carbon::parse($eta) : null;
+            $s = InboundShipment::create(['number' => $number, 'po_id' => $po->id, 'supplier_id' => $po->supplier_id, 'warehouse_id' => $po->warehouse_id, 'eta' => $due ?? $po->due_date, 'status' => 'expected']);
+            $lineNo = 0;
+            foreach ($po->lines as $l) {
+                $open = max(0, $l->qty - $l->received_qty - $l->damaged_qty - $l->rejected_qty);
+                if ($open === 0) {
+                    continue;
+                }
+                ShipmentLine::create(['shipment_id' => $s->id, 'line_no' => ++$lineNo, 'po_line_id' => $l->id, 'product_id' => $l->product_id, 'ordered_qty' => $open,
+                    'suggestion_ar' => 'يُحدَّد الموقع المقترح عند الاستلام وفق شروط التخزين', 'suggestion_en' => 'Suggested bin is assigned at receiving per storage rules']);
+            }
+            $this->audit->log($user, ['action' => 'SHIPMENT.BACKORDER', 'entityType' => 'InboundShipment', 'entityId' => $s->id, 'entityNumber' => $number,
+                'newValue' => ['po' => $po->number, 'lines' => $lineNo, 'openQty' => $state['openQty'], 'eta' => $s->eta?->toJSON()]]);
+            $this->audit->status($user, 'InboundShipment', $s->id, $number, null, 'expected', "متبقي {$po->number}");
+            $this->notify->activity($user, 'InboundShipment', $s->id, $number,
+                "فُتحت الشحنة {$number} لاستلام المتبقي على {$po->number} ({$state['openQty']} وحدة) من {$po->supplier->name_ar}", "Shipment {$number} opened for the {$state['openQty']} units still due on {$po->number}", ['wm', 'proc']);
+
+            return $s->id;
+        });
+
+        return $this->getShipment($id);
     }
 
     /** Search / scan a PO number or a shipment number: the latest OPEN shipment that matches. */

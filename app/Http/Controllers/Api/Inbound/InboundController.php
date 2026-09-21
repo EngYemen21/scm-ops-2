@@ -46,6 +46,13 @@ class InboundController extends Controller
         return $this->inbound->cancel(AuthUser::current(), $id);
     }
 
+    public function backorder(Request $request): array
+    {
+        $data = $request->validate(['po' => 'required|string', 'eta' => ['nullable', 'string', self::DATE]]);
+
+        return $this->inbound->createBackorder(AuthUser::current(), $data['po'], $data['eta'] ?? null);
+    }
+
     public function postGrn(Request $request, string $id): array
     {
         $data = $request->validate([

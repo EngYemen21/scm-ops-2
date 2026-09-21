@@ -41,7 +41,10 @@ export function useShipmentActions(onChanged) {
   const arrive = (n, carrier) => act.run(() => api.postIdempotent(`/inbound/shipments/${n}/arrive`, { carrier: carrier || undefined }), { success: t(`سُجل وصول ${n} — Gate check`, `${n} arrived — gate check`) }).then((r) => { if (r) onChanged?.(r); return r; });
   const inspect = (n) => act.run(() => api.postIdempotent(`/inbound/shipments/${n}/inspect`), { success: t(`بدأ فحص ${n} — أدخل الكميات لكل سطر`, `Inspection of ${n} started — enter quantities per line`) }).then((r) => { if (r) onChanged?.(r); return r; });
   const postGrn = (n, lines, notes) => act.run(() => api.postIdempotent(`/inbound/shipments/${n}/grn`, { lines, notes: notes || undefined }), { success: (g) => t(`أُصدر ${g.number} — السليم في Inbound Staging بانتظار Putaway${g.putaways?.length ? ` (${g.putaways.length} مهمة)` : ''}`, `${g.number} posted — accepted goods in inbound staging awaiting putaway`) });
-  return { act, arrive, inspect, postGrn };
+  const cancel = (n) => act.run(() => api.postIdempotent(`/inbound/shipments/${n}/cancel`), { success: t(`أُلغيت الشحنة ${n}`, `Shipment ${n} cancelled`) }).then((s) => { if (s) onChanged?.(s); return s; });
+  /** Follow-up shipment for what is still due on the purchase order (after a partial receipt or a cancellation). */
+  const backorder = (po, eta) => act.run(() => api.postIdempotent('/inbound/shipments/backorder', { po, eta: eta || undefined }), { success: (s) => t(`فُتحت الشحنة ${s.number} للكمية المتبقية على ${po}`, `Shipment ${s.number} opened for the remainder of ${po}`) }).then((s) => { if (s) onChanged?.(s); return s; });
+  return { act, arrive, inspect, postGrn, cancel, backorder };
 }
 
 /** First value of a query-string param (vue-router may hand back an array). */

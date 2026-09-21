@@ -105,3 +105,17 @@ Use the query builder whenever possible — it is portable. In hand-written SQL:
   the happy path end to end, each business-rule rejection (with its error code), a permission denial (403 + nothing
   changed), and `reconcile()['ok']` after any stock movement.
 - Format with `vendor/bin/pint <your paths>` and lint with `php -l` before finishing.
+
+## Receiving: one shipment = one GRN, the rest arrives on a follow-up shipment
+
+A shipment is received once (`inspecting → putaway`). What the supplier did not deliver stays open on the purchase order
+(`partial`) — and is received through a **follow-up shipment**: `POST /api/inbound/shipments/backorder { po, eta? }`
+(`shipment.receive`, idempotent). It creates an `expected` shipment whose lines are exactly the open quantities of the
+PO lines, so the existing no-over-receipt rule keeps working per shipment line. The same call re-opens a delivery whose
+expected shipment was cancelled. Rules (`InboundService::backorderState`): the PO must be `sent | confirmed | partial`,
+something must be open, and only ONE shipment per order may be waiting for goods (`expected | arrived | inspecting`) —
+the PO row is locked, so two users cannot open two. `GET /inbound/shipments/{id}` carries `backorder: { allowed, openQty,
+openLines, reasonAr, reasonEn, shipment }` so the client shows the button or the reason, never a dead end.
+
+In the client every shipment row shows its next action, and the shipment opens in a drawer (`ShipmentsTab.vue` →
+`ShipmentPanel.vue`) whose "next step" box names the step, the permission it needs and — when the role lacks it — says so.
