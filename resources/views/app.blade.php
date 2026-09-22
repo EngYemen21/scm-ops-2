@@ -20,5 +20,27 @@
 </head>
 <body>
     <div id="app"></div>
+    <script>
+      // Fail-safe: if the application has not mounted 12 s after the page loaded (blocked script, stale cache, broken
+      // network), say so instead of leaving a blank screen, and offer a full reload.
+      setTimeout(function () {
+        if (document.documentElement.dataset.mounted) return;
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:Almarai,sans-serif;background:#f4f3f8;color:#20242e;text-align:center;padding:24px;z-index:9999';
+        d.innerHTML = '<div><div style="font-size:18px;font-weight:800">تعذّر تحميل التطبيق</div><div style="margin:8px 0 16px;color:#7d7990;font-size:13px">لم تُحمَّل ملفات الواجهة — قد تكون نسخة قديمة محفوظة في المتصفح أو الاتصال متقطع.</div><button onclick="location.reload()" style="background:#1E2130;color:#fff;border:0;border-radius:10px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer">إعادة التحميل</button></div>';
+        document.body.appendChild(d);
+      }, 12000);
+    </script>
+    <script>
+      // Fail-safe: if the application has not mounted 12 s after the page loaded (blocked script, stale cache, broken
+      // network), say so instead of leaving a blank screen, and offer a full reload.
+      setTimeout(function () {
+        if (document.documentElement.dataset.mounted) return;
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:Almarai,sans-serif;background:#f4f3f8;color:#20242e;text-align:center;padding:24px;z-index:9999';
+        d.innerHTML = '<div><div style="font-size:18px;font-weight:800">تعذّر تحميل التطبيق</div><div style="margin:8px 0 16px;color:#7d7990;font-size:13px">لم تُحمَّل ملفات الواجهة — قد تكون نسخة قديمة محفوظة في المتصفح أو الاتصال متقطع.</div><button onclick="location.reload()" style="background:#1E2130;color:#fff;border:0;border-radius:10px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer">إعادة التحميل</button></div>';
+        document.body.appendChild(d);
+      }, 12000);
+    </script>
 </body>
 </html>
