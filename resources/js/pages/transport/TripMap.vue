@@ -18,7 +18,7 @@ const props = defineProps({
 
 const auth = useAuth();
 const act = useAction();
-const q = useGet(() => `/transport/trips/${encodeURIComponent(props.number)}/map`, null, { staleTime: 60_000 });
+const q = useGet(() => `/transport/trips/${encodeURIComponent(props.number)}/map`, null, { staleTime: 15_000, refetchInterval: (query) => (['dispatched', 'onroute', 'partial', 'returning'].includes(query.state.data?.status) ? 20_000 : false) });
 const d = computed(() => q.data.value);
 const route = computed(() => d.value?.route);
 const label = (map, k) => (map[k] ? (lang.value === 'en' ? map[k].en : map[k].ar) : k);
@@ -35,7 +35,7 @@ const markers = computed(() => {
     });
   }
   if (x.lastFix) out.push({ id: 'fix', kind: 'fix', lat: x.lastFix.lat, lng: x.lastFix.lng, title: t('آخر موقع سجّله جوال السائق', 'Last fix from the driver phone'), sub: [t('عند إثبات التسليم', 'At proof of delivery'), fmtAgo(x.lastFix.at)] });
-  if (x.vehicle) out.push({ id: 'vehicle', kind: 'vehicle', lat: x.vehicle.lat, lng: x.vehicle.lng, text: '🚚', title: x.vehicle.code, sub: [x.vehicle.plateAr, x.vehicle.at && fmtAgo(x.vehicle.at)].filter(Boolean) });
+  if (x.vehicle) out.push({ id: 'vehicle', kind: x.vehicle.gpsOnline ? 'vehicle' : 'vehicle off', lat: x.vehicle.lat, lng: x.vehicle.lng, text: '🚚', title: `${x.vehicle.code}${x.vehicle.plateAr ? ` · ${x.vehicle.plateAr}` : ''}`, sub: [x.vehicle.gpsOnline ? `${t('متصلة', 'Online')} · ${fmtNum(x.vehicle.speedKph ?? 0)} ${t('كم/س', 'km/h')}` : t('غير متصلة', 'Offline'), x.vehicle.at && `${t('آخر موقع', 'Last fix')} ${fmtAgo(x.vehicle.at)}`].filter(Boolean) });
   return out;
 });
 
@@ -43,9 +43,11 @@ const markers = computed(() => {
 const lines = computed(() => {
   const x = d.value;
   if (!x) return [];
-  if (route.value?.status === 'ok' && route.value.geometry) return [{ id: 'route', geometry: route.value.geometry }];
+  const trail = (x.trail || []).map((p) => [p.lng, p.lat]);
+  const trailLine = trail.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: trail }, color: '#3C79F5', width: 3 }] : [];
+  if (route.value?.status === 'ok' && route.value.geometry) return [{ id: 'route', geometry: route.value.geometry }, ...trailLine];
   const pts = [x.origin, ...x.stops].filter((p) => p && p.lat != null).map((p) => [p.lng, p.lat]);
-  return pts.length > 1 ? [{ id: 'links', geometry: { type: 'LineString', coordinates: pts }, dashed: true, color: '#7d7990' }] : [];
+  return [...(pts.length > 1 ? [{ id: 'links', geometry: { type: 'LineString', coordinates: pts }, dashed: true, color: '#7d7990' }] : []), ...trailLine];
 });
 
 const duration = computed(() => {
@@ -85,6 +87,7 @@ async function optimize() {
       <span v-else-if="route?.status === 'no_coordinates'" class="text-warn">{{ t('لا توجد مواقع كافية على الخريطة لحساب المسار', 'Not enough located points to compute a route') }}</span>
       <span v-else-if="route?.status === 'error'" class="text-bad">{{ t('تعذّر حساب المسار من مزود الخرائط', 'The maps provider could not compute the route') }}</span>
 
+      <span v-if="d.vehicle" class="font-bold" :class="d.vehicle.gpsOnline ? 'text-ok' : 'text-muted'">🚚 {{ d.vehicle.code }} · {{ d.vehicle.gpsOnline ? `${fmtNum(d.vehicle.speedKph ?? 0)} ${t('كم/س', 'km/h')}` : t('غير متصلة', 'offline') }}{{ d.vehicle.at ? ` · ${fmtAgo(d.vehicle.at)}` : '' }}</span>
       <span class="flex-1" />
       <Btn v-if="canManage && d.optimize.allowed" tone="softPurple" size="sm" :loading="act.pending.value" :label="{ ar: 'تحسين ترتيب المحطات', en: 'Optimise stop order' }" @click="optimize" />
     </div>

@@ -193,3 +193,14 @@ column edge, plain values on one line with an ellipsis and the full text in the 
 - Hand-written header / row grids opt into the same look with the `bgrid` class on both (text column = first child;
   `s2` / `s3` when it is the second / third).
 - Phones are untouched: below 768 px rows become cards (see Phone layout).
+
+## Live tracking (GPS)
+
+Data comes only from `GET /transport/map` (vehicles with `lat/lng/speedKph/course/at/gpsOnline`), `GET /transport/trips/{n}/map`
+(`vehicle` + `trail`), `GET /transport/vehicles/{code}/trail` and `GET /transport/gps/status`. Helpers in
+`pages/transport/gps.js`: `useGpsStatus()` (shared, cached), `useGpsUnits(enabled)` (pairing list, `vehicle.manage`),
+`gpsLabel(vehicle, configured)` → the one honest line per vehicle: pending / not paired / no matching unit / online ·
+speed · ago / offline · ago. Screens: `FleetMap.vue` (live markers, greyed when offline, clicking opens the vehicle),
+`TripMap.vue` (vehicle + blue trail while the trip is on the road, 20 s refresh), `VehicleLiveTab.vue` (drawer tab: map,
+trail window 3/12/48 h, pairing, "refresh now"), `FleetVehiclesTab.vue` (GPS column). Never draw a vehicle that the
+provider did not report.

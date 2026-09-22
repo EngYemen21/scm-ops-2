@@ -113,7 +113,7 @@ const sevChipLabel = (ks) => `${bi(ALERT_SEV_LABELS[ks[0]])} ${sum(tw.value?.ope
 
   <div class="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3.5">
     <div class="col !gap-3.5">
-      <SectionCard small :title="{ ar: 'خريطة الرحلات', en: 'Trips map' }"><FleetMap :height="280" :warehouse="wh.whParams.warehouse || null" @trip="trip = $event" /></SectionCard>
+      <SectionCard small :title="{ ar: 'خريطة الرحلات', en: 'Trips map' }"><FleetMap :height="280" :warehouse="wh.whParams.warehouse || null" @trip="trip = $event" @vehicle="vehicle = $event" /></SectionCard>
 
       <SectionCard small :padded="false" :title="{ ar: 'الرحلات النشطة والمتأخرة', en: 'Active & delayed trips' }" :count="active.data.value?.total">
         <div v-if="active.isLoading.value" class="skel m-3 h-[60px]" />

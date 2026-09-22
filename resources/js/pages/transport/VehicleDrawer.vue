@@ -10,8 +10,10 @@ import { OWNERSHIP_LABELS, TRIP_LABELS, VEHICLE_LABELS, VEHICLE_TRANSITIONS } fr
 import { useAuth } from '@/stores/auth';
 import { confirm } from '@/stores/ui';
 import BreakdownForm from './BreakdownForm.vue';
+import { gpsLabel, useGpsStatus } from './gps';
 import KvList from './KvList.vue';
-import { MAINT_KIND_LABELS, MAINT_STATUS_LABELS, PENDING, VEHICLE_KIND_LABELS, docDaysLabel, labelOf, whyNot } from './tms';
+import VehicleLiveTab from './VehicleLiveTab.vue';
+import { MAINT_KIND_LABELS, MAINT_STATUS_LABELS, VEHICLE_KIND_LABELS, docDaysLabel, labelOf, whyNot } from './tms';
 
 const props = defineProps({ code: { type: String, default: null } });
 const emit = defineEmits(['close', 'open-trip']);
@@ -19,6 +21,8 @@ const emit = defineEmits(['close', 'open-trip']);
 const auth = useAuth();
 const act = useAction();
 const tab = ref('overview');
+const { configured: gpsConfigured } = useGpsStatus();
+const gps = computed(() => (v.value ? gpsLabel(v.value, gpsConfigured.value) : null));
 const bd = ref(false);
 watch(() => props.code, () => { tab.value = 'overview'; bd.value = false; });
 
@@ -38,7 +42,7 @@ async function setState(to) {
 }
 
 const title = computed(() => (v.value ? `${v.value.code} — ${[v.value.brand, v.value.model, v.value.year].filter(Boolean).join(' ')}` : props.code));
-const tabs = computed(() => [{ k: 'overview', label: { ar: 'نظرة عامة', en: 'Overview' } }, { k: 'docs', label: { ar: 'الوثائق', en: 'Documents' } }, { k: 'maint', label: { ar: 'الصيانة', en: 'Maintenance' }, badge: v.value?.openMaintenance?.length }, { k: 'fuel', label: { ar: 'الوقود', en: 'Fuel' } }, { k: 'trips', label: { ar: 'الرحلات', en: 'Trips' } }]);
+const tabs = computed(() => [{ k: 'overview', label: { ar: 'نظرة عامة', en: 'Overview' } }, { k: 'live', label: { ar: 'التتبع الحي', en: 'Live' } }, { k: 'docs', label: { ar: 'الوثائق', en: 'Documents' } }, { k: 'maint', label: { ar: 'الصيانة', en: 'Maintenance' }, badge: v.value?.openMaintenance?.length }, { k: 'fuel', label: { ar: 'الوقود', en: 'Fuel' } }, { k: 'trips', label: { ar: 'الرحلات', en: 'Trips' } }]);
 
 const overview = computed(() => {
   const x = v.value;
@@ -57,7 +61,7 @@ const overview = computed(() => {
     { k: { ar: 'السائقون الافتراضيون', en: 'Default drivers' }, v: (x.drivers || []).map((d) => d.nameAr).join(' · ') || '—' },
     { id: 'trip', k: { ar: 'الرحلة الحالية', en: 'Active trip' }, v: '—' },
     { k: { ar: 'التنبيهات المفتوحة', en: 'Open alerts' }, v: alerts.length ? alerts.map((a) => (lang.value === 'en' && a.textEn) || a.textAr).join(' · ') : '—', c: alerts.length ? '#b23b3b' : undefined },
-    { k: { ar: 'الموقع الحي', en: 'Live position' }, v: bi(PENDING), c: '#7d7990' },
+    { k: { ar: 'الموقع الحي', en: 'Live position' }, v: gps.value?.text || '—', c: gps.value?.color },
     { k: { ar: 'إجمالي الرحلات', en: 'Total trips' }, num: true, v: fmtNum(x.tripsCount) },
   ];
 });
@@ -86,8 +90,7 @@ const tripCols = [
       <div class="row wrap">
         <Chip :map="VEHICLE_LABELS" :k="v.state" />
         <span class="text-[9.5px] font-extrabold" :class="v.canAssign?.ok ? 'text-ok' : 'text-bad'">{{ v.canAssign?.ok ? t('قابلة للإسناد ✓', 'Assignable ✓') : `${t('غير قابلة للإسناد', 'Not assignable')} — ${whyNot(v.canAssign, lang)}` }}</span>
-        <Chip v-if="v.gpsOnline" small fg="#1d7a3e" bg="#e6f9ec" label="GPS ✓" />
-        <Chip v-else small :label="{ ar: 'GPS: Integration Pending', en: 'GPS: Integration Pending' }" />
+        <Chip small :fg="gps.color" :bg="gps.online ? '#e6f9ec' : '#F1EFF6'" :label="`GPS: ${gps.text}`" />
       </div>
       <Tabs v-model="tab" variant="sm" :tabs="tabs" class="!mx-0 !mb-3 !mt-3.5" />
 
@@ -97,6 +100,7 @@ const tripCols = [
           <template v-else>—</template>
         </template>
       </KvList>
+      <VehicleLiveTab v-else-if="tab === 'live'" :vehicle="v" />
       <KvList v-else-if="tab === 'docs'" :rows="docs" />
       <div v-else-if="tab === 'maint'" class="col">
         <EmptyState v-if="(v.maintenance || []).length === 0" :text="{ ar: 'لا أوامر صيانة', en: 'No maintenance orders' }" />

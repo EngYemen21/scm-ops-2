@@ -30,7 +30,7 @@ class TransportMapService
 
     private const ORIGIN = '__origin__';
 
-    public function __construct(private readonly TripsService $trips) {}
+    public function __construct(private readonly TripsService $trips, private readonly GpsTrackingService $gps) {}
 
     /** What the browser needs to draw a map. Only a Mapbox PUBLIC token (pk.…) ever leaves the server. */
     public function config(): array
@@ -41,7 +41,7 @@ class TransportMapService
         return [
             'provider' => $ok ? 'mapbox' : null, 'configured' => $ok, 'token' => $ok ? $token : null,
             'status' => $ok ? 'connected' : Pending::STATUS,
-            'gps' => ['status' => AdapterFactory::gps()->configured() ? 'connected' : Pending::STATUS],
+            'gps' => ['status' => AdapterFactory::gps()->configured() ? 'connected' : Pending::STATUS, 'onlineMinutes' => GpsTrackingService::ONLINE_MINUTES],
         ];
     }
 
@@ -123,7 +123,7 @@ class TransportMapService
     {
         $p = $v ? self::point($v->lat, $v->lng) : null;
 
-        return $p ? $p + ['code' => $v->code, 'plateAr' => $v->plate_ar, 'state' => $v->state, 'gpsOnline' => (bool) $v->gps_online, 'at' => $v->last_sync_at, 'source' => 'gps'] : null;
+        return $p ? $p + ['code' => $v->code, 'plateAr' => $v->plate_ar, 'state' => $v->state, 'gpsOnline' => (bool) $v->gps_online, 'speedKph' => $v->speed_kph, 'course' => $v->course, 'at' => $v->gps_at, 'source' => 'gps'] : null;
     }
 
     /** Why the stop order cannot be optimised right now — null when it can. */
@@ -144,6 +144,7 @@ class TransportMapService
 
     public function trip(string $number): array
     {
+        $this->gps->sync();
         $t = $this->load($number);
         $origin = self::origin($t->warehouse);
         $stops = self::stops($t);
@@ -156,6 +157,7 @@ class TransportMapService
             'route' => $this->routeFor($origin, $stops),
             'lastFix' => self::lastFix([$t->id])[$t->id] ?? null,
             'vehicle' => self::vehiclePosition($t->vehicle),
+            'trail' => $t->vehicle && in_array($t->status, U::ACTIVE_TRIP_STATES, true) ? $this->gps->trail($t->vehicle->id, 12) : [],
             'optimize' => ['allowed' => $block === null, 'code' => $block[0] ?? null, 'reasonAr' => $block[1] ?? null, 'reasonEn' => $block[2] ?? null],
         ];
     }
@@ -186,6 +188,7 @@ class TransportMapService
     /** Control-tower / fleet map: warehouses, the open trips with their located stops, and every position that really exists. */
     public function overview(?string $warehouseCode = null): array
     {
+        $sync = $this->gps->sync();
         $whId = $warehouseCode ? Warehouse::where('code', $warehouseCode)->value('id') : null;
         $trips = Trip::with(['warehouse', 'vehicle', 'driver', 'stops' => fn ($q) => $q->orderBy('seq'), 'stops.customer'])
             ->when($whId, fn ($q) => $q->where('warehouse_id', $whId))
@@ -202,7 +205,7 @@ class TransportMapService
             ])->all(),
             'vehicles' => $vehicles->map(fn (Vehicle $v) => self::vehiclePosition($v))->all(),
             'gps' => AdapterFactory::gps()->configured()
-                ? ['status' => 'connected']
+                ? ['status' => ($sync['ok'] ?? true) ? 'connected' : 'error', 'lastSync' => $sync['at'] ?? null, 'detail' => $sync['detail'] ?? null, 'unmatched' => $sync['unmatched'] ?? [], 'onlineMinutes' => GpsTrackingService::ONLINE_MINUTES]
                 : ['status' => Pending::STATUS, 'noteAr' => 'التتبع الحي للمركبات يتطلب ربط مزود GPS — المعروض هو مواقع المحطات وآخر موقع سجّله جوال السائق عند التسليم', 'noteEn' => 'Live vehicle tracking needs a GPS provider; shown are stop locations and the last fix from the driver phone'],
         ];
     }

@@ -13,7 +13,10 @@ return [
     'OBJECT_STORAGE_REGION' => env('OBJECT_STORAGE_REGION'),
     'OBJECT_STORAGE_PUBLIC_URL' => env('OBJECT_STORAGE_PUBLIC_URL'),
 
-    // Vehicle tracking / telematics
+    // Vehicle tracking / telematics. Wialon (gps.tawasolmap.com): an access token the account owner generates on
+    // {WIALON_BASE_URL}/login.html (see docs/RUNBOOK.md). Falls back to the generic HTTP adapter (GPS_PROVIDER_URL).
+    'WIALON_BASE_URL' => env('WIALON_BASE_URL'),
+    'WIALON_TOKEN' => env('WIALON_TOKEN'),
     'GPS_PROVIDER_URL' => env('GPS_PROVIDER_URL'),
     'GPS_PROVIDER_TOKEN' => env('GPS_PROVIDER_TOKEN'),
 

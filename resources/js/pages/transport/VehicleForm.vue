@@ -2,7 +2,9 @@
 // Add vehicle (POST /transport/vehicles). Document expiry dates are mandatory: expired documents block assignment.
 import { computed } from 'vue';
 import { api } from '@/api/client';
-import { FormDrawer } from '@/components';
+import { FormDrawer, SelectInput, TextInput } from '@/components';
+import { useAuth } from '@/stores/auth';
+import { useGpsStatus, useGpsUnits } from './gps';
 import { t } from '@/i18n';
 import { OWNERSHIP_LABELS } from '@/shared';
 import { VEHICLE_KIND_LABELS, optsOf } from './tms';
@@ -12,6 +14,10 @@ defineProps({ open: { type: Boolean, default: false } });
 const emit = defineEmits(['close']);
 
 const whOpts = useWarehouseOptions();
+const auth = useAuth();
+const { configured: gpsConfigured } = useGpsStatus();
+const units = useGpsUnits(computed(() => gpsConfigured.value && auth.can('vehicle.manage')));
+const unitOpts = computed(() => (units.data.value?.units || []).map((u) => [u.uid || u.name || u.id, `${u.name}${u.uid ? ` · ${u.uid}` : ''}${u.vehicle ? ` — ${t('مقترنة بـ', 'paired to')} ${u.vehicle}` : ''}`]));
 const fields = computed(() => [
   { k: 'code', label: { ar: 'رقم المركبة', en: 'Vehicle code' }, required: true, dir: 'ltr' }, { k: 'plateAr', label: { ar: 'اللوحة (عربي)', en: 'Plate (Arabic)' }, required: true }, { k: 'plateEn', label: { ar: 'اللوحة (إنجليزي)', en: 'Plate (English)' }, dir: 'ltr' },
   { k: 'vin', label: { ar: 'رقم الهيكل VIN', en: 'VIN' }, required: true, dir: 'ltr' }, { k: 'brand', label: { ar: 'الماركة', en: 'Brand' }, required: true }, { k: 'model', label: { ar: 'الموديل', en: 'Model' } }, { k: 'year', label: { ar: 'السنة', en: 'Year' }, type: 'num', min: 1990, max: 2100 },
@@ -26,5 +32,10 @@ const fields = computed(() => [
 
 <template>
   <FormDrawer :open="open" :title="{ ar: 'إضافة مركبة', en: 'Add vehicle' }" :fields="fields" :submit="(v) => api.postIdempotent('/transport/vehicles', v)"
-              :action="{ success: (r) => r?.message || t('أُضيفت المركبة', 'Vehicle added'), invalidate: ['transport'] }" @close="emit('close')" />
+              :action="{ success: (r) => r?.message || t('أُضيفت المركبة', 'Vehicle added'), invalidate: ['transport'] }" @close="emit('close')">
+    <template #field-gpsDeviceId="{ value, set }">
+      <SelectInput v-if="gpsConfigured && unitOpts.length" :model-value="value || ''" :options="unitOpts" :label="{ ar: 'وحدة التتبع (Wialon)', en: 'Tracking unit (Wialon)' }" :placeholder="{ ar: '— بلا تتبع —', en: '— none —' }" :hint="{ ar: 'تُقرأ مواقع المركبة من هذه الوحدة', en: 'The vehicle position is read from this unit' }" @update:model-value="set" />
+      <TextInput v-else :model-value="value || ''" dir="ltr" :label="{ ar: 'معرّف جهاز GPS (IMEI / اسم الوحدة)', en: 'GPS device (IMEI / unit name)' }" :hint="gpsConfigured ? { ar: 'المزود لم يُرجع وحدات — اكتب IMEI الوحدة أو اسمها', en: 'No units from the provider — type the unit IMEI or name' } : { ar: 'يُستخدم عند ربط مزود التتبع', en: 'Used once a tracking provider is connected' }" @update:model-value="set" />
+    </template>
+  </FormDrawer>
 </template>

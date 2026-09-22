@@ -20,7 +20,7 @@ class DashboardService
     private const INTEGRATIONS = [
         ['key' => 'b2b', 'labelAr' => 'منصة B2B', 'labelEn' => 'B2B platform', 'env' => 'B2B_WEBHOOK_URL'],
         ['key' => 'whatsapp', 'labelAr' => 'واتساب', 'labelEn' => 'WhatsApp', 'env' => 'WHATSAPP_API_URL'],
-        ['key' => 'gps', 'labelAr' => 'تتبع GPS', 'labelEn' => 'GPS tracking', 'env' => 'GPS_PROVIDER_URL'],
+        ['key' => 'gps', 'labelAr' => 'تتبع GPS', 'labelEn' => 'GPS tracking', 'env' => 'WIALON_TOKEN', 'alt' => 'GPS_PROVIDER_URL'],
         ['key' => 'maps', 'labelAr' => 'الخرائط', 'labelEn' => 'Maps', 'env' => 'MAPBOX_PUBLIC_TOKEN', 'alt' => 'MAPS_API_KEY'],
         ['key' => 'storage', 'labelAr' => 'تخزين الملفات', 'labelEn' => 'Object storage', 'env' => 'OBJECT_STORAGE_ENDPOINT'],
         ['key' => 'erp', 'labelAr' => 'نظام ERP', 'labelEn' => 'ERP', 'env' => 'ERP_BASE_URL'],

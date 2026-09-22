@@ -13,6 +13,7 @@ use App\Services\Integrations\Adapters\MapsAdapter;
 use App\Services\Integrations\Adapters\MessagingAdapter;
 use App\Services\Integrations\Adapters\ObjectStorageAdapter;
 use App\Services\Integrations\Adapters\Pending;
+use App\Services\Integrations\Adapters\WialonGps;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use Illuminate\Support\Collection;
@@ -101,7 +102,11 @@ class IntegrationsService
         return [
             $row('b2b', $this->b2b->configured()),
             $storageRow,
-            $row('gps', $this->gps->configured()),
+            $this->gps instanceof WialonGps ? (function () use ($row) {
+                $probe = $this->gps->probe();
+
+                return $probe['ok'] ? $row('gps', true, 'Wialon · '.$probe['user'], 'Wialon — الحساب '.$probe['user'], 'connected') : $row('gps', true, $probe['detail'], "تعذّر الاتصال: {$probe['detail']}", 'error');
+            })() : $row('gps', $this->gps->configured()),
             $row('maps', $this->maps->configured()),
             $row('whatsapp', $this->messaging->whatsappConfigured()),
             $row('email', $this->messaging->emailConfigured()),

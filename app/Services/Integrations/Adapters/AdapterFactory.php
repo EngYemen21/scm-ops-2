@@ -36,6 +36,10 @@ final class AdapterFactory
 
     public static function gps(?array $env = null): GpsAdapter
     {
+        $wialon = self::v($env, 'WIALON_TOKEN');
+        if ($wialon) {
+            return new WialonGps(self::v($env, 'WIALON_BASE_URL') ?: 'https://gps.tawasolmap.com', $wialon);
+        }
         $url = self::v($env, 'GPS_PROVIDER_URL');
 
         return $url ? new HttpGps($url, self::v($env, 'GPS_PROVIDER_TOKEN')) : new PendingGps;

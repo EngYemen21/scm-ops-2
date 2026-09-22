@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Transport\FleetController;
+use App\Http\Controllers\Api\Transport\GpsController;
 use App\Http\Controllers\Api\Transport\MapController;
 use App\Http\Controllers\Api\Transport\TripsController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,12 @@ Route::prefix('transport')->group(function () {
     Route::get('map', [MapController::class, 'overview']);
     Route::get('trips/{number}/map', [MapController::class, 'trip']);
     Route::post('trips/{number}/optimize', [MapController::class, 'optimize'])->middleware('perm:trip.manage');
+
+    // live tracking (telematics provider): status, forced sync, the provider's units for pairing, one vehicle's trail
+    Route::get('gps/status', [GpsController::class, 'status']);
+    Route::post('gps/sync', [GpsController::class, 'sync'])->middleware('perm:vehicle.manage');
+    Route::get('gps/units', [GpsController::class, 'units'])->middleware('perm:vehicle.manage');
+    Route::get('vehicles/{code}/trail', [GpsController::class, 'trail']);
 
     // vehicles
     Route::get('vehicles', [FleetController::class, 'listVehicles']);

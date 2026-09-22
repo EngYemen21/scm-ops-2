@@ -124,3 +124,29 @@ The demo data itself (`database/seed-data/snapshot.json`) was produced with the 
   After go-live, change the schema with new Laravel migrations instead.
 - `node tools/export-shared.mjs "<old project>/packages/shared/dist/index.js"` → `config/scm.php` +
   `resources/js/shared/constants.json`. After the old system is retired, edit those two files directly (keep them in sync).
+
+## 6. Live vehicle tracking (Wialon — gps.tawasolmap.com)
+
+The fleet's telematics platform is **Wialon** (Gurtam), hosted at `https://gps.tawasolmap.com`. The system reads every
+unit's last position through the Wialon Remote API and copies it onto the vehicle (`vehicles.lat/lng/speed_kph/course/
+gps_at/gps_online`) plus a trail (`vehicle_positions`, 7 days). Nothing else is written to Wialon.
+
+**Access token (done once by the Wialon account owner — never share the account password):**
+
+1. Open, signed out of Wialon:
+   `https://gps.tawasolmap.com/login.html?client_id=B2Bops&access_type=0x300&activation_time=0&duration=0&redirect_uri=https://gps.tawasolmap.com/post_token.html`
+   (`access_type=0x300` = view data + online tracking, read-only; `duration=0` = does not expire).
+2. Sign in. The page that follows shows `access_token=…` — that 72-character string is the token.
+3. Put it in the environment: `WIALON_TOKEN=…` (and `WIALON_BASE_URL=https://gps.tawasolmap.com`, the default).
+   On Vercel: `vercel env add WIALON_TOKEN production` then redeploy. Locally: `.env` + `php artisan config:clear`.
+4. Check: Settings → integrations shows "Wialon — الحساب <user>"; `GET /api/transport/gps/status` says `connected`.
+
+**Pairing vehicles:** Fleet → vehicle → tab «التتبع الحي» → «اقتران بجهاز» lists the account's units; pick the one
+installed in that vehicle (stored in `vehicles.gps_device_id` as the unit IMEI). The new-vehicle form offers the same
+list. A paired vehicle whose unit disappeared from the account is listed as "unmatched" on the maps, never placed.
+
+**Sync cadence:** `php artisan scm:gps-sync` runs every minute under the scheduler (`php artisan schedule:work` or a
+cron entry `* * * * * php artisan schedule:run`). Without a scheduler (Vercel) the map screens trigger the same sync,
+throttled to one provider call per 30 s however many people are watching; the fleet map polls every 20 s. A fix older
+than 10 minutes shows the vehicle as offline (greyed marker, with its time). To revoke access, delete the token in
+Wialon (user settings → tokens) or clear `WIALON_TOKEN`.

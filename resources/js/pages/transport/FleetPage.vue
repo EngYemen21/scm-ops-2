@@ -110,7 +110,7 @@ function editRouteRow(r) { editRoute.value = r; form.value = 'route'; }
   </KpiGrid>
 
   <SectionCard small class="mt-3" :title="{ ar: 'خريطة الأسطول والرحلات', en: 'Fleet & trips map' }">
-    <FleetMap :height="300" @trip="trip = $event" />
+    <FleetMap :height="300" @trip="trip = $event" @vehicle="vehicle = $event" />
   </SectionCard>
 
   <div class="row wrap mb-2.5 mt-3.5">

@@ -19,6 +19,7 @@ use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
 use App\Services\Core\SettingsService;
 use App\Services\Exceptions\ExceptionsService;
+use App\Services\Integrations\Adapters\AdapterFactory;
 use App\Services\Returns\ReturnsService;
 use App\Support\AppError;
 use App\Support\AuthUser;
@@ -67,7 +68,7 @@ class DeliveryService
         return [
             'current' => $current ? $this->decorate($current) : null,
             'upcoming' => $trips->reject(fn (Trip $t) => $t->id === $current?->id)->map(fn (Trip $t) => $this->decorate($t))->values()->all(),
-            'gps' => ['status' => 'integration_pending', 'note' => 'تتبع المركبة الحي يتطلب ربط مزود Telematics — غير متصل'],
+            'gps' => AdapterFactory::gps()->configured() ? ['status' => 'connected', 'note' => 'تتبع المركبة الحي مربوط بمزود Telematics'] : ['status' => 'integration_pending', 'note' => 'تتبع المركبة الحي يتطلب ربط مزود Telematics — غير متصل'],
         ];
     }
 

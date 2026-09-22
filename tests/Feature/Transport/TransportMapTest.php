@@ -63,7 +63,7 @@ class TransportMapTest extends ApiTestCase
         $this->assertSame(['RYD'], array_column($overview['warehouses'], 'code'));
         $this->assertContains($t['number'], array_column($overview['trips'], 'number'));
         $this->assertSame('integration_pending', $overview['gps']['status']);
-        $this->assertSame([], $overview['vehicles'], 'no vehicle position is invented');
+        $this->assertSame([], array_values(array_filter($overview['vehicles'], fn ($v) => $v['at'] === null || $v['source'] !== 'gps')), 'every drawn vehicle carries a provider fix with its time — none is invented');
         Http::assertNothingSent();
     }
 

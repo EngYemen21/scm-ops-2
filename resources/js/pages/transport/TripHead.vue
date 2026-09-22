@@ -3,7 +3,10 @@
 // ETA and live tracking are "Integration Pending" — never fabricated. Extra classes (padding) fall through to the root.
 import { computed } from 'vue';
 import { fmtDate, fmtNum, lang, t } from '@/i18n';
+import { useGpsStatus } from './gps';
 import { drvName, etaText, tripProgress, vehName } from './tms';
+
+const { configured: gpsConfigured } = useGpsStatus();
 
 const props = defineProps({ trip: { type: Object, required: true } });
 
@@ -27,6 +30,6 @@ const head = computed(() => {
         <div class="mt-0.5 text-[10.5px] font-bold leading-[1.5]">{{ h.v }}</div>
       </div>
     </div>
-    <div class="mt-2.5 text-[9px] text-[#7FD6E5]">{{ t('التتبع الحي للمركبة و ETA اللحظي — Integration Pending (يتطلب مزود GPS / Telematics) · المسار والمسافة على الخريطة أدناه', 'Live vehicle tracking & live ETA — Integration Pending (needs a GPS / telematics provider) · route and distance are on the map below') }}</div>
+    <div class="mt-2.5 text-[9px] text-[#7FD6E5]">{{ gpsConfigured ? t('موقع المركبة الحي على الخريطة أدناه (يُحدَّث كل 20 ثانية) · ETA اللحظي يُحتسب عند ربطه', 'Live vehicle position on the map below (refreshed every 20 s) · live ETA pending') : t('التتبع الحي للمركبة و ETA اللحظي — Integration Pending (يتطلب مزود GPS / Telematics) · المسار والمسافة على الخريطة أدناه', 'Live vehicle tracking & live ETA — Integration Pending (needs a GPS / telematics provider) · route and distance are on the map below') }}</div>
   </div>
 </template>

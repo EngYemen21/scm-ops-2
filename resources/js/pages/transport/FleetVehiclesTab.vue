@@ -1,12 +1,13 @@
 <script setup>
 // Fleet · vehicles tab: search + state / box type / warehouse filters → GET /transport/vehicles (polled every 30s).
-// Document-expiry and next-maintenance warnings per row; GPS is "Integration Pending" (only the device id is real).
+// Document-expiry and next-maintenance warnings per row; the GPS column shows the provider's last fix (online / offline / unpaired).
 import { ref } from 'vue';
 import { useList } from '@/api/client';
 import { Chip, DataTable, ErrorBanner, SelectInput, TextInput } from '@/components';
 import { bi, fmtNum, lang, t } from '@/i18n';
 import { OWNERSHIP_LABELS, VEHICLE_LABELS } from '@/shared';
-import { PENDING, VEHICLE_KIND_LABELS, docDaysLabel, labelOf, optsOf } from './tms';
+import { gpsLabel, useGpsStatus } from './gps';
+import { VEHICLE_KIND_LABELS, docDaysLabel, labelOf, optsOf } from './tms';
 import { useWarehouseOptions } from './tmsComposables';
 
 const props = defineProps({
@@ -16,6 +17,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['open']);
 
+const { configured: gpsConfigured } = useGpsStatus();
 const q = ref(props.initialQ);
 const state = ref(props.filter);
 const kind = ref('');
@@ -39,7 +41,7 @@ const columns = [
   { key: 'odometer', header: { ar: 'العداد كم', en: 'Odometer' }, width: '90px', kind: 'num', value: (v) => fmtNum(v.odometer) },
   { key: 'docs', header: { ar: 'الوثائق', en: 'Documents' }, width: '100px' },
   { key: 'maint', header: { ar: 'الصيانة القادمة', en: 'Next maint.' }, width: '120px' },
-  { key: 'gps', header: 'GPS', width: '110px' },
+  { key: 'gps', header: 'GPS', width: '150px' },
   { key: 'alerts', header: { ar: 'تنبيهات', en: 'Alerts' }, width: '70px', kind: 'num' },
   { key: 'state', header: { ar: 'الحالة', en: 'Status' }, width: '130px' },
 ];
@@ -73,7 +75,7 @@ const columns = [
           <span v-if="remainKm(row) == null" class="muted">—</span>
           <b v-else class="num text-[10px]" :style="{ color: remainColor(remainKm(row)) }">{{ fmtNum(remainKm(row)) }} {{ t('كم', 'km') }}</b>
         </template>
-        <template #cell-gps="{ row }"><span class="text-[9px] font-extrabold" :class="row.gpsDeviceId ? 'text-muted' : 'text-faint'">{{ row.gpsDeviceId ? `${row.gpsDeviceId} · ` : '' }}{{ bi(PENDING) }}</span></template>
+        <template #cell-gps="{ row }"><span class="row !gap-1.5 text-[9px] font-extrabold" :style="{ color: gpsLabel(row, gpsConfigured).color }"><span class="inline-block h-2 w-2 flex-none rounded-full" :style="{ background: gpsLabel(row, gpsConfigured).color }" />{{ gpsLabel(row, gpsConfigured).text }}</span></template>
         <template #cell-alerts="{ row }"><span class="font-extrabold" :class="row.openAlerts ? 'text-bad' : 'text-faint'">{{ row.openAlerts || 0 }}</span></template>
         <template #cell-state="{ row }"><Chip :map="VEHICLE_LABELS" :k="row.state" dot /></template>
       </DataTable>
