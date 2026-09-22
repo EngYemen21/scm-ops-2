@@ -79,7 +79,7 @@ async function signOut() {
     <div v-else class="topbar">
       <div class="topbar-row">
         <button type="button" class="tb-btn hamburger" aria-label="menu" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button>
-        <div class="flex flex-none cursor-pointer items-center" role="link" @click="router.push(auth.homePath)">
+        <div class="tb-logo" role="link" @click="router.push(auth.homePath)">
           <img src="/logo-white.png" alt="B2B ops — ERP System" class="block h-[38px] w-auto">
         </div>
         <div class="flex-1" />
