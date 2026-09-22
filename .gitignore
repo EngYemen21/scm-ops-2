@@ -42,3 +42,5 @@ ios/App/App.xcworkspace/xcuserdata/
 ios/App/build/
 *.keystore
 *.jks
+android/.kotlin/
+android/app/.cxx/
