@@ -13,3 +13,8 @@
 /.env
 /.env.*
 !/.env.example
+
+# native app projects are not part of the web deployment
+android
+ios
+mobile

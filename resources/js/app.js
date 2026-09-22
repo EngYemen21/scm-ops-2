@@ -6,6 +6,7 @@ import { queryClient } from './api/client';
 import { router } from './router';
 import { toast } from './stores/ui';
 import { t } from './i18n';
+import { setupNative } from './composables/native';
 import '../css/app.css';
 
 const app = createApp(App);
@@ -35,3 +36,4 @@ router.onError((err) => {
 
 app.mount('#app');
 document.documentElement.dataset.mounted = '1';
+void setupNative(router);

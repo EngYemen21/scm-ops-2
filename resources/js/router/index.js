@@ -3,7 +3,8 @@
 // Lazy components are resolved ONCE here, at module load, through import.meta.glob — never inside a render.
 // (In the previous React client a lazy component created during render made navigation freeze on some desktop
 // browsers: the URL changed but the page never re-rendered.) A page whose file does not exist yet shows ComingSoon.
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router';
+import { isNative } from '../composables/native';
 import { useAuth } from '../stores/auth';
 import { ALL_ROUTE_META, PAGE_FILES } from './routes';
 
@@ -30,7 +31,8 @@ const routes = [
   },
 ];
 
-export const router = createRouter({ history: createWebHistory(), routes, scrollBehavior: () => ({ top: 0 }) });
+// Inside the native shells the pages are files, not server routes: hash history keeps deep links working without a server fallback.
+export const router = createRouter({ history: isNative ? createWebHashHistory() : createWebHistory(), routes, scrollBehavior: () => ({ top: 0 }) });
 
 router.beforeEach(async (to) => {
   const auth = useAuth();

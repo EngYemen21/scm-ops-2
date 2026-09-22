@@ -7,6 +7,7 @@
 //   own error correction and are accepted at once.
 // - The camera needs HTTPS (or localhost) and the user's permission; every failure says what to do about it.
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { ensureCameraPermission } from '../composables/native';
 import { useScrollLock } from '../composables/scrollLock';
 import { bi, dir, t } from '../i18n';
 import Icon from '../layout/Icon.vue';
@@ -53,6 +54,7 @@ function onRead(text, result) {
 async function start() {
   state.value = 'starting'; error.value = null; torchOn.value = false; torchAvailable.value = false; last = { text: '', hits: 0 };
   try {
+    if (!(await ensureCameraPermission())) throw new Error(t('لم يُسمح باستخدام الكاميرا — فعّل الإذن من إعدادات التطبيق', 'Camera permission denied — enable it in the app settings'));
     if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('المتصفح لا يدعم الكاميرا', 'This browser has no camera support'));
     const { Html5Qrcode, Html5QrcodeSupportedFormats: F } = await import('html5-qrcode');
     await nextTick();

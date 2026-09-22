@@ -28,3 +28,17 @@ Thumbs.db
 
 .vercel
 .env.local
+
+# native apps (Capacitor): the web bundle is built on demand, Android/iOS build outputs stay local
+mobile/www/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/keystore.properties
+android/app/release/
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/build/
+*.keystore
+*.jks

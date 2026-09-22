@@ -1,0 +1,14 @@
+{
+  "appId": "sa.b2b.ops",
+  "appName": "B2B ops",
+  "webDir": "mobile/www",
+  "backgroundColor": "#1E2130",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never", "backgroundColor": "#1E2130" },
+  "plugins": {
+    "SplashScreen": { "launchAutoHide": false, "backgroundColor": "#1E2130", "androidScaleType": "CENTER_CROP", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "backgroundColor": "#1E2130", "overlaysWebView": false },
+    "Keyboard": { "resize": "body", "resizeOnFullScreen": true }
+  }
+}

@@ -82,7 +82,8 @@ export function errorMessage(e, l = getLang()) {
 }
 
 // ---------------------------------------------------------------- request
-export const API_BASE = '/api';
+/** Same origin on the web; the native apps are built with VITE_API_ORIGIN = the server they talk to (vite.mobile.config.js). */
+export const API_BASE = (import.meta.env.VITE_API_ORIGIN || '').replace(/\/$/, '') + '/api';
 
 export function buildQuery(params) {
   if (!params) return '';
