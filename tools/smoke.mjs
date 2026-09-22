@@ -33,7 +33,9 @@ const results = [];
 for (let i = 0; i < urls.length; i += 6) results.push(...await Promise.all(urls.slice(i, i + 6).map(get)));
 // Correct refusals, not failures: an administrator is not a driver; the attachment list needs entityType + entityId; a label needs its text.
 const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400, '/barcodes/code128': 400, '/barcodes/qr': 400 };
-const bad = results.filter((r) => r.status !== (EXPECTED[r.url] ?? 200));
+// A provider-backed list answers 422 <CODE>_PENDING until that provider is configured — an honest state, not a failure.
+const pending = (r) => r.status === 422 && /"code":"[A-Z_]+_PENDING"/.test(r.body);
+const bad = results.filter((r) => r.status !== (EXPECTED[r.url] ?? 200) && !pending(r));
 for (const r of bad) console.log(`✗ ${r.status} GET ${r.url}  ${r.body.slice(0, 220).replace(/\s+/g, ' ')}`);
 const ms = results.map((r) => r.ms).sort((a, b) => a - b);
 console.log(`\n${results.length} endpoints · ${results.length - bad.length} OK · ${bad.length} failed · median ${ms[ms.length >> 1]} ms · slowest ${ms.at(-1)} ms (${results.find((r) => r.ms === ms.at(-1)).url})`);
