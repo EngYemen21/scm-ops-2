@@ -79,9 +79,8 @@ async function signOut() {
     <div v-else class="topbar">
       <div class="topbar-row">
         <button type="button" class="tb-btn hamburger" aria-label="menu" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button>
-        <div class="flex flex-none cursor-pointer items-center gap-[9px]" @click="router.push(auth.homePath)">
-          <img src="/logo-white.png" alt="B2B ops — ERP System" class="block h-[30px] w-auto">
-          <div class="tb-sub self-end pb-0.5 text-[8.5px] text-[#8b90a5]">{{ t('عمليات سلسلة الإمداد', 'Supply Chain Operations') }}</div>
+        <div class="flex flex-none cursor-pointer items-center" role="link" @click="router.push(auth.homePath)">
+          <img src="/logo-white.png" alt="B2B ops — ERP System" class="block h-[38px] w-auto">
         </div>
         <div class="flex-1" />
         <GlobalSearch v-if="!isLite" />

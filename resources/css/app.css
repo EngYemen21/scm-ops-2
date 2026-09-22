@@ -107,7 +107,7 @@
     .sidebar-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(30, 33, 48, .45); z-index: 54; }
     .main { padding: 16px 14px 60px; }
     .gs-wrap { width: min(220px, 40vw) !important; }
-    .tb-user-text, .tb-sub { display: none; }
+    .tb-user-text { display: none; }
   }
   @media (max-width: 600px) { .gs-wrap { display: none; } }
 
