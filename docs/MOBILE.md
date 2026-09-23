@@ -63,3 +63,27 @@ builder (Codemagic, Bitrise, GitHub Actions `macos` runner) with the same reposi
 - Push notifications (needs Firebase for Android and APNs for iOS) — the in-app bell works over the API.
 - Offline mode: the app needs the server; screens show the normal "cannot reach the server" error offline.
 - iOS build and store submission need a Mac (or a cloud macOS builder) and the Apple membership; both are on your side.
+
+## Store builds from GitHub (no Mac needed)
+
+Two manual workflows under `.github/workflows/` build and upload from the cloud once the store credentials exist as
+repository secrets (Settings → Secrets and variables → Actions). Nobody's Apple ID or Google password is involved —
+only API keys the account owner generates and can revoke.
+
+| Workflow | Secrets | Result |
+|---|---|---|
+| **iOS (TestFlight)** — `ios.yml`, macOS runner | `APPLE_TEAM_ID` · `ASC_KEY_ID` · `ASC_ISSUER_ID` · `ASC_KEY_P8` (the `.p8` file, base64) | archive signed by Xcode cloud-managed signing, uploaded to App Store Connect → TestFlight |
+| **Android (Play)** — `android.yml` | `ANDROID_KEYSTORE_B64` · `ANDROID_KEYSTORE_PASSWORD` · `ANDROID_KEY_ALIAS` · `ANDROID_KEY_PASSWORD` · `PLAY_SERVICE_ACCOUNT_JSON` | signed `.aab`, uploaded to the chosen Play track |
+
+Where the keys come from:
+
+- **App Store Connect API key**: App Store Connect → Users and Access → Integrations → App Store Connect API → Team
+  keys → "+" → name `B2B ops CI`, access **App Manager**. Download the `.p8` once (Apple never shows it again); the
+  Key ID and Issuer ID are on the same page. Team ID: developer.apple.com → Membership.
+- **Play service account**: Play Console → Setup → API access → create a Google Cloud service account, grant it
+  "Release manager" on the app, create a JSON key. The upload keystore is the one under
+  `%USERPROFILE%\.scmops\android\keys` (`base64 -w0 b2bops-upload.jks`).
+
+Then Actions → pick the workflow → Run workflow with the next build / version number. The app record itself (name,
+bundle id `sa.b2b.ops`, listing, privacy answers, review notes with a demo login) is created once in App Store
+Connect / Play Console; after the first upload every further release is one workflow run plus "Submit for review".

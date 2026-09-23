@@ -1,0 +1,53 @@
+# iOS build + upload to TestFlight on a macOS runner. Manual trigger. Needs these repository secrets (docs/MOBILE.md):
+#   APPLE_TEAM_ID             the 10-character team id (Apple Developer → Membership)
+#   ASC_KEY_ID, ASC_ISSUER_ID App Store Connect API key (Users and Access → Integrations → App Store Connect API)
+#   ASC_KEY_P8                the key file contents (AuthKey_XXXX.p8), base64-encoded
+# Signing is Xcode cloud-managed through that key: no certificate or profile is stored anywhere.
+name: iOS (TestFlight)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Build number (must increase for every upload)
+        required: true
+        default: '1'
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Web bundle for the app
+        run: npm run mobile:build && npx cap sync ios
+      - name: CocoaPods
+        working-directory: ios/App
+        run: pod install --repo-update
+      - name: App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.ASC_KEY_P8 }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+      - name: Archive
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
+            -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" | xcpretty && exit ${PIPESTATUS[0]}
+      - name: Export and upload to App Store Connect
+        working-directory: ios/App
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist ../ExportOptions.plist -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+      - name: Keep the archive log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: ios-export, path: ${{ runner.temp }}/export, if-no-files-found: ignore }
