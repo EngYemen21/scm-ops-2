@@ -50,4 +50,7 @@ jobs:
       - name: Keep the archive log
         if: always()
         uses: actions/upload-artifact@v4
-        with: { name: ios-export, path: ${{ runner.temp }}/export, if-no-files-found: ignore }
+        with:
+          name: ios-export
+          path: ${{ runner.temp }}/export
+          if-no-files-found: ignore

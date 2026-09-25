@@ -43,7 +43,8 @@ jobs:
           grep -n "versionCode\|versionName" android/app/build.gradle
       - name: Build signed bundle
         working-directory: android
-        env: { KEYSTORE_PROPERTIES: ${{ runner.temp }}/keystore.properties }
+        env:
+          KEYSTORE_PROPERTIES: ${{ runner.temp }}/keystore.properties
         run: ./gradlew --no-daemon bundleRelease
       - uses: actions/upload-artifact@v4
         with: { name: app-release-aab, path: android/app/build/outputs/bundle/release/app-release.aab }
