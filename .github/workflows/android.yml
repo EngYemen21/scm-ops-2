@@ -23,6 +23,8 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      VITE_API_ORIGIN: https://scm-ops-laravel.vercel.app   # the server the app talks to (not a secret)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
