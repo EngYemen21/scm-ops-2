@@ -35,6 +35,15 @@ for (let i = 0; i < urls.length; i += 6) results.push(...await Promise.all(urls.
 const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400, '/barcodes/code128': 400, '/barcodes/qr': 400 };
 // A provider-backed list answers 422 <CODE>_PENDING until that provider is configured — an honest state, not a failure.
 const pending = (r) => r.status === 422 && /"code":"[A-Z_]+_PENDING"/.test(r.body);
+// Non-API pages are checked by CONTENT: the SPA shell answers 200 for any path, so a stale or failed deploy would
+// otherwise look healthy (that is how a week of failed Vercel builds went unnoticed).
+const PAGES = [['/privacy', 'Privacy Policy — B2B ops'], ['/manifest.webmanifest', '"short_name"'], ['/', 'rel="manifest"']];
+for (const [path, needle] of PAGES) {
+  const t0 = Date.now();
+  const r = await fetch(BASE + path);
+  const body = await r.text();
+  results.push({ url: `[page] ${path}`, status: r.ok && body.includes(needle) ? 200 : r.status === 200 ? 599 : r.status, ms: Date.now() - t0, body: body.includes(needle) ? '' : `missing "${needle}" — stale or failed deploy?` });
+}
 const bad = results.filter((r) => r.status !== (EXPECTED[r.url] ?? 200) && !pending(r));
 for (const r of bad) console.log(`✗ ${r.status} GET ${r.url}  ${r.body.slice(0, 220).replace(/\s+/g, ' ')}`);
 const ms = results.map((r) => r.ms).sort((a, b) => a - b);
