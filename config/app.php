@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Contact shown on the public privacy policy (/privacy) that the App Store / Google Play listings link to.
+    'privacy_contact' => env('PRIVACY_CONTACT_EMAIL', 'salem@b2b.sa'),
+    'privacy_updated' => env('PRIVACY_UPDATED', '2026-09-27'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

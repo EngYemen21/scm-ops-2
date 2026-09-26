@@ -2,16 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Store Connect upload with Xcode cloud-managed signing (certificates and profiles are created through the API key). -->
+    <!-- App Store Connect upload with manual signing: the "Apple Distribution" certificate and the App Store profile
+         made by tools/ios-signing.mjs, installed on the runner from repository secrets. The workflow replaces
+         __PROFILE_NAME__ and __TEAM_ID__ before exporting. -->
     <key>method</key>
     <string>app-store-connect</string>
     <key>destination</key>
     <string>upload</string>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>signingCertificate</key>
+    <string>Apple Distribution</string>
+    <key>teamID</key>
+    <string>__TEAM_ID__</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>sa.b2b.ops</key>
+        <string>__PROFILE_NAME__</string>
+    </dict>
     <key>uploadSymbols</key>
     <true/>
     <key>manageAppVersionAndBuildNumber</key>
-    <true/>
+    <false/>
 </dict>
 </plist>

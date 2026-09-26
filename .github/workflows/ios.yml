@@ -54,11 +54,35 @@ jobs:
             -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
             | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*signing|\*\* ARCHIVE" || true
           test -d "$RUNNER_TEMP/App.xcarchive" || (tail -80 "$RUNNER_TEMP/archive.log"; exit 1)
+      # Distribution signing: the certificate + App Store profile from tools/ios-signing.mjs (secrets IOS_DIST_P12_B64,
+      # IOS_DIST_P12_PASSWORD, IOS_PROFILE_B64, IOS_PROFILE_NAME). The archive is re-signed with them at export — the
+      # App Manager API key cannot use Apple's cloud-managed distribution signing (that needs an Admin key).
+      - name: Distribution certificate and profile
+        env:
+          P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"; KC_PASS="$(uuidgen)"
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          echo "$P12_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KC" -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/appstore.mobileprovision"
+          UUID=$(security cms -D -i "$RUNNER_TEMP/appstore.mobileprovision" | plutil -extract UUID raw -)
+          cp "$RUNNER_TEMP/appstore.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/"$UUID".mobileprovision
+          echo "profile $UUID installed"
       - name: Export and upload to App Store Connect
         working-directory: ios/App
         run: |
+          sed -e "s/__PROFILE_NAME__/${{ secrets.IOS_PROFILE_NAME }}/" -e "s/__TEAM_ID__/${{ secrets.APPLE_TEAM_ID }}/" ../ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" -exportPath "$RUNNER_TEMP/export" \
-            -exportOptionsPlist ../ExportOptions.plist -allowProvisioningUpdates \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
             -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
       - name: Keep the logs
