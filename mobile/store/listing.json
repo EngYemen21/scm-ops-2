@@ -1,0 +1,27 @@
+{
+  "_comment": "Store listing text (App Store + Google Play). Pushed to App Store Connect by: node tools/asc.mjs listing sa.b2b.ops",
+  "supportUrl": "https://scm-ops-laravel.vercel.app",
+  "privacyPolicyUrl": "https://scm-ops-laravel.vercel.app/privacy",
+  "primaryCategory": "BUSINESS",
+  "secondaryCategory": "PRODUCTIVITY",
+  "copyright": "2026 Salem Mufarrij",
+  "locales": {
+    "ar-SA": {
+      "name": "B2B ops",
+      "subtitle": "عمليات سلسلة الإمداد",
+      "promotionalText": "كل عمليات المستودع والمبيعات والنقل في تطبيق واحد: باركود، خرائط، وتتبع حي للأسطول.",
+      "keywords": "مستودع,مخزون,باركود,شحن,توصيل,أسطول,تتبع,سلسلة الإمداد,مشتريات,مبيعات,ERP,WMS",
+      "description": "B2B ops نظام تشغيلي متكامل لإدارة سلسلة الإمداد للشركات، يعمل على الجوال والجهاز اللوحي بنفس صلاحيات النظام الأساسي وبياناته.\n\nالمخزون والمستودعات\n• أرصدة لحظية حسب المستودع والموقع والدفعة وتاريخ الانتهاء (FEFO)\n• الاستلام من الموردين والفحص وإذن الاستلام (GRN) والشحنات المتبقية\n• الجرد الدوري والتحويلات بين المستودعات\n\nالمبيعات والتجهيز\n• عروض الأسعار وأوامر البيع وتجميع الطلبات\n• قوائم التجهيز والتعبئة وجاهزية الشحن\n\nالنقل والتسليم\n• الرحلات والمحطات على الخريطة مع المسار والمسافة والزمن حسب حركة المرور\n• تحسين ترتيب المحطات آليًا\n• تتبع حي لمواقع المركبات وسرعتها\n• إثبات التسليم بالموقع والصورة\n\nأدوات الميدان\n• قراءة الباركود ورموز QR بالكاميرا في كل الشاشات التي تحتاجها\n• إصدار ملصقات الباركود للمواقع والمنتجات والشحنات\n\nالتحكم والأمان\n• صلاحيات حسب الدور تُطبَّق على الخادم\n• سجل تدقيق لكل العمليات\n• واجهة عربية وإنجليزية\n\nالتطبيق مخصص لموظفي الجهات المشتركة في النظام؛ يتطلب حسابًا يصدره مسؤول النظام في جهتك."
+    },
+    "en-US": {
+      "name": "B2B ops",
+      "subtitle": "Supply chain operations",
+      "promotionalText": "Warehouse, sales and transport operations in one app — barcode scanning, maps and live fleet tracking.",
+      "keywords": "warehouse,inventory,barcode,shipping,delivery,fleet,tracking,supply chain,procurement,ERP,WMS",
+      "description": "B2B ops is a complete supply-chain operations system for businesses, on phone and tablet, with the same permissions and data as the main system.\n\nInventory and warehouses\n• Live stock by warehouse, bin, batch and expiry (FEFO)\n• Supplier receiving, quality check, goods receipts and follow-up shipments\n• Cycle counts and inter-warehouse transfers\n\nSales and fulfilment\n• Quotations, sales orders and order consolidation\n• Picking, packing and dispatch readiness\n\nTransport and delivery\n• Trips and stops on the map with route, distance and traffic-aware time\n• Automatic stop-order optimisation\n• Live vehicle positions and speed\n• Proof of delivery with location and photo\n\nField tools\n• Barcode and QR scanning with the camera wherever it is needed\n• Barcode labels for bins, products and shipments\n\nControl and security\n• Role-based permissions enforced on the server\n• Full audit trail\n• Arabic and English interface\n\nFor staff of organisations using the system; requires an account issued by your administrator."
+    }
+  },
+  "review": {
+    "notes": "B2B ops is an internal supply-chain operations tool for company staff (warehouse, sales, transport). There is no public sign-up; accounts are issued by the company administrator. Please use the demo account below. Native features to review: camera barcode/QR scanning (Inventory → scan button on any search or quantity field), maps and live vehicle positions (Transport → a trip → Stops & map), and location captured on proof of delivery. On iPad the app shows the full desktop layout."
+  }
+}

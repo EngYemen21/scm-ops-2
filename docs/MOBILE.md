@@ -87,3 +87,19 @@ Where the keys come from:
 Then Actions → pick the workflow → Run workflow with the next build / version number. The app record itself (name,
 bundle id `sa.b2b.ops`, listing, privacy answers, review notes with a demo login) is created once in App Store
 Connect / Play Console; after the first upload every further release is one workflow run plus "Submit for review".
+
+## iOS release — how it is wired (2026-09-27)
+
+| Piece | Value / where |
+|---|---|
+| App record | App Store Connect → "B2B ops", bundle id `sa.b2b.ops`, SKU `B2BOPS-IOS-001`, primary language Arabic |
+| API key | "B2B ops CI", role **App Manager** (Key ID `G22VP6B72A`); file kept in `%USERPROFILE%\.scmops\apple\` — back it up |
+| Signing | Apple Distribution certificate + App Store profile made by `tools/ios-signing.mjs` (valid to 2027-09-26); `.p12` and profile in the same folder and as GitHub secrets `IOS_DIST_P12_B64`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE_B64`, `IOS_PROFILE_NAME` |
+| Build | `.github/workflows/ios.yml` on **macos-26 / Xcode 26** (App Store Connect rejects older SDKs). Project uses Swift Package Manager — no CocoaPods |
+| Listing | `mobile/store/listing.json` (ar-SA + en-US texts, urls, categories) and `mobile/store/{iphone-6.9,ipad-13}/*.png`; push with `node tools/asc.mjs listing sa.b2b.ops` |
+| Privacy policy | public page `/privacy` (contact from `PRIVACY_CONTACT_EMAIL`) |
+
+A new release: bump the build number → Actions → **iOS (TestFlight)** → Run workflow (`build_number` must increase) → the
+build appears in TestFlight after Apple processes it (10–30 min) → attach it to the version and submit for review.
+Why not cloud-managed signing: it needs an **Admin** API key; the App Manager key is enough with our own certificate.
+Renew the certificate/profile before 2027-09-26 by re-running `tools/ios-signing.mjs` (delete `cert.id` first) and updating the four secrets.
