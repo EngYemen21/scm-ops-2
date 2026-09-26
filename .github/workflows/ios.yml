@@ -21,7 +21,8 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-15
+    # App Store Connect only accepts builds made with the iOS 26 SDK (Xcode 26) or later.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       VITE_API_ORIGIN: ${{ inputs.api_origin }}
@@ -36,8 +37,15 @@ jobs:
         run: npm run mobile:build && npx cap sync ios
       - name: Server address baked into the app
         run: grep -rl "${VITE_API_ORIGIN#https://}" mobile/www/assets/*.js | head -1 || (echo "server address missing from the bundle" && exit 1)
-      - name: Xcode
-        run: xcodebuild -version
+      - name: Xcode 26 (newest installed)
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -viE "beta|rc" | sort -V | tail -1)
+          [ -n "$XC" ] || XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XC" ] || { echo "no Xcode 26 on this runner — App Store Connect requires the iOS 26 SDK"; exit 1; }
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i "iphoneos"
       - name: App Store Connect API key
         run: |
           mkdir -p ~/private_keys
