@@ -15,7 +15,13 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>لحفظ صورة إثبات التسليم في معرض الصور عند طلبك</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>لتسجيل موقع التسليم عند إثبات التسليم</string>
+	<string>لتسجيل موقع التسليم عند إثبات التسليم ومتابعة رحلتك</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>لمتابعة موقعك أثناء رحلات التوصيل المُسندة لك فقط، حتى والتطبيق في الخلفية؛ يتوقف تلقائيًا عند إقفال الرحلة</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>CFBundleDisplayName</key>
         <string>B2B ops</string>
 	<key>CFBundleExecutable</key>

@@ -35,6 +35,12 @@ class Driver extends BaseModel
             'safety' => 'float',
             'blocked' => 'boolean',
             'active' => 'boolean',
+            'phone_consent_at' => 'datetime',
+            'phone_lat' => 'float',
+            'phone_lng' => 'float',
+            'phone_accuracy' => 'float',
+            'phone_speed_kph' => 'float',
+            'phone_at' => 'datetime',
         ];
     }
 

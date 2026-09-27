@@ -103,3 +103,25 @@ A new release: bump the build number → Actions → **iOS (TestFlight)** → Ru
 build appears in TestFlight after Apple processes it (10–30 min) → attach it to the version and submit for review.
 Why not cloud-managed signing: it needs an **Admin** API key; the App Manager key is enough with our own certificate.
 Renew the certificate/profile before 2027-09-26 by re-running `tools/ios-signing.mjs` (delete `cert.id` first) and updating the four secrets.
+
+## Driver phone tracking (native app)
+
+The driver's phone reports its position during an ACTIVE trip only (`dispatched → returning`), after an in-app
+disclosure and consent — next to the truck's own GPS (Wialon), so the dispatcher sees both and a mismatch.
+
+| Piece | Where |
+|---|---|
+| Plugin | `@capacitor-community/background-geolocation` — Android foreground service (type `location`, persistent notification), iOS "Always" + `UIBackgroundModes: location` |
+| Phone logic | `resources/js/composables/driverTracking.js` — polls `GET /delivery/tracking`, starts / stops the watcher, queues fixes in local storage (network gaps), sends batches to `POST /delivery/tracking/points` |
+| Consent | `layout/DriverTrackingConsent.vue` (disclosure BEFORE the OS prompt — Play "prominent disclosure"), `POST /delivery/tracking/consent`; driver can withdraw from "رحلاتي" |
+| Server | `app/Services/Delivery/PhoneTrackingService.php` — stores fixes only for a consented driver on an active trip (else answers `tracking:false`), validates (range, ≤24 h old, not future, accuracy ≤1 km), de-duplicates on (driver, time), keeps 30 days |
+| Maps | trip map: 📱 marker + green phone trail + "phone away from the truck" (>1 km, both fresh) / "stopped reporting" (>10 min); fleet map: every open trip's phone + an alert list |
+
+Honest limit: the OS stops tracking if the driver force-closes the app (swipes it away on Android, force-quits on
+iOS). The dispatcher then sees "stopped reporting" while the truck GPS keeps working. Surviving a force-quit needs a
+commercial native SDK (e.g. Transistorsoft, licence per app) — not included.
+
+Store declarations: Google Play → App content → "Foreground service permissions" (location: tracking delivery trips,
+with a short screen recording) and the data-safety form (precise location, collected, not shared). Apple → review notes
+explain background location (see `mobile/store/listing.json` → review.notes) and the privacy labels include precise
+location linked to the user.

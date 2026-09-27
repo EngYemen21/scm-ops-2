@@ -37,5 +37,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- the driver's position on proof of delivery -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- driver trip tracking: a foreground service (type location, declared by the background-geolocation plugin) with
+         a visible notification while a trip is active; Android 13+ needs the notification permission to show it -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>

@@ -30,7 +30,10 @@
         <ul>
             <li><b>بيانات الحساب:</b> اسم المستخدم والاسم والدور والصلاحيات — لتسجيل الدخول وتطبيق الصلاحيات.</li>
             <li><b>بيانات العمل:</b> ما يدخله المستخدم أثناء عمله (طلبات، حركات مخزون، رحلات، إثباتات تسليم) — وهي بيانات الجهة المالكة.</li>
-            <li><b>الموقع الجغرافي:</b> عند تسجيل إثبات التسليم فقط، وبعد إذنك، لتوثيق مكان التسليم. لا يتتبع التطبيق موقعك في الخلفية.</li>
+            <li><b>الموقع الجغرافي للسائقين:</b> أثناء رحلات التوصيل المُسندة للسائق فقط، وبعد موافقته الصريحة داخل التطبيق وإذن النظام،
+                يُرسل التطبيق موقع الجوال وسرعته — بما في ذلك والتطبيق في الخلفية أو الشاشة مقفلة — لمتابعة الرحلة وسلامة التسليم. يظهر
+                إشعار دائم طوال مدة التتبع، ويتوقف تلقائيًا عند إقفال الرحلة، ويمكن للسائق سحب موافقته في أي وقت. خارج الرحلات لا يُجمع أي موقع.
+                ويُسجَّل الموقع أيضًا عند إثبات التسليم.</li>
             <li><b>الكاميرا:</b> لقراءة الباركود ورموز QR وتصوير إثبات التسليم، بعد إذنك. لا تُحفظ الصور إلا ما ترفقه أنت بإثبات التسليم.</li>
             <li><b>سجل التدقيق:</b> العمليات التي تُجرى داخل النظام مع وقتها ومنفّذها، لأغراض الرقابة الداخلية.</li>
         </ul>
@@ -42,7 +45,7 @@
             التتبع المتعاقد معه. يعالج هؤلاء البيانات نيابةً عنا ولتشغيل الخدمة فقط.</p>
         <h2>الحماية والاحتفاظ</h2>
         <p>الاتصال مشفّر (HTTPS)، وكلمات المرور مخزّنة بشكل مجزّأ غير قابل للاسترجاع، والوصول محكوم بالأدوار. تُحفظ بيانات العمل طوال
-            مدة استخدام الجهة للنظام، ومسارات المركبات 7 أيام.</p>
+            مدة استخدام الجهة للنظام، ومسارات المركبات 7 أيام، ومسارات جوالات السائقين 30 يومًا.</p>
         <h2>حقوقك</h2>
         <p>يمكنك طلب الاطلاع على بياناتك أو تصحيحها أو حذف حسابك عبر مسؤول النظام في جهتك أو بالتواصل معنا على
             <a href="mailto:{{ $contact }}">{{ $contact }}</a>.</p>
@@ -57,7 +60,11 @@
         <ul>
             <li><b>Account data:</b> username, name, role and permissions — to sign in and enforce access rights.</li>
             <li><b>Business data:</b> what users enter while working (orders, stock movements, trips, proofs of delivery).</li>
-            <li><b>Location:</b> only when a proof of delivery is recorded, with your permission. No background tracking.</li>
+            <li><b>Driver location:</b> only during delivery trips assigned to the driver, after the driver's explicit in-app
+                consent and the system permission, the app sends the phone's location and speed — including in the background or
+                with the screen locked — to follow the trip and delivery safety. A persistent notification is shown while tracking;
+                it stops automatically when the trip is closed, and the driver can withdraw consent at any time. No location is
+                collected outside trips. Location is also recorded on proof of delivery.</li>
             <li><b>Camera:</b> to scan barcodes / QR codes and photograph a delivery, with your permission.</li>
             <li><b>Audit log:</b> actions performed in the system, with time and user, for internal control.</li>
         </ul>
@@ -68,7 +75,7 @@
             behalf solely to run the service.</p>
         <h2>Security and retention</h2>
         <p>Traffic is encrypted (HTTPS), passwords are stored hashed, access is role-based. Business data is kept while the
-            organisation uses the system; vehicle trails for 7 days.</p>
+            organisation uses the system; vehicle trails for 7 days, driver phone trails for 30 days.</p>
         <h2>Your rights</h2>
         <p>Ask your organisation's administrator, or contact <a href="mailto:{{ $contact }}">{{ $contact }}</a>, to access or
             correct your data or delete your account.</p>

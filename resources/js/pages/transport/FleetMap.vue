@@ -30,12 +30,24 @@ const markers = computed(() => {
         title: (lang.value === 'en' && s.customerEn) || s.customerAr, sub: [`${trip.number} · ${label(TRIP_LABELS, trip.status)}`, label(STOP_LABELS, s.status), trip.driverAr].filter(Boolean),
       });
     }
+    const ph = trip.phone;
+    if (ph?.lat != null) out.push({ id: `p-${trip.number}`, kind: ph.status === 'live' ? 'phone' : 'phone off', lat: ph.lat, lng: ph.lng, text: '📱', trip: trip.number, title: `${ph.driverAr} · ${trip.number}`, sub: [ph.status === 'live' ? `${t('جوال السائق يعمل', 'Driver phone live')}${ph.speedKph != null ? ` · ${fmtNum(ph.speedKph)} ${t('كم/س', 'km/h')}` : ''}` : t('توقف جوال السائق عن الإرسال', 'Driver phone stopped reporting'), ph.at && fmtAgo(ph.at), ph.apart ? `⚠ ${t('بعيد عن الشاحنة', 'away from the truck')} ${fmtNum(ph.metresFromTruck / 1000, 1)} ${t('كم', 'km')}` : null].filter(Boolean) });
     if (trip.lastFix) out.push({ id: `f-${trip.number}`, kind: 'fix', lat: trip.lastFix.lat, lng: trip.lastFix.lng, trip: trip.number, title: `${trip.number}${trip.vehicle ? ` · ${trip.vehicle}` : ''}`, sub: [t('آخر موقع سجّله جوال السائق عند التسليم', 'Last fix from the driver phone at delivery'), fmtAgo(trip.lastFix.at)] });
   }
   for (const v of x.vehicles) out.push({ id: `v-${v.code}`, kind: v.gpsOnline ? 'vehicle' : 'vehicle off', lat: v.lat, lng: v.lng, text: '🚚', vehicle: v.code, title: `${v.code}${v.plateAr ? ` · ${v.plateAr}` : ''}`, sub: [v.gpsOnline ? `${t('متصلة', 'Online')} · ${fmtNum(v.speedKph ?? 0)} ${t('كم/س', 'km/h')}` : t('غير متصلة', 'Offline'), v.at && `${t('آخر موقع', 'Last fix')} ${fmtAgo(v.at)}`].filter(Boolean) });
   return out;
 });
 const located = computed(() => markers.value.filter((m) => m.kind === 'stop' && m.lat != null).length);
+const phonesLive = computed(() => (d.value?.trips || []).filter((x) => x.phone?.status === 'live').length);
+/** Trips that need the dispatcher's attention because of the driver's phone. */
+const phoneAlerts = computed(() => (d.value?.trips || []).flatMap((x) => {
+  const ph = x.phone;
+  if (!ph) return [];
+  if (ph.apart) return [{ trip: x.number, tone: 'bad', text: `${ph.driverAr} (${x.number}) — ${t('الجوال بعيد عن الشاحنة', 'phone away from the truck')} ${fmtNum(ph.metresFromTruck / 1000, 1)} ${t('كم', 'km')}` }];
+  if (ph.status === 'stale') return [{ trip: x.number, tone: 'warn', text: `${ph.driverAr} (${x.number}) — ${t('توقف الجوال عن الإرسال', 'phone stopped reporting')} ${fmtAgo(ph.at)}` }];
+  if (ph.status === 'no_consent') return [{ trip: x.number, tone: 'muted', text: `${ph.driverAr} (${x.number}) — ${t('لم يوافق على التتبع بعد', 'has not accepted tracking yet')}` }];
+  return [];
+}));
 </script>
 
 <template>
@@ -49,6 +61,8 @@ const located = computed(() => markers.value.filter((m) => m.kind === 'stop' && 
       <span v-if="d.gps.status === 'connected' && d.gps.lastSync" class="text-faint">· {{ t('آخر مزامنة', 'last sync') }} {{ fmtAgo(d.gps.lastSync) }}</span>
       <span v-else-if="d.gps.status === 'error'" class="basis-full text-bad">{{ t('تعذّرت مزامنة مواقع المركبات', 'Vehicle sync failed') }}: {{ d.gps.detail }}</span>
       <span v-if="d.gps.status !== 'connected' && d.gps.status !== 'error'" class="basis-full text-faint">{{ lang === 'en' ? d.gps.noteEn : d.gps.noteAr }}</span>
+      <span class="row !gap-1"><i class="map-dot phone legend" />{{ t(`جوالات السائقين (${phonesLive})`, `Driver phones (${phonesLive})`) }}</span>
+      <span v-for="a in phoneAlerts" :key="a.trip" class="basis-full cursor-pointer font-bold" :class="{ bad: 'text-bad', warn: 'text-warn', muted: 'text-muted' }[a.tone]" @click="emit('trip', a.trip)">📱 {{ a.text }}</span>
       <span v-if="d.gps.unmatched?.length" class="basis-full text-warn">{{ t('مركبات مقترنة بلا وحدة مطابقة عند المزود', 'Paired vehicles with no matching unit at the provider') }}: {{ d.gps.unmatched.join('، ') }}</span>
     </div>
   </div>

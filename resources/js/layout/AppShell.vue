@@ -23,6 +23,9 @@ import MobileSearch from './mobile/MobileSearch.vue';
 import MobileTabBar from './mobile/MobileTabBar.vue';
 import WarehouseChip from './mobile/WarehouseChip.vue';
 import NotificationBell from './NotificationBell.vue';
+import DriverTrackingConsent from './DriverTrackingConsent.vue';
+import { isNative } from '../composables/native';
+import { startDriverTracking, stopDriverTracking } from '../composables/driverTracking';
 
 const auth = useAuth();
 const whStore = useWarehouse();
@@ -35,6 +38,9 @@ const passwordOpen = passwordDialogOpen;
 watch(() => route.path, () => { sidebarOpen.value = false; menuOpen.value = false; });
 
 const user = computed(() => auth.user);
+// Driver phone tracking (native app only): starts for a signed-in driver, stops on sign-out.
+const nativeDriver = computed(() => isNative && !!user.value?.driverId);
+watch(nativeDriver, (on) => { if (on) void startDriverTracking(); else stopDriverTracking(); }, { immediate: true });
 /** Worker / driver screens are task-focused: no global search. */
 const isLite = computed(() => (user.value?.roles || []).every((r) => r === 'worker' || r === 'driver'));
 const label = (map, k) => (map[k] ? (lang.value === 'ar' ? map[k].ar : map[k].en) : k);
@@ -164,5 +170,6 @@ async function signOut() {
     </template>
 
     <ChangePasswordModal :open="passwordOpen || user.mustChangePassword" :forced="user.mustChangePassword" @close="passwordOpen = false" />
+    <DriverTrackingConsent v-if="nativeDriver" />
   </div>
 </template>

@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-1cn_Tsge.js","assets/dist-o_crFI-n.js"])))=>i.map(i=>d[i]);
+import{i as e}from"./dist-o_crFI-n.js";import{n as t,t as n}from"./preload-helper-C9F5ZtEB.js";t();var r=e(`SplashScreen`,{web:()=>n(()=>import(`./web-1cn_Tsge.js`).then(e=>new e.SplashScreenWeb),__vite__mapDeps([0,1]))});export{r as SplashScreen};

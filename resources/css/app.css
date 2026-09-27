@@ -657,6 +657,10 @@
 .map-dot.fix { width: 16px; height: 16px; background: #3C79F5; box-shadow: 0 0 0 5px rgba(60, 121, 245, .22), 0 2px 7px rgba(30, 33, 48, .35); }
 .map-dot.vehicle { width: 30px; height: 30px; background: #fff; border-color: #1d7a3e; font-size: 15px; box-shadow: 0 0 0 4px rgba(29, 122, 62, .18), 0 2px 7px rgba(30, 33, 48, .35); }
 .map-dot.vehicle.off { border-color: #a8a4b8; box-shadow: 0 2px 7px rgba(30, 33, 48, .3); filter: grayscale(1); opacity: .8; }
+/* driver's phone (native app tracking): a smaller round marker, green ring when live, grey when it stopped reporting */
+.map-dot.phone { width: 26px; height: 26px; background: #fff; border-color: #1d7a3e; font-size: 13px; box-shadow: 0 0 0 4px rgba(29, 122, 62, .15), 0 2px 7px rgba(30, 33, 48, .3); }
+.map-dot.phone.off { border-color: #b26a16; box-shadow: 0 2px 7px rgba(30, 33, 48, .3); filter: grayscale(.8); opacity: .8; }
+.map-dot.phone.legend { background: #e6f9ec; border-color: #1d7a3e; }
 .map-dot.legend { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0; border-width: 1.5px; box-shadow: none; cursor: default; border-radius: 999px; }
 .map-dot.warehouse.legend { border-radius: 3px; }
 

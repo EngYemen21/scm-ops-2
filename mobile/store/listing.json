@@ -22,6 +22,6 @@
     }
   },
   "review": {
-    "notes": "B2B ops is an internal supply-chain operations tool for company staff (warehouse, sales, transport). There is no public sign-up; accounts are issued by the company administrator. Please use the demo account below. Native features to review: camera barcode/QR scanning (Inventory → scan button on any search or quantity field), maps and live vehicle positions (Transport → a trip → Stops & map), and location captured on proof of delivery. On iPad the app shows the full desktop layout."
+    "notes": "B2B ops is an internal supply-chain operations tool for company staff (warehouse, sales, transport). There is no public sign-up; accounts are issued by the company administrator. Please use the demo account below. Native features to review: camera barcode/QR scanning (Inventory → scan button on any search or quantity field), maps and live vehicle positions (Transport → a trip → Stops & map), and location captured on proof of delivery. On iPad the app shows the full desktop layout. Background location: drivers are tracked ONLY during an active delivery trip assigned to them, after an in-app disclosure and consent; tracking stops automatically when the trip is closed (Transport → a trip → Stops & map shows the driver phone next to the truck). Sign in with a driver account to see the disclosure."
   }
 }

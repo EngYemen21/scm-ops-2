@@ -7,6 +7,7 @@ use App\Models\Trip;
 use App\Models\TripStop;
 use App\Models\Vehicle;
 use App\Models\Warehouse;
+use App\Services\Delivery\PhoneTrackingService;
 use App\Services\Integrations\Adapters\AdapterFactory;
 use App\Services\Integrations\Adapters\MapboxMaps;
 use App\Services\Integrations\Adapters\Pending;
@@ -30,7 +31,7 @@ class TransportMapService
 
     private const ORIGIN = '__origin__';
 
-    public function __construct(private readonly TripsService $trips, private readonly GpsTrackingService $gps) {}
+    public function __construct(private readonly TripsService $trips, private readonly GpsTrackingService $gps, private readonly PhoneTrackingService $phones) {}
 
     /** What the browser needs to draw a map. Only a Mapbox PUBLIC token (pk.…) ever leaves the server. */
     public function config(): array
@@ -158,6 +159,9 @@ class TransportMapService
             'lastFix' => self::lastFix([$t->id])[$t->id] ?? null,
             'vehicle' => self::vehiclePosition($t->vehicle),
             'trail' => $t->vehicle && in_array($t->status, U::ACTIVE_TRIP_STATES, true) ? $this->gps->trail($t->vehicle->id, 12) : [],
+            // the driver's phone (native app, active trip, consented) and its trail on this trip — compared with the truck
+            'phone' => $this->phones->phoneOf($t),
+            'phoneTrail' => in_array($t->status, PhoneTrackingService::TRACKED_TRIP_STATES, true) || $t->status === 'closed' ? $this->phones->trail($t->id) : [],
             'optimize' => ['allowed' => $block === null, 'code' => $block[0] ?? null, 'reasonAr' => $block[1] ?? null, 'reasonEn' => $block[2] ?? null],
         ];
     }
@@ -202,6 +206,7 @@ class TransportMapService
             'trips' => $trips->map(fn (Trip $t) => [
                 'number' => $t->number, 'status' => $t->status, 'routeAr' => $t->route_ar, 'warehouse' => $t->warehouse?->code, 'delayMin' => $t->delay_min,
                 'vehicle' => $t->vehicle?->code, 'driverAr' => $t->driver?->name_ar, 'stops' => self::stops($t), 'lastFix' => $fixes[$t->id] ?? null,
+                'phone' => $this->phones->phoneOf($t),
             ])->all(),
             'vehicles' => $vehicles->map(fn (Vehicle $v) => self::vehiclePosition($v))->all(),
             'gps' => AdapterFactory::gps()->configured()

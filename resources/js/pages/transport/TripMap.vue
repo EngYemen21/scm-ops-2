@@ -36,7 +36,19 @@ const markers = computed(() => {
   }
   if (x.lastFix) out.push({ id: 'fix', kind: 'fix', lat: x.lastFix.lat, lng: x.lastFix.lng, title: t('آخر موقع سجّله جوال السائق', 'Last fix from the driver phone'), sub: [t('عند إثبات التسليم', 'At proof of delivery'), fmtAgo(x.lastFix.at)] });
   if (x.vehicle) out.push({ id: 'vehicle', kind: x.vehicle.gpsOnline ? 'vehicle' : 'vehicle off', lat: x.vehicle.lat, lng: x.vehicle.lng, text: '🚚', title: `${x.vehicle.code}${x.vehicle.plateAr ? ` · ${x.vehicle.plateAr}` : ''}`, sub: [x.vehicle.gpsOnline ? `${t('متصلة', 'Online')} · ${fmtNum(x.vehicle.speedKph ?? 0)} ${t('كم/س', 'km/h')}` : t('غير متصلة', 'Offline'), x.vehicle.at && `${t('آخر موقع', 'Last fix')} ${fmtAgo(x.vehicle.at)}`].filter(Boolean) });
+  const ph = x.phone;
+  if (ph?.lat != null) out.push({ id: 'phone', kind: ph.status === 'live' ? 'phone' : 'phone off', lat: ph.lat, lng: ph.lng, text: '📱', title: `${t('جوال السائق', 'Driver phone')} · ${ph.driverAr}`, sub: [phoneLine.value, ph.at && `${t('آخر موقع', 'Last fix')} ${fmtAgo(ph.at)}`].filter(Boolean) });
   return out;
+});
+
+/** One honest line about the driver's phone on this trip (tracking state + distance from the truck). */
+const phoneLine = computed(() => {
+  const ph = d.value?.phone;
+  if (!ph) return null;
+  const base = { live: t('يعمل', 'live'), stale: t('توقف الإرسال', 'stopped reporting'), waiting: t('بانتظار أول موقع', 'waiting for a first fix'), no_consent: t('لم يوافق السائق على التتبع بعد', 'driver has not accepted tracking') }[ph.status] || ph.status;
+  const speed = ph.status === 'live' && ph.speedKph != null ? ` · ${fmtNum(ph.speedKph)} ${t('كم/س', 'km/h')}` : '';
+  const apart = ph.metresFromTruck != null ? ` · ${t('يبعد عن الشاحنة', 'from the truck')} ${ph.metresFromTruck >= 1000 ? `${fmtNum(ph.metresFromTruck / 1000, 1)} ${t('كم', 'km')}` : `${fmtNum(ph.metresFromTruck)} ${t('م', 'm')}`}` : '';
+  return `${base}${speed}${apart}`;
 });
 
 /** Provider line when there is one; otherwise straight dashed links between the located points (clearly not a road). */
@@ -44,7 +56,11 @@ const lines = computed(() => {
   const x = d.value;
   if (!x) return [];
   const trail = (x.trail || []).map((p) => [p.lng, p.lat]);
-  const trailLine = trail.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: trail }, color: '#3C79F5', width: 3 }] : [];
+  const phoneTrail = (x.phoneTrail || []).map((p) => [p.lng, p.lat]);
+  const trailLine = [
+    ...(trail.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: trail }, color: '#3C79F5', width: 3 }] : []),
+    ...(phoneTrail.length > 1 ? [{ id: 'phone-trail', geometry: { type: 'LineString', coordinates: phoneTrail }, color: '#1d7a3e', width: 3 }] : []),
+  ];
   if (route.value?.status === 'ok' && route.value.geometry) return [{ id: 'route', geometry: route.value.geometry }, ...trailLine];
   const pts = [x.origin, ...x.stops].filter((p) => p && p.lat != null).map((p) => [p.lng, p.lat]);
   return [...(pts.length > 1 ? [{ id: 'links', geometry: { type: 'LineString', coordinates: pts }, dashed: true, color: '#7d7990' }] : []), ...trailLine];
@@ -88,10 +104,17 @@ async function optimize() {
       <span v-else-if="route?.status === 'error'" class="text-bad">{{ t('تعذّر حساب المسار من مزود الخرائط', 'The maps provider could not compute the route') }}</span>
 
       <span v-if="d.vehicle" class="font-bold" :class="d.vehicle.gpsOnline ? 'text-ok' : 'text-muted'">🚚 {{ d.vehicle.code }} · {{ d.vehicle.gpsOnline ? `${fmtNum(d.vehicle.speedKph ?? 0)} ${t('كم/س', 'km/h')}` : t('غير متصلة', 'offline') }}{{ d.vehicle.at ? ` · ${fmtAgo(d.vehicle.at)}` : '' }}</span>
+      <span v-if="d.phone" class="font-bold" :class="d.phone.status === 'live' ? 'text-ok' : d.phone.status === 'stale' ? 'text-bad' : 'text-muted'">📱 {{ d.phone.driverAr }} · {{ phoneLine }}</span>
       <span class="flex-1" />
       <Btn v-if="canManage && d.optimize.allowed" tone="softPurple" size="sm" :loading="act.pending.value" :label="{ ar: 'تحسين ترتيب المحطات', en: 'Optimise stop order' }" @click="optimize" />
     </div>
 
+    <div v-if="d?.phone?.apart" class="mt-2 rounded-[10px] bg-[#fdecec] px-3 py-2 text-[10.5px] font-bold text-bad">
+      ⚠ {{ t('جوال السائق بعيد عن الشاحنة', 'The driver\'s phone is away from the truck') }} ({{ fmtNum(d.phone.metresFromTruck / 1000, 1) }} {{ t('كم', 'km') }}) — {{ t('تحقّق من السائق', 'check with the driver') }}
+    </div>
+    <div v-else-if="d?.phone?.status === 'stale'" class="mt-2 rounded-[10px] bg-[#fbf0dd] px-3 py-2 text-[10.5px] font-bold text-warn">
+      {{ t('توقف جوال السائق عن إرسال موقعه منذ', 'The driver\'s phone stopped reporting') }} {{ fmtAgo(d.phone.at) }} — {{ t('غالبًا أُغلق التطبيق أو انقطعت الشبكة؛ موقع الشاحنة من جهاز التتبع مستمر.', 'the app was probably closed or offline; the truck GPS keeps reporting.') }}
+    </div>
     <div v-if="d?.unlocated.length" class="mt-2 rounded-[10px] bg-[#fbf0dd] px-3 py-2 text-[10px] font-bold text-warn">
       {{ t('محطات بلا موقع على الخريطة', 'Stops without a map location') }}:
       <span v-for="(u, i) in d.unlocated" :key="u.seq"><span class="num">{{ u.seq }}</span> · {{ u.customerAr }}{{ i < d.unlocated.length - 1 ? '، ' : '' }}</span>

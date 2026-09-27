@@ -10,8 +10,9 @@ import { TRIP_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
 import { BIG } from './driver';
 import DriverStopCard from './DriverStopCard.vue';
+import DriverTrackingStatus from './DriverTrackingStatus.vue';
 import OpsRequestForm from './OpsRequestForm.vue';
-import { OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, PENDING, drvName, labelOf, vehName } from './tms';
+import { OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, drvName, labelOf, vehName } from './tms';
 
 const auth = useAuth();
 const act = useAction();
@@ -33,7 +34,6 @@ const canStart = computed(() => canExec.value && !!cur.value && cur.value.status
 const onRoute = computed(() => !!cur.value && ['onroute', 'partial'].includes(cur.value.status));
 const waitingDispatch = computed(() => !!cur.value && cur.value.status !== 'onroute' && !['partial', 'completed', 'returning'].includes(cur.value.status));
 const notDriver = computed(() => q.error.value?.code === 'NOT_A_DRIVER');
-const gpsText = computed(() => { const s = q.data.value?.gps?.status; return !s || s === 'integration_pending' ? bi(PENDING) : s; });
 
 const start = () => act.run(() => api.postIdempotent(`/delivery/trips/${encodeURIComponent(cur.value.number)}/start`), { success: (r) => r?.message || t('بدأت الرحلة — بالتوفيق', 'Trip started — drive safe'), invalidate: ['delivery', 'transport'] });
 
@@ -77,7 +77,7 @@ const sub = computed(() => `${userName.value} · ${t('واجهة السائق Mo
           <div class="num text-[13px] font-bold text-brand">{{ prog.done }}/{{ prog.total }}</div>
         </div>
         <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-night-3"><div class="h-full bg-brand" :style="{ width: progPct + '%' }" /></div>
-        <div class="mt-2 text-[9px] text-[#7FD6E5]">ETA · {{ t('التتبع', 'Tracking') }}: {{ bi(PENDING) }} · GPS: {{ gpsText }}</div>
+        <DriverTrackingStatus />
         <button v-if="canStart" type="button" :class="BIG" class="mt-[13px] h-[46px] w-full rounded-xl bg-brand text-[12.5px] text-[#0b2a30]" :disabled="act.pending.value" @click="start">{{ t('بدء الرحلة — Start Route', 'Start Route') }}</button>
         <div v-if="waitingDispatch" class="mt-2.5 text-[9.5px] text-[#8b90a5]">{{ t('بانتظار التحميل والإرسال من المستودع (Dispatch) قبل بدء الرحلة.', 'Waiting for warehouse loading & dispatch before the trip can start.') }}</div>
       </div>
