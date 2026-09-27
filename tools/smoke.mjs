@@ -32,7 +32,7 @@ const urls = [...new Set([...routes, ...reports, '/search?q=PO&limit=5'])].sort(
 const results = [];
 for (let i = 0; i < urls.length; i += 6) results.push(...await Promise.all(urls.slice(i, i + 6).map(get)));
 // Correct refusals, not failures: an administrator is not a driver; the attachment list needs entityType + entityId; a label needs its text.
-const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400, '/barcodes/code128': 400, '/barcodes/qr': 400 };
+const EXPECTED = { '/delivery/my-trips': USER === 'driver' ? 200 : 403, '/delivery/tracking': USER === 'driver' ? 200 : 403, '/integrations/attachments': 400, '/barcodes/code128': 400, '/barcodes/qr': 400 };
 // A provider-backed list answers 422 <CODE>_PENDING until that provider is configured — an honest state, not a failure.
 const pending = (r) => r.status === 422 && /"code":"[A-Z_]+_PENDING"/.test(r.body);
 // Non-API pages are checked by CONTENT: the SPA shell answers 200 for any path, so a stale or failed deploy would
