@@ -2,12 +2,14 @@
 
 namespace App\Services\Integrations\Adapters;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Mapbox: Directions (traffic-aware ETA + the route line), Optimization (stop ordering). Coordinates only — Mapbox
+ * Mapbox: Directions (traffic-aware ETA + the route line), Optimization (stop ordering), Map Matching (a recorded
+ * trail snapped to the streets). Coordinates only — Mapbox
  * takes `lng,lat`; places given as an address string are refused (geocode them in the client's map picker first).
  *
  * The token is a Mapbox PUBLIC token (pk.…): it is meant to be shipped to browsers and is also what draws the map in
@@ -20,6 +22,12 @@ class MapboxMaps implements MapsAdapter
 
     public const OPTIMIZE_MAX = 12;
 
+    /** Map Matching accepts 100 coordinates per request. */
+    public const MATCH_MAX = 100;
+
+    /** A matching Mapbox is less sure of than this is dropped: the recorded trace is drawn instead. */
+    public const MATCH_MIN_CONFIDENCE = 0.2;
+
     public function __construct(private readonly string $token, private readonly int $timeoutMs = 8000) {}
 
     public function configured(): bool
@@ -30,8 +38,20 @@ class MapboxMaps implements MapsAdapter
     /** @return array{ok:bool, data?:array, detail?:string} */
     private function getJson(string $url, array $query): array
     {
+        return $this->send(fn () => Http::timeout($this->timeoutMs / 1000)->get($url, $query + ['access_token' => $this->token]));
+    }
+
+    /** POST form body: for long coordinate lists that would overflow a GET URL. */
+    private function postForm(string $url, array $form): array
+    {
+        return $this->send(fn () => Http::timeout($this->timeoutMs / 1000)->asForm()->post($url.'?access_token='.urlencode($this->token), $form));
+    }
+
+    /** @param  callable():\Illuminate\Http\Client\Response  $request */
+    private function send(callable $request): array
+    {
         try {
-            $res = Http::timeout($this->timeoutMs / 1000)->get($url, $query + ['access_token' => $this->token]);
+            $res = $request();
             $data = (array) $res->json();
             if (! $res->successful() || ($data['code'] ?? 'Ok') !== 'Ok') {
                 return ['ok' => false, 'detail' => trim(($data['code'] ?? "HTTP {$res->status()}").' '.Pending::snippet((string) ($data['message'] ?? ''), 80))];
@@ -120,5 +140,51 @@ class MapboxMaps implements MapsAdapter
         $trip = $r['data']['trips'][0] ?? [];
 
         return ['status' => 'ok', 'order' => array_values($byPosition), 'totalKm' => round(($trip['distance'] ?? 0) / 100) / 10, 'totalMinutes' => (int) round(($trip['duration'] ?? 0) / 60)];
+    }
+
+    /**
+     * Map Matching. Each fix gets a search radius from its own accuracy (10–50 m, Mapbox's cap) and its timestamp, so
+     * Mapbox can tell a U-turn from GPS noise; `tidy` drops clusters of fixes taken while standing. The driving
+     * profile first; a stretch it cannot place on a road (the driver walking to a door, across a yard) is tried on the
+     * walking network before giving up.
+     */
+    public function matchTrace(array $points): array
+    {
+        $r = $this->matchOn('driving', $points);
+
+        $offRoad = $r['status'] !== 'ok' && preg_match('/^(low confidence|NoMatch)/', $r['detail'] ?? '');
+
+        return $offRoad ? $this->matchOn('walking', $points) : $r;
+    }
+
+    private function matchOn(string $profile, array $points): array
+    {
+        $points = array_values($points);
+        $coords = array_map(self::coord(...), $points);
+        if (count($coords) < 2 || in_array(null, $coords, true)) {
+            return ['status' => 'error', 'detail' => 'every point needs coordinates'];
+        }
+        if (count($coords) > self::MATCH_MAX) {
+            return ['status' => 'error', 'detail' => 'too many points (max '.self::MATCH_MAX.')'];
+        }
+        $radius = fn (array $p) => (string) max(10, min(50, (int) round(2 * (float) ($p['accuracy'] ?? 12.5))));
+        $r = $this->postForm("https://api.mapbox.com/matching/v5/mapbox/{$profile}", [
+            'coordinates' => implode(';', $coords),
+            'radiuses' => implode(';', array_map($radius, $points)),
+            'timestamps' => implode(';', array_map(fn (array $p) => (string) Carbon::parse($p['at'])->getTimestamp(), $points)),
+            'geometries' => 'geojson', 'overview' => 'full', 'tidy' => 'true',
+        ]);
+        if (! $r['ok']) {
+            return ['status' => 'error', 'detail' => $r['detail']];
+        }
+        $lines = [];
+        foreach ($r['data']['matchings'] ?? [] as $m) {
+            $line = $m['geometry']['coordinates'] ?? [];
+            if (($m['confidence'] ?? 0) >= self::MATCH_MIN_CONFIDENCE && count($line) > 1) {
+                $lines[] = array_map(fn ($c) => [(float) $c[0], (float) $c[1]], $line);
+            }
+        }
+
+        return $lines ? ['status' => 'ok', 'lines' => $lines] : ['status' => 'error', 'detail' => 'low confidence'];
     }
 }

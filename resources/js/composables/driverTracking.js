@@ -75,7 +75,7 @@ async function startWatcher() {
     backgroundMessage: 'يُرسل موقعك أثناء الرحلة فقط ويتوقف تلقائيًا عند انتهائها',
     requestPermissions: true,
     stale: false,
-    distanceFilter: tracking.state?.distanceFilterMetres ?? 50,
+    distanceFilter: tracking.state?.distanceFilterMetres ?? 25,
   }, onLocation);
   tracking.running = true;
 }

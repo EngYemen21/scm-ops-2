@@ -23,4 +23,13 @@ interface MapsAdapter
      * @return array{status:string, order:string[], totalKm?:float, totalMinutes?:int, detail?:string} when pending, `order` is the input order unchanged
      */
     public function optimizeRoute(array $stops): array;
+
+    /**
+     * Snaps a recorded GPS trace (oldest first) to the road network, so a trail follows the streets instead of cutting
+     * straight between fixes.
+     *
+     * @param  list<array{lat:float, lng:float, accuracy?:float|null, at:string|\DateTimeInterface}>  $points
+     * @return array{status:string, lines?:list<list<array{0:float, 1:float}>>, detail?:string} lines are `[lng, lat]` runs; a gap in the trace splits them
+     */
+    public function matchTrace(array $points): array;
 }

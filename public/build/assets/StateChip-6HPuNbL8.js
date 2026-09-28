@@ -1,1 +1,0 @@
-import{X as e,c as t,w as n}from"./runtime-core.esm-bundler-BMzhbq6t.js";import{i as r,it as i}from"./app-CV2yfvah.js";var a={__name:`StateChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(n(),t(e(i),{map:e(r),k:a.k,small:a.small},null,8,[`map`,`k`,`small`]))}};export{a as default};

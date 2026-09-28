@@ -56,10 +56,12 @@ const lines = computed(() => {
   const x = d.value;
   if (!x) return [];
   const trail = (x.trail || []).map((p) => [p.lng, p.lat]);
+  // the phone trail snapped to the streets by the server; the recorded fix-to-fix line only when that is missing
   const phoneTrail = (x.phoneTrail || []).map((p) => [p.lng, p.lat]);
+  const phoneLines = x.phoneRoute?.lines?.length ? x.phoneRoute.lines : [phoneTrail];
   const trailLine = [
     ...(trail.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: trail }, color: '#3C79F5', width: 3 }] : []),
-    ...(phoneTrail.length > 1 ? [{ id: 'phone-trail', geometry: { type: 'LineString', coordinates: phoneTrail }, color: '#1d7a3e', width: 3 }] : []),
+    ...phoneLines.filter((l) => l.length > 1).map((coordinates, i) => ({ id: `phone-trail-${i}`, geometry: { type: 'LineString', coordinates }, color: '#1d7a3e', width: 4 })),
   ];
   if (route.value?.status === 'ok' && route.value.geometry) return [{ id: 'route', geometry: route.value.geometry }, ...trailLine];
   const pts = [x.origin, ...x.stops].filter((p) => p && p.lat != null).map((p) => [p.lng, p.lat]);

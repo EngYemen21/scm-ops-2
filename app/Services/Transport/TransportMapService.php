@@ -31,7 +31,7 @@ class TransportMapService
 
     private const ORIGIN = '__origin__';
 
-    public function __construct(private readonly TripsService $trips, private readonly GpsTrackingService $gps, private readonly PhoneTrackingService $phones) {}
+    public function __construct(private readonly TripsService $trips, private readonly GpsTrackingService $gps, private readonly PhoneTrackingService $phones, private readonly TraceMatcher $matcher) {}
 
     /** What the browser needs to draw a map. Only a Mapbox PUBLIC token (pk.…) ever leaves the server. */
     public function config(): array
@@ -150,6 +150,7 @@ class TransportMapService
         $origin = self::origin($t->warehouse);
         $stops = self::stops($t);
         $block = self::optimizeBlock($t, $origin, $stops);
+        $phoneTrail = in_array($t->status, PhoneTrackingService::TRACKED_TRIP_STATES, true) || $t->status === 'closed' ? $this->phones->trail($t->id) : [];
 
         return [
             'number' => $t->number, 'status' => $t->status, 'routeAr' => $t->route_ar,
@@ -161,7 +162,9 @@ class TransportMapService
             'trail' => $t->vehicle && in_array($t->status, U::ACTIVE_TRIP_STATES, true) ? $this->gps->trail($t->vehicle->id, 12) : [],
             // the driver's phone (native app, active trip, consented) and its trail on this trip — compared with the truck
             'phone' => $this->phones->phoneOf($t),
-            'phoneTrail' => in_array($t->status, PhoneTrackingService::TRACKED_TRIP_STATES, true) || $t->status === 'closed' ? $this->phones->trail($t->id) : [],
+            'phoneTrail' => PhoneTrackingService::thin($phoneTrail),
+            // the same trail snapped to the streets (drawn instead of the straight fix-to-fix line when available)
+            'phoneRoute' => $this->matcher->lines('phone:'.$t->id, $phoneTrail),
             'optimize' => ['allowed' => $block === null, 'code' => $block[0] ?? null, 'reasonAr' => $block[1] ?? null, 'reasonEn' => $block[2] ?? null],
         ];
     }

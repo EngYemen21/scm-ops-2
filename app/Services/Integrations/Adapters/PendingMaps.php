@@ -24,4 +24,9 @@ class PendingMaps implements MapsAdapter
     {
         return ['status' => Pending::STATUS, 'order' => array_values(array_column($stops, 'id')), 'detail' => Pending::DETAIL_EN];
     }
+
+    public function matchTrace(array $points): array
+    {
+        return Pending::result();
+    }
 }

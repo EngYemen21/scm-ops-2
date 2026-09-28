@@ -26,7 +26,14 @@ class PhoneTrackingService
     /** What the phone is told to do (seconds between reports when moving, metres between fixes). */
     public const REPORT_INTERVAL_SECONDS = 30;
 
-    public const DISTANCE_FILTER_METRES = 50;
+    /** Dense enough that a turn shows as a turn (50 m drew corners as straight chords), sparse enough for the battery. */
+    public const DISTANCE_FILTER_METRES = 25;
+
+    /** A fix less precise than this is stored (last position, audit) but left off the drawn trail. */
+    public const TRAIL_MAX_ACCURACY_METRES = 50;
+
+    /** The trail sent to a browser is thinned to this many points (the snapped line is built from all of them). */
+    public const TRAIL_MAX_POINTS = 3000;
 
     /** A tracked trip whose last phone fix is older than this is flagged "phone tracking stopped". */
     public const STALE_MINUTES = 10;
@@ -176,9 +183,53 @@ class PhoneTrackingService
     }
 
     /** @return list<array{lat:float, lng:float, speedKph:?float, at:mixed}> oldest first */
+    /**
+     * The phone's path on a trip, oldest first, cleaned for drawing: imprecise fixes are dropped, and so is a fix that
+     * lies within the GPS error of the previous one (standing still makes the reported position wander a few metres,
+     * which drew as spikes). The latest fix is always kept so the line reaches the phone marker.
+     *
+     * @return list<array{lat:float, lng:float, accuracy:float|null, speedKph:float|null, at:mixed}>
+     */
     public function trail(string $tripId, ?string $driverId = null): array
     {
-        return DriverPosition::where('trip_id', $tripId)->when($driverId, fn ($q) => $q->where('driver_id', $driverId))
-            ->orderBy('at')->limit(3000)->get()->map(fn ($p) => ['lat' => $p->lat, 'lng' => $p->lng, 'speedKph' => $p->speed_kph, 'at' => $p->at])->all();
+        $rows = DriverPosition::where('trip_id', $tripId)->when($driverId, fn ($q) => $q->where('driver_id', $driverId))
+            ->orderBy('at')->limit(20000)->get(['lat', 'lng', 'accuracy', 'speed_kph', 'at']);
+        $out = [];
+        $last = $rows->count() - 1;
+        foreach ($rows->values() as $i => $p) {
+            if ($p->accuracy !== null && $p->accuracy > self::TRAIL_MAX_ACCURACY_METRES) {
+                continue;
+            }
+            $prev = $out ? $out[count($out) - 1] : null;
+            if ($prev) {
+                $noise = max(5.0, (float) ($p->accuracy ?? 10), (float) ($prev['accuracy'] ?? 10));
+                $tooClose = self::metresBetween($prev['lat'], $prev['lng'], (float) $p->lat, (float) $p->lng) < $noise;
+                if ($p->at->getTimestamp() <= $prev['at']->getTimestamp() || ($tooClose && $i !== $last)) {
+                    continue;
+                }
+                if ($tooClose) { // the latest fix, but still inside the noise: move the end of the line there
+                    array_pop($out);
+                }
+            }
+            $out[] = ['lat' => (float) $p->lat, 'lng' => (float) $p->lng, 'accuracy' => $p->accuracy, 'speedKph' => $p->speed_kph, 'at' => $p->at];
+        }
+
+        return $out;
+    }
+
+    /** Evenly thins a trail to at most $max points, keeping the first and the last. */
+    public static function thin(array $trail, int $max = self::TRAIL_MAX_POINTS): array
+    {
+        $n = count($trail);
+        if ($n <= $max) {
+            return $trail;
+        }
+        $out = [];
+        for ($k = 0; $k < $max - 1; $k++) {
+            $out[] = $trail[intdiv($k * ($n - 1), $max - 1)];
+        }
+        $out[] = $trail[$n - 1];
+
+        return $out;
     }
 }

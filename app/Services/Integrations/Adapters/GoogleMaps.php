@@ -107,4 +107,10 @@ class GoogleMaps implements MapsAdapter
             'totalKm' => round($meters / 100) / 10, 'totalMinutes' => (int) round($seconds / 60),
         ];
     }
+
+    /** Snapping needs the separate Roads API product: the caller draws the recorded trace as it is. */
+    public function matchTrace(array $points): array
+    {
+        return ['status' => 'error', 'detail' => 'trace matching is not offered by this provider'];
+    }
 }

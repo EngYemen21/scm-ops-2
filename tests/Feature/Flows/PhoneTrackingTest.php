@@ -8,6 +8,9 @@ use App\Models\DriverPosition;
 use App\Models\Trip;
 use App\Models\Vehicle;
 use App\Services\Delivery\PhoneTrackingService;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Tests\ApiTestCase;
 
 /**
@@ -128,5 +131,52 @@ class PhoneTrackingTest extends ApiTestCase
         // silence for longer than the stale window → "stale" (the app was force-closed or lost the network)
         $d->update(['phone_at' => now()->subMinutes(PhoneTrackingService::STALE_MINUTES + 5)]);
         $this->assertSame('stale', $this->expectOk($this->getAs('disp', "/api/transport/trips/{$trip->number}/map"))['phone']['status']);
+    }
+
+    public function test_the_phone_trail_is_cleaned_and_snapped_to_the_streets(): void
+    {
+        $d = $this->fresh();
+        [$trip] = $this->dispatchedTrip($d, [[[$this->product('PT-C'), 1]]]);
+        $this->expectOk($this->postAs('driver', '/api/delivery/tracking/consent', ['accepted' => true]));
+        $this->expectOk($this->postAs('driver', '/api/delivery/tracking/points', ['points' => [
+            $this->point(24.7000, 46.7000, 300, ['accuracy' => 6]),
+            $this->point(24.70003, 46.70002, 280, ['accuracy' => 6]),   // 4 m away while standing: GPS noise
+            $this->point(24.7040, 46.7000, 240, ['accuracy' => 80]),    // imprecise fix: stored, not drawn
+            $this->point(24.7010, 46.7000, 200, ['accuracy' => 5]),
+            $this->point(24.7020, 46.7010, 100, ['accuracy' => 5]),
+        ]]));
+        $this->assertSame(5, DriverPosition::where('trip_id', $trip->id)->count());
+        $url = "/api/transport/trips/{$trip->number}/map";
+
+        // no maps provider: the cleaned recorded line
+        config(['integrations.MAPBOX_PUBLIC_TOKEN' => null]);
+        $map = $this->expectOk($this->getAs('disp', $url));
+        $this->assertSame([[24.7, 46.7], [24.701, 46.7], [24.702, 46.701]], array_map(fn ($p) => [$p['lat'], $p['lng']], $map['phoneTrail']));
+        $this->assertSame(['matched' => false, 'lines' => [[[46.7, 24.7], [46.7, 24.701], [46.701, 24.702]]]], $map['phoneRoute']);
+
+        // Mapbox: the line follows the streets; fix accuracy → search radius, fix time → timestamp
+        config(['integrations.MAPBOX_PUBLIC_TOKEN' => 'pk.test-token']);
+        $street = [[46.7, 24.7], [46.7001, 24.7005], [46.7, 24.701], [46.7005, 24.7015], [46.701, 24.702]];
+        $matching = fn (float $confidence) => ['code' => 'Ok', 'matchings' => [['confidence' => $confidence, 'geometry' => ['type' => 'LineString', 'coordinates' => $street]]]];
+        Http::fake(['api.mapbox.com/matching/*' => Http::sequence()->push($matching(0.93))
+            ->push($matching(0.05))->push($matching(0.6))       // 2nd load: not a road → the walking network places it
+            ->push(['code' => 'NoMatch'], 200)->push($matching(0.05))]); // 3rd load: neither → recorded line
+        $map = $this->expectOk($this->getAs('disp', $url));
+        $this->assertSame(['matched' => true, 'lines' => [$street]], $map['phoneRoute']);
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/matching/v5/mapbox/driving?access_token=pk.test-token')
+            && $r['coordinates'] === '46.7,24.7;46.7,24.701;46.701,24.702' && $r['radiuses'] === '12;10;10' && count(explode(';', $r['timestamps'])) === 3);
+
+        // reopened: served from the cache, no second provider call
+        $this->expectOk($this->getAs('disp', $url));
+        $this->assertCount(1, Http::recorded(fn (Request $r) => str_contains($r->url(), '/matching/')));
+
+        // off the road network (the driver walking to a door): matched on foot
+        Cache::flush();
+        $this->assertSame(['matched' => true, 'lines' => [$street]], $this->expectOk($this->getAs('disp', $url))['phoneRoute']);
+        $this->assertCount(1, Http::recorded(fn (Request $r) => str_contains($r->url(), '/matching/v5/mapbox/walking?')));
+
+        // a match Mapbox cannot make or is unsure of is not drawn: the recorded line is
+        Cache::flush();
+        $this->assertSame(['matched' => false, 'lines' => [[[46.7, 24.7], [46.7, 24.701], [46.701, 24.702]]]], $this->expectOk($this->getAs('disp', $url))['phoneRoute']);
     }
 }

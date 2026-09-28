@@ -115,6 +115,8 @@ disclosure and consent — next to the truck's own GPS (Wialon), so the dispatch
 | Phone logic | `resources/js/composables/driverTracking.js` — polls `GET /delivery/tracking`, starts / stops the watcher, queues fixes in local storage (network gaps), sends batches to `POST /delivery/tracking/points` |
 | Consent | `layout/DriverTrackingConsent.vue` (disclosure BEFORE the OS prompt — Play "prominent disclosure"), `POST /delivery/tracking/consent`; driver can withdraw from "رحلاتي" |
 | Server | `app/Services/Delivery/PhoneTrackingService.php` — stores fixes only for a consented driver on an active trip (else answers `tracking:false`), validates (range, ≤24 h old, not future, accuracy ≤1 km), de-duplicates on (driver, time), keeps 30 days |
+| Trail | a fix every 25 m (`DISTANCE_FILTER_METRES`, sent by the server — no app rebuild to tune it); drawn trail drops fixes worse than 50 m and fixes within the GPS error of the previous one (standing-still spikes) |
+| Snapped line | `app/Services/Transport/TraceMatcher.php` + Mapbox Map Matching (driving, then walking for off-road stretches), blocks of 100 fixes cached per block — a finished block is matched once; unmatched / low-confidence blocks are drawn as recorded (`phoneRoute.matched=false`) |
 | Maps | trip map: 📱 marker + green phone trail + "phone away from the truck" (>1 km, both fresh) / "stopped reporting" (>10 min); fleet map: every open trip's phone + an alert list |
 
 Honest limit: the OS stops tracking if the driver force-closes the app (swipes it away on Android, force-quits on
