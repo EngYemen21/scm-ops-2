@@ -100,11 +100,13 @@ function fit(force = false) {
   const key = `${props.fitKey}|${all.length > 0}`;
   if (!force && fitted === key) return;
   fitted = key;
-  if (all.length === 0) { map.value.jumpTo(SAUDI); return; }
-  if (all.length === 1) { map.value.jumpTo({ center: [all[0].lng, all[0].lat], zoom: props.pickable ? 14 : 11.5 }); return; }
+  // a single marker with a trail behind it (vehicle drawer) frames the whole trail, not just the marker
+  const lineCoords = props.lines.flatMap((l) => l.geometry?.coordinates || []);
+  if (all.length === 0 && lineCoords.length < 2) { map.value.jumpTo(SAUDI); return; }
+  if (all.length === 1 && lineCoords.length < 2) { map.value.jumpTo({ center: [all[0].lng, all[0].lat], zoom: props.pickable ? 14 : 11.5 }); return; }
   const b = new gl.LngLatBounds();
   all.forEach((p) => b.extend([p.lng, p.lat]));
-  props.lines.forEach((l) => l.geometry?.coordinates?.forEach((c) => b.extend(c)));
+  lineCoords.forEach((c) => b.extend(c));
   map.value.fitBounds(b, { padding: 42, maxZoom: 14, duration: 0 });
 }
 

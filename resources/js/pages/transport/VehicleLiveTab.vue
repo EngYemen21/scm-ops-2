@@ -81,7 +81,7 @@ const syncNow = () => act.run(() => api.post('/transport/gps/sync'), { success: 
       </div>
 
       <template v-if="vehicle.gpsDeviceId">
-        <MapView :height="260" :markers="markers" :lines="lines" :fit-key="`${code}|${(d?.trail || []).length}`" :pending-label="{ ar: 'خريطة المركبة', en: 'Vehicle map' }" />
+        <MapView :height="260" :markers="markers" :lines="lines" :fit-key="`${code}|${d?.hours ?? ''}`" :pending-label="{ ar: 'خريطة المركبة', en: 'Vehicle map' }" />
         <div class="row wrap !gap-x-3 !gap-y-1 text-[10px] text-muted">
           <span v-if="live.at">{{ t('آخر موقع', 'Last fix') }}: <span class="num">{{ fmtDate(live.at) }}</span> ({{ fmtAgo(live.at) }})</span>
           <span v-if="live.speedKph != null">{{ t('السرعة', 'Speed') }}: <span class="num">{{ fmtNum(live.speedKph) }}</span> {{ t('كم/س', 'km/h') }}</span>
