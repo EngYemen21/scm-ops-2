@@ -40,6 +40,8 @@ class Vehicle extends BaseModel
             'map_y' => 'float',
             'lat' => 'float',
             'gps_at' => 'datetime',
+            'gps_history_from' => 'datetime',
+            'gps_history_until' => 'datetime',
             'speed_kph' => 'float',
             'course' => 'integer',
             'lng' => 'float',

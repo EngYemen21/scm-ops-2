@@ -169,6 +169,38 @@ class WialonGps implements GpsAdapter
         return ['status' => 'ok', 'vehicleCode' => $vehicleCode, 'lat' => $u['lat'], 'lng' => $u['lng'], 'speedKph' => $u['speedKph'], 'at' => $u['at'] ?? now()->toIso8601ZuluString()];
     }
 
+    /**
+     * The unit's recorded positions between two times (its message history on the Wialon server), oldest first — the
+     * real track the device reported, not only the fixes this server happened to sample. At most $max messages; `more`
+     * says the window held more (ask again from the last `at`).
+     *
+     * @return array{status:string, points?:list<array{lat:float, lng:float, speedKph:?float, course:?int, at:string}>, more?:bool, detail?:string}
+     */
+    public function track(string $unitId, int $from, int $to, int $max = 5000): array
+    {
+        // flags / mask: data messages (type 0x0000 in the 0xFF00 type bits) that carry a position (0x0001)
+        $r = $this->inSession('messages/load_interval', ['itemId' => (int) $unitId, 'timeFrom' => $from, 'timeTo' => $to, 'flags' => 0x0001, 'flagsMask' => 0xFF01, 'loadCount' => $max]);
+        if (! $r['ok']) {
+            return ($r['code'] ?? null) === 1001 ? ['status' => 'ok', 'points' => [], 'more' => false] : ['status' => 'error', 'detail' => $r['detail']];
+        }
+        $messages = (array) ($r['data']['messages'] ?? []);
+        $points = [];
+        foreach ($messages as $m) {
+            $pos = is_array($m['pos'] ?? null) ? $m['pos'] : null;
+            if (! $pos || ! is_numeric($pos['y'] ?? null) || ! is_numeric($pos['x'] ?? null) || ! is_numeric($m['t'] ?? null) || ((float) $pos['y'] === 0.0 && (float) $pos['x'] === 0.0)) {
+                continue;
+            }
+            $points[] = [
+                'lat' => (float) $pos['y'], 'lng' => (float) $pos['x'],
+                'speedKph' => is_numeric($pos['s'] ?? null) ? (float) $pos['s'] : null, 'course' => is_numeric($pos['c'] ?? null) ? (int) $pos['c'] : null,
+                'at' => gmdate('Y-m-d\TH:i:s\Z', (int) $m['t']),
+            ];
+        }
+        $this->inSession('messages/unload', []); // frees the message buffer the session holds
+
+        return ['status' => 'ok', 'points' => $points, 'more' => count($messages) >= $max];
+    }
+
     /** Reefer temperature needs the unit's sensor configuration (differs per installer) — honestly not read here. */
     public function getVehicleTemperature(string $vehicleCode): array
     {

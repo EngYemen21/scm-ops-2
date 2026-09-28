@@ -151,6 +151,7 @@ class TransportMapService
         $stops = self::stops($t);
         $block = self::optimizeBlock($t, $origin, $stops);
         $phoneTrail = in_array($t->status, PhoneTrackingService::TRACKED_TRIP_STATES, true) || $t->status === 'closed' ? $this->phones->trail($t->id) : [];
+        $truckTrail = $t->vehicle && in_array($t->status, U::ACTIVE_TRIP_STATES, true) ? $this->gps->trail($t->vehicle->id, 12) : [];
 
         return [
             'number' => $t->number, 'status' => $t->status, 'routeAr' => $t->route_ar,
@@ -159,10 +160,12 @@ class TransportMapService
             'route' => $this->routeFor($origin, $stops),
             'lastFix' => self::lastFix([$t->id])[$t->id] ?? null,
             'vehicle' => self::vehiclePosition($t->vehicle),
-            'trail' => $t->vehicle && in_array($t->status, U::ACTIVE_TRIP_STATES, true) ? $this->gps->trail($t->vehicle->id, 12) : [],
+            'trail' => TraceMatcher::thin($truckTrail, PhoneTrackingService::TRAIL_MAX_POINTS),
+            // the truck's recorded track snapped to the streets
+            'trailRoute' => $this->matcher->lines('vehicle:'.$t->vehicle_id, $truckTrail),
             // the driver's phone (native app, active trip, consented) and its trail on this trip — compared with the truck
             'phone' => $this->phones->phoneOf($t),
-            'phoneTrail' => PhoneTrackingService::thin($phoneTrail),
+            'phoneTrail' => TraceMatcher::thin($phoneTrail, PhoneTrackingService::TRAIL_MAX_POINTS),
             // the same trail snapped to the streets (drawn instead of the straight fix-to-fix line when available)
             'phoneRoute' => $this->matcher->lines('phone:'.$t->id, $phoneTrail),
             'optimize' => ['allowed' => $block === null, 'code' => $block[0] ?? null, 'reasonAr' => $block[1] ?? null, 'reasonEn' => $block[2] ?? null],

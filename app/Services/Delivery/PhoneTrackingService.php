@@ -216,20 +216,4 @@ class PhoneTrackingService
 
         return $out;
     }
-
-    /** Evenly thins a trail to at most $max points, keeping the first and the last. */
-    public static function thin(array $trail, int $max = self::TRAIL_MAX_POINTS): array
-    {
-        $n = count($trail);
-        if ($n <= $max) {
-            return $trail;
-        }
-        $out = [];
-        for ($k = 0; $k < $max - 1; $k++) {
-            $out[] = $trail[intdiv($k * ($n - 1), $max - 1)];
-        }
-        $out[] = $trail[$n - 1];
-
-        return $out;
-    }
 }

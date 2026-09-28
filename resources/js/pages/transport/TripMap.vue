@@ -55,12 +55,13 @@ const phoneLine = computed(() => {
 const lines = computed(() => {
   const x = d.value;
   if (!x) return [];
+  // truck and phone trails snapped to the streets by the server; the recorded fix-to-fix line only when that is missing
   const trail = (x.trail || []).map((p) => [p.lng, p.lat]);
-  // the phone trail snapped to the streets by the server; the recorded fix-to-fix line only when that is missing
+  const truckLines = x.trailRoute?.lines?.length ? x.trailRoute.lines : [trail];
   const phoneTrail = (x.phoneTrail || []).map((p) => [p.lng, p.lat]);
   const phoneLines = x.phoneRoute?.lines?.length ? x.phoneRoute.lines : [phoneTrail];
   const trailLine = [
-    ...(trail.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: trail }, color: '#3C79F5', width: 3 }] : []),
+    ...truckLines.filter((l) => l.length > 1).map((coordinates, i) => ({ id: `trail-${i}`, geometry: { type: 'LineString', coordinates }, color: '#3C79F5', width: 4 })),
     ...phoneLines.filter((l) => l.length > 1).map((coordinates, i) => ({ id: `phone-trail-${i}`, geometry: { type: 'LineString', coordinates }, color: '#1d7a3e', width: 4 })),
   ];
   if (route.value?.status === 'ok' && route.value.geometry) return [{ id: 'route', geometry: route.value.geometry }, ...trailLine];

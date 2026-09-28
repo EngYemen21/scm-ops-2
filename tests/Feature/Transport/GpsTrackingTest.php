@@ -43,12 +43,27 @@ class GpsTrackingTest extends ApiTestCase
 
     private array $log = [];
 
+    /** Recorded messages the fake provider returns for messages/load_interval. */
+    private array $history = [];
+
+    private ?array $matching = null;
+
+    private function recorded(int $secondsAgo, float $lat, float $lng, float $speed): array
+    {
+        return ['t' => now()->subSeconds($secondsAgo)->timestamp, 'tp' => 'ud', 'pos' => ['y' => $lat, 'x' => $lng, 's' => $speed, 'c' => 0], 'p' => ['pwr_ext' => 27.1]];
+    }
+
     private function fakeProvider(array $items): void
     {
         $this->items = $items;
         $this->loginError = null;
         $this->log = [];
         Http::fake(function (Request $r) {
+            if (str_contains($r->url(), 'api.mapbox.com/matching/')) {
+                $this->log[] = 'mapbox/matching';
+
+                return Http::response($this->matching ?? ['code' => 'NoMatch']);
+            }
             $svc = self::svc($r);
             $this->log[] = $svc;
             $items = $this->items;
@@ -63,6 +78,15 @@ class GpsTrackingTest extends ApiTestCase
             }
             if ($svc === 'core/search_items') {
                 return ($r['sid'] ?? null) === 'sid-1' ? Http::response(['items' => $items, 'totalItemsCount' => count($items)]) : Http::response(['error' => 1]);
+            }
+            if ($svc === 'messages/load_interval') { // the unit's recorded messages in [timeFrom, timeTo]
+                $p = json_decode((string) $r['params'], true);
+                $in = array_values(array_filter($this->history, fn ($m) => $m['t'] >= $p['timeFrom'] && $m['t'] <= $p['timeTo']));
+
+                return Http::response(['count' => count($in), 'messages' => array_slice($in, 0, $p['loadCount'])]);
+            }
+            if ($svc === 'messages/unload') {
+                return Http::response([]);
             }
 
             return Http::response(['error' => 2]);
@@ -160,6 +184,52 @@ class GpsTrackingTest extends ApiTestCase
         // the same (not newer) position again: nothing appended
         $this->expectOk($this->postAs('disp', '/api/transport/gps/sync'));
         $this->assertSame(2, VehiclePosition::where('vehicle_id', Vehicle::where('code', $v['code'])->value('id'))->count());
+    }
+
+    public function test_the_trail_is_the_providers_recorded_track_snapped_to_the_streets(): void
+    {
+        $this->travelTo(now()->startOfHour()->addMinutes(40)); // the whole track inside one clock hour
+        $this->useWialon();
+        $v = $this->mkVehicle('dry', extra: ['gpsDeviceId' => '990000000000077']);
+        $id = Vehicle::where('code', $v['code'])->value('id');
+        // 20 min of driving north, a fix every 40 s — then 4 fixes parked, wandering 2 m
+        for ($i = 0; $i < 30; $i++) {
+            $this->history[] = $this->recorded(1400 - $i * 40, 24.70 + $i * 0.001, 46.60, 45);
+        }
+        foreach ([0.00002, -0.00001, 0.00001, 0.0] as $k => $jitter) {
+            $this->history[] = $this->recorded(200 - $k * 40, 24.729 + $jitter, 46.60, 0);
+        }
+        $this->fakeProvider([$this->unit('U77', '990000000000077', 24.729, 46.60, 60)]);
+        $this->expectOk($this->postAs('disp', '/api/transport/gps/sync'));
+        $this->assertSame((string) crc32('990000000000077'), Vehicle::find($id)->gps_unit_id);
+        $this->assertSame(1, VehiclePosition::where('vehicle_id', $id)->count(), 'the sync alone samples one fix');
+
+        // the trail copies the recorded history: every moving fix, the parked ones collapse into the last
+        $url = "/api/transport/vehicles/{$v['code']}/trail?hours=3";
+        $trail = $this->expectOk($this->getAs('disp', $url));
+        $this->assertContains('messages/load_interval', $this->log);
+        $this->assertCount(30, $trail['trail']);
+        $this->assertSame([24.7, 24.729], [$trail['trail'][0]['lat'], $trail['trail'][29]['lat']]);
+        $this->assertFalse($trail['trailRoute']['matched']); // no maps provider: the recorded line
+        $this->assertCount(30, $trail['trailRoute']['lines'][0]);
+        $this->assertSame(now()->getTimestamp(), Vehicle::find($id)->gps_history_until->getTimestamp());
+
+        // Mapbox on: the line follows the streets; reopened at once → neither provider asked again
+        config(['integrations.MAPBOX_PUBLIC_TOKEN' => 'pk.test-token']);
+        $street = [[46.6, 24.7], [46.6004, 24.715], [46.6, 24.729]];
+        $this->matching = ['code' => 'Ok', 'matchings' => [['confidence' => 0.9, 'geometry' => ['type' => 'LineString', 'coordinates' => $street]]]];
+        $this->assertSame(['matched' => true, 'lines' => [$street]], $this->expectOk($this->getAs('disp', $url))['trailRoute']);
+        $calls = array_count_values($this->log);
+        $this->expectOk($this->getAs('disp', $url));
+        $this->assertSame($calls, array_count_values($this->log));
+
+        // 3 minutes later the truck moved on: only the new span is fetched, the snapped line is refreshed
+        $this->travel(3)->minutes();
+        $this->history[] = $this->recorded(30, 24.735, 46.60, 40);
+        $after = $this->expectOk($this->getAs('disp', $url));
+        $this->assertCount(31, $after['trail']);
+        $this->assertSame($calls['messages/load_interval'] + 1, array_count_values($this->log)['messages/load_interval']);
+        $this->assertSame($calls['mapbox/matching'] + 1, array_count_values($this->log)['mapbox/matching']);
     }
 
     public function test_an_expired_session_is_reopened_once_and_provider_errors_are_reported(): void

@@ -135,6 +135,7 @@ class PhoneTrackingTest extends ApiTestCase
 
     public function test_the_phone_trail_is_cleaned_and_snapped_to_the_streets(): void
     {
+        $this->travelTo(now()->startOfHour()->addMinutes(30)); // the fixes inside one clock hour: one matched block
         $d = $this->fresh();
         [$trip] = $this->dispatchedTrip($d, [[[$this->product('PT-C'), 1]]]);
         $this->expectOk($this->postAs('driver', '/api/delivery/tracking/consent', ['accepted' => true]));

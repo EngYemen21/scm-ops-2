@@ -150,3 +150,11 @@ cron entry `* * * * * php artisan schedule:run`). Without a scheduler (Vercel) t
 throttled to one provider call per 30 s however many people are watching; the fleet map polls every 20 s. A fix older
 than 10 minutes shows the vehicle as offline (greyed marker, with its time). To revoke access, delete the token in
 Wialon (user settings → tokens) or clear `WIALON_TOKEN`.
+
+**Trails:** the sync only samples the last fix, so the trail is filled from the unit's **message history** in Wialon
+(`messages/load_interval` — every fix the device sent, typically one per 20–30 s while moving). Opening a trail (trip
+map, vehicle «التتبع الحي») copies the spans not yet copied (`vehicles.gps_history_from/until`, newest first, 6 h per
+request, 3 requests per load — a 48 h window fills in over a few refreshes) into `vehicle_positions` (unique per
+vehicle + time; standing-still repeats skipped). The window starts on a whole hour. The line drawn is that track
+snapped to the streets by Mapbox Map Matching (`TraceMatcher`, per-hour blocks cached; the growing last block is
+re-matched at most every 2 min); it breaks at gaps (no fix for 15 min or a 3 km jump) instead of inventing a road.

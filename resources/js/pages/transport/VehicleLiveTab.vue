@@ -27,9 +27,11 @@ const markers = computed(() => {
   if (v.lat == null || v.lng == null) return [];
   return [{ id: 'v', kind: 'vehicle', lat: v.lat, lng: v.lng, text: '🚚', title: `${v.code} · ${v.plateAr || ''}`, sub: [label.value.text, v.at ? fmtDate(v.at) : null].filter(Boolean) }];
 });
+// the recorded track snapped to the streets by the server (pieces break at gaps); the fix-to-fix line only without it
 const lines = computed(() => {
   const pts = (d.value?.trail || []).map((p) => [p.lng, p.lat]);
-  return pts.length > 1 ? [{ id: 'trail', geometry: { type: 'LineString', coordinates: pts }, color: '#3C79F5', width: 3 }] : [];
+  const route = d.value?.trailRoute?.lines?.length ? d.value.trailRoute.lines : [pts];
+  return route.filter((l) => l.length > 1).map((coordinates, i) => ({ id: `trail-${i}`, geometry: { type: 'LineString', coordinates }, color: '#3C79F5', width: 4 }));
 });
 
 // ── pairing ──
