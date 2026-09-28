@@ -192,10 +192,11 @@ class GpsTrackingTest extends ApiTestCase
         $this->useWialon();
         $v = $this->mkVehicle('dry', extra: ['gpsDeviceId' => '990000000000077']);
         $id = Vehicle::where('code', $v['code'])->value('id');
-        // 20 min of driving north, a fix every 40 s — then 4 fixes parked, wandering 2 m
+        // 20 min of driving north, a fix every 40 s — then parked: one drift of 55 m, 4 fixes wandering 2 m
         for ($i = 0; $i < 30; $i++) {
             $this->history[] = $this->recorded(1400 - $i * 40, 24.70 + $i * 0.001, 46.60, 45);
         }
+        $this->history[] = $this->recorded(230, 24.7295, 46.60, 0);
         foreach ([0.00002, -0.00001, 0.00001, 0.0] as $k => $jitter) {
             $this->history[] = $this->recorded(200 - $k * 40, 24.729 + $jitter, 46.60, 0);
         }

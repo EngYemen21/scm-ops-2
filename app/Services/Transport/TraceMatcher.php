@@ -138,11 +138,16 @@ class TraceMatcher
         return $p['at'] instanceof DateTimeInterface ? $p['at']->getTimestamp() : (int) strtotime((string) $p['at']);
     }
 
+    /** Below this reported speed a vehicle is parked. */
+    public const PARKED_KPH = 3;
+
     /**
      * Drops fixes that add nothing to the drawn line: not newer than the previous one, or within $minMetres of it
-     * (standing still makes the reported position wander). The latest fix is always kept so the line reaches the marker.
+     * (standing still makes the reported position wander). A fix reported at parked speed must be $parkedMetres away
+     * to count: a parked GPS drifts tens of metres (up to ~100 m seen on the fleet's units), which drew as zig-zags in
+     * yards and car parks. The latest fix is always kept so the line reaches the marker.
      */
-    public static function declutter(array $points, float $minMetres): array
+    public static function declutter(array $points, float $minMetres, ?float $parkedMetres = null): array
     {
         $out = [];
         $n = count($points);
@@ -152,7 +157,8 @@ class TraceMatcher
                 if (self::ts($p) <= self::ts($prev)) {
                     continue;
                 }
-                if (PhoneTrackingService::metresBetween((float) $prev['lat'], (float) $prev['lng'], (float) $p['lat'], (float) $p['lng']) < $minMetres) {
+                $parked = $parkedMetres !== null && isset($p['speedKph']) && $p['speedKph'] !== null && $p['speedKph'] < self::PARKED_KPH;
+                if (PhoneTrackingService::metresBetween((float) $prev['lat'], (float) $prev['lng'], (float) $p['lat'], (float) $p['lng']) < ($parked ? $parkedMetres : $minMetres)) {
                     if ($i !== $n - 1) {
                         continue;
                     }

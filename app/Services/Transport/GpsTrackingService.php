@@ -35,6 +35,9 @@ class GpsTrackingService
 
     private const TRAIL_MIN_SECONDS = 300;
 
+    /** A parked vehicle's fix must move this far to be drawn (parked GPS drift). */
+    public const PARKED_DRIFT_METRES = 150;
+
     /** History is asked from the provider in spans of this many hours, at most this many requests per call. */
     private const HISTORY_CHUNK_HOURS = 6;
 
@@ -181,7 +184,7 @@ class GpsTrackingService
         $rows = VehiclePosition::where('vehicle_id', $vehicleId)->where('at', '>=', $since)->orderBy('at')->limit(20000)
             ->get()->map(fn ($p) => ['lat' => $p->lat, 'lng' => $p->lng, 'speedKph' => $p->speed_kph, 'at' => $p->at])->all();
 
-        return TraceMatcher::declutter($rows, self::TRAIL_MIN_METRES);
+        return TraceMatcher::declutter($rows, self::TRAIL_MIN_METRES, self::PARKED_DRIFT_METRES);
     }
 
     /**
