@@ -47,7 +47,13 @@ return [
         'customer_updated' => App\Integration\Handlers\CustomerHandler::class,
         'product_created' => App\Integration\Handlers\ProductHandler::class,
         'product_updated' => App\Integration\Handlers\ProductHandler::class,
+        'sales_order_confirmed' => App\Integration\Handlers\SalesOrderHandler::class,
+        'sales_order_cancelled' => App\Integration\Handlers\SalesOrderHandler::class,
+        'sales_order_received' => App\Integration\Handlers\SalesOrderHandler::class,
     ],
+
+    // Warehouse that fulfils orders received from other systems when the order does not name one
+    'default_warehouse' => env('INTEGRATION_DEFAULT_WAREHOUSE', 'RYD'),
 
     // Request signing: accepted clock difference, maximum body size and batch length
     'max_skew_seconds' => 300,

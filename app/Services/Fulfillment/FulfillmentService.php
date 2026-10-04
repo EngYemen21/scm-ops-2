@@ -2,6 +2,7 @@
 
 namespace App\Services\Fulfillment;
 
+use App\Integration\Services\OrderEvents;
 use App\Models\DispatchRecord;
 use App\Models\Driver;
 use App\Models\FoLine;
@@ -199,6 +200,7 @@ class FulfillmentService
                 $this->audit->status($user, 'FulfillmentOrder', $fo->id, $fo->number, $from, $newStatus, null, $txId);
                 if ($fo->so_id) {
                     SalesOrder::whereKey($fo->so_id)->update(['status' => $newStatus]);
+                    app(OrderEvents::class)->emit($fo->so_id, $newStatus === 'picked' ? 'picking.completed' : 'picking.started', ['fulfilmentOrder' => $fo->number]);
                 }
             }
             if ($allDone) {
@@ -251,6 +253,11 @@ class FulfillmentService
                 $fo->update(['status' => 'picked']);
                 PickList::whereKey($t->pick_list_id)->update(['status' => 'done', 'completed_at' => now()]);
                 $this->audit->status($user, 'FulfillmentOrder', $fo->id, $fo->number, $from, 'picked', 'short pick');
+                // the sales order follows its fulfilment order, as in pick() (it stayed "picking" before)
+                if ($fo->so_id) {
+                    SalesOrder::whereKey($fo->so_id)->update(['status' => 'picked']);
+                    app(OrderEvents::class)->emit($fo->so_id, 'picking.completed', ['fulfilmentOrder' => $fo->number, 'shortPicked' => true]);
+                }
             }
             $this->audit->log($user, ['action' => 'PICK.SHORT', 'entityType' => 'PickTask', 'entityId' => $t->id, 'entityNumber' => $t->pickList->number, 'newValue' => ['shortQty' => $shortQty, 'reason' => $reason]]);
 
@@ -301,6 +308,7 @@ class FulfillmentService
             StagingEntry::create(['direction' => 'out', 'bin_id' => $out->id, 'reference_type' => 'FulfillmentOrder', 'reference_id' => $fo->id, 'reference_number' => $fo->number, 'qty' => (int) $fo->lines->sum('picked_qty')]);
             if ($fo->so_id) {
                 SalesOrder::whereKey($fo->so_id)->update(['status' => 'packed']);
+                app(OrderEvents::class)->emit($fo->so_id, 'order.packed', ['fulfilmentOrder' => $fo->number, 'package' => $pkg->number, 'cartons' => $cartons]);
             }
             $this->audit->status($user, 'FulfillmentOrder', $fo->id, $fo->number, 'picked', 'packed', $pkg->number, $txId);
             $this->notify->activity($user, 'FulfillmentOrder', $fo->id, $fo->number, "اكتملت تعبئة {$fo->number} — {$pkg->number} · طُبع Packing Slip وShipping Label، وجاهز للتحميل", "Packed {$fo->number}", ['disp']);
@@ -440,6 +448,7 @@ class FulfillmentService
             StagingEntry::where('reference_type', 'FulfillmentOrder')->where('reference_id', $fo->id)->where('status', 'waiting')->update(['status' => 'cleared', 'cleared_at' => now()]);
             if ($fo->so_id) {
                 SalesOrder::whereKey($fo->so_id)->update(['status' => 'loaded']);
+                app(OrderEvents::class)->emit($fo->so_id, 'order.loaded', ['fulfilmentOrder' => $fo->number, 'trip' => $trip->number]);
             }
             if ($trip->status !== 'loading') {
                 $from = $trip->status;
@@ -511,6 +520,10 @@ class FulfillmentService
                 $this->audit->status($user, 'FulfillmentOrder', $o->fo_id, $o->fo->number, 'loaded', 'onroute', $trip->number, $txId);
                 if ($o->fo->so_id) {
                     SalesOrder::whereKey($o->fo->so_id)->update(['status' => 'outfordel', 'trip_id' => $trip->id]);
+                    app(OrderEvents::class)->emit($o->fo->so_id, 'shipment.dispatched', [
+                        'fulfilmentOrder' => $o->fo->number, 'trip' => $trip->number, 'vehicle' => $vehicle->plate_ar ?: $vehicle->code,
+                        'driver' => $driver->name_ar, 'driverPhone' => $driver->mobile, 'plannedStart' => $trip->planned_start ?? null,
+                    ]);
                 }
             }
             $from = $trip->status;

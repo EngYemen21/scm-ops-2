@@ -2,6 +2,7 @@
 
 namespace App\Services\Delivery;
 
+use App\Integration\Services\OrderEvents;
 use App\Models\DeliveryRecord;
 use App\Models\Driver;
 use App\Models\FoLine;
@@ -294,6 +295,13 @@ class DeliveryService
             }
             $this->notify->event($result === 'delivered' ? 'DeliveryCompleted' : ($result === 'partial' ? 'PartialShipment' : 'DeliveryFailed'),
                 ['fo' => $fo->number, 'trip' => $s->trip->number, 'pod' => $pod->number, 'delivered' => $delivered, 'returned' => $returned, 'reason' => $failReason]);
+            // an order from Sales: the delivery result + proof of delivery go back to it (GPS only as captured / not)
+            app(OrderEvents::class)->emit($fo->so_id, $result === 'delivered' ? 'delivery.completed' : ($result === 'partial' ? 'delivery.partial' : 'delivery.failed'), [
+                'fulfilmentOrder' => $fo->number, 'trip' => $s->trip->number, 'pod' => $pod->number, 'receiver' => $pod->receiver_name,
+                'deliveredQty' => $delivered, 'returnedQty' => $returned, 'reason' => $failReason, 'reasonAr' => $reasonAr,
+                'gps' => $gpsStatus === 'captured', 'return' => $rtn,
+                'lines' => $fo->lines->map(fn (FoLine $l) => ['sku' => $l->product?->sku, 'delivered' => $lineDelivered($l), 'returned' => $l->qty - $lineDelivered($l)])->all(),
+            ]);
             $activity = $result === 'delivered' ? "سُلّم {$fo->number} ✓ — POD {$pod->number} أُقفل"
                 : ($result === 'partial' ? "تسليم جزئي {$delivered}/{$total} — {$fo->number} · مرتجع ".($rtn ?: '—') : "فشل تسليم {$fo->number} — {$reasonAr}");
             $this->notify->activity($user, 'ProofOfDelivery', $pod->id, $pod->number, $activity, null, ['disp']);

@@ -118,10 +118,12 @@ class InboxService
 
             return $row;
         } catch (Blocked $b) {
-            $this->exceptions->raise($b->errorCode, $b->getMessage(), [
-                'system' => $row->source, 'entity' => $b->entity, 'entityRef' => $b->entityRef, 'correlationId' => $row->correlation_id,
-                'eventId' => $row->event_id, 'details' => $b->details,
-            ]);
+            foreach ((array) ($b->entityRef ?? [null]) as $ref) {
+                $this->exceptions->raise($b->errorCode, $b->getMessage(), [
+                    'system' => $row->source, 'entity' => $b->entity, 'entityRef' => $ref, 'correlationId' => $row->correlation_id,
+                    'eventId' => $row->event_id, 'details' => $b->details,
+                ]);
+            }
             $row->attempts++;
 
             return $this->finish($row, 'blocked', $b->errorCode, $b->getMessage(), null, $t0, now()->addMinutes(self::BLOCKED_RECHECK_MINUTES));

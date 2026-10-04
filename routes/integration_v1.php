@@ -12,3 +12,5 @@ use Illuminate\Support\Facades\Route;
 Route::get('health', [V1Controller::class, 'health'])->middleware('int.system');
 Route::post('events', [V1Controller::class, 'events'])->middleware('int.system:events:write');
 Route::post('ops/heartbeat', [V1Controller::class, 'heartbeat'])->middleware('int.system:ops:run');
+Route::get('inventory/availability', [V1Controller::class, 'availability'])->middleware('int.system:inventory:read');
+Route::get('orders/{externalRef}', [V1Controller::class, 'order'])->middleware('int.system:orders:read');

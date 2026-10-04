@@ -2,6 +2,7 @@
 
 namespace App\Services\Sales;
 
+use App\Integration\Services\OrderEvents;
 use App\Models\Bin;
 use App\Models\Customer;
 use App\Models\FoLine;
@@ -305,7 +306,10 @@ class SalesService
             FulfillmentOrder::where('so_id', $so->id)->update(['status' => 'cancelled']);
             PickTask::whereIn('pick_list_id', PickList::whereIn('fo_id', $foIds)->select('id'))->update(['status' => 'cancelled']);
             PickList::whereIn('fo_id', $foIds)->update(['status' => 'cancelled']);
-            $this->adjustBalance($so->customer_id, -$t['total']);
+            // an order received from another system never added to the OPS balance: credit is that system's decision
+            if (! $so->source_system) {
+                $this->adjustBalance($so->customer_id, -$t['total']);
+            }
             $from = $so->status;
             $so->update(['status' => 'cancelled']);
             $this->audit->status($user, 'SalesOrder', $so->id, $so->number, $from, 'cancelled', $reason);
@@ -393,6 +397,7 @@ class SalesService
             }
             $so->update(['status' => 'preparing']);
             $this->audit->status($user, 'SalesOrder', $so->id, $so->number, 'allocated', 'preparing', "FO {$number} · {$pl->number}");
+            app(OrderEvents::class)->emit($so->id, 'order.released', ['fulfilmentOrder' => $number, 'pickList' => $pl->number]);
             $this->audit->log($user, ['action' => 'FO.CREATE', 'entityType' => 'FulfillmentOrder', 'entityId' => $fo->id, 'entityNumber' => $number,
                 'newValue' => ['so' => $so->number, 'pickList' => $pl->number, 'tasks' => count($tasks)]]);
             $this->notify->activity($user, 'FulfillmentOrder', $fo->id, $number, "أُنشئ أمر التنفيذ {$number} وقائمة التجهيز {$pl->number} لـ {$so->number}", null, ['wm', 'worker']);

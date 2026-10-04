@@ -22,6 +22,7 @@ class SalesOrder extends BaseModel
             'due_date' => 'datetime',
             'kg' => 'float',
             'cbm' => 'float',
+            'commercial' => 'array', // the source system's commercial snapshot (integration)
         ];
     }
 

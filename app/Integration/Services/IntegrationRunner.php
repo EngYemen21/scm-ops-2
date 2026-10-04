@@ -13,7 +13,7 @@ class IntegrationRunner
 {
     public const LAST_KEY = 'int:last-run';
 
-    public function __construct(private readonly InboxService $inbox, private readonly Dispatcher $dispatcher) {}
+    public function __construct(private readonly InboxService $inbox, private readonly Dispatcher $dispatcher, private readonly OrderIntakeService $orders) {}
 
     public function run(int $limit = 100, string $trigger = 'manual'): array
     {
@@ -23,7 +23,10 @@ class IntegrationRunner
         }
         try {
             $t0 = microtime(true);
-            $out = ['ran' => true, 'trigger' => $trigger, 'inbox' => $this->inbox->processDue($limit), 'deliveries' => $this->dispatcher->processDue($limit)];
+            $out = ['ran' => true, 'trigger' => $trigger, 'inbox' => $this->inbox->processDue($limit),
+                // orders from other systems waiting for stock: completed first-come-first-served when it is there
+                'backordersCompleted' => $this->orders->topUp(null, $limit)];
+            $out['deliveries'] = $this->dispatcher->processDue($limit); // last: includes the events the steps above produced
             $out['ms'] = (int) round((microtime(true) - $t0) * 1000);
             $out['at'] = now()->toIso8601ZuluString('millisecond');
             Cache::put(self::LAST_KEY, $out, now()->addDays(7));

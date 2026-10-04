@@ -2,7 +2,9 @@
 
 namespace App\Integration\Http;
 
+use App\Integration\Services\AvailabilityService;
 use App\Integration\Services\InboxService;
+use App\Integration\Services\OrderIntakeService;
 use App\Integration\Services\IntegrationRunner;
 use App\Integration\Support\Systems;
 use App\Support\AppError;
@@ -49,5 +51,20 @@ class V1Controller
     public function heartbeat(IntegrationRunner $runner): array
     {
         return $runner->run(100, 'heartbeat');
+    }
+
+    /** ATP per product, by the CALLER's product ids: ?products=P-1,P-2[&warehouse=RYD] */
+    public function availability(Request $request, AvailabilityService $availability): array
+    {
+        $products = explode(',', (string) $request->query('products', ''));
+        $warehouse = $request->query('warehouse');
+
+        return $availability->forExternal((string) $request->attributes->get('intSystem'), $products, is_string($warehouse) && $warehouse !== '' ? $warehouse : null);
+    }
+
+    /** OPS's view of an order the caller sent (status, timeline, shipment, POD, exceptions). */
+    public function order(Request $request, OrderIntakeService $orders, string $externalRef): array
+    {
+        return $orders->view((string) $request->attributes->get('intSystem'), $externalRef);
     }
 }
