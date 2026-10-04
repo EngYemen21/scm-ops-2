@@ -74,6 +74,15 @@ Then: OPS `php artisan migrate --force` (creates `int_*`, adds the service user 
 2. OPS → **برج التكامل → ربط الأصناف**: link each Sales product to its OPS SKU (suggestions by name are hints only;
    a link is always made by a person, one-to-one). Orders containing an unmapped product wait (`blocked`) and are
    replayed automatically the moment the mapping exists.
+   * **The product does not exist in OPS** → «إنشاء في العمليات»: creates it from the Sales record (name, pack) and
+     links it in one step. OPS needs weight, dimensions and storage class for every product; the form opens with an
+     estimate read from the pack text (`PackEstimator`: "كرتون 4×4 لتر" → 16 kg, a 4:3:2.5 carton sized for it) which
+     the steward corrects. The new product has no stock. Needs `integration.manage` + `product.manage`.
+   * **Pilot only — in bulk:** `php artisan scm:integration-adopt-products sales [--stock=N] [--warehouse=RYD] [--dry-run]`
+     does the same for every unmapped product with the *estimated* attributes, and with `--stock` posts a **trial
+     opening balance** (an audited adjustment by `svc.sales` whose reason says «رصيد افتتاحي تجريبي») into a bin of the
+     matching storage zone. Before real operation: correct the attributes on the product screens and replace the trial
+     balances by a stock count.
 3. Check `GET /api/v1/inventory/availability?products=…` from Sales (the catalogue then shows متوفر / كمية محدودة /
    غير متوفر, exact quantities for B2B staff only).
 

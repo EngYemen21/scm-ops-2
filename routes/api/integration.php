@@ -20,5 +20,7 @@ Route::prefix('integration')->middleware('perm:integration.view')->group(functio
 
     Route::get('mappings/{entity}', [TowerController::class, 'mappings'])->whereIn('entity', ['product', 'customer']);
     Route::post('mappings/{entity}', [TowerController::class, 'map'])->whereIn('entity', ['product', 'customer'])->middleware('perm:integration.manage');
+    // create the other system's product in OPS and link it — also needs the right to manage products
+    Route::post('mappings/product/adopt', [TowerController::class, 'adopt'])->middleware('perm:integration.manage,product.manage');
     Route::delete('mappings/{entity}/{externalId}', [TowerController::class, 'unmap'])->whereIn('entity', ['product', 'customer'])->middleware('perm:integration.manage');
 });

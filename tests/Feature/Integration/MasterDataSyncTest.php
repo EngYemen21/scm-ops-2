@@ -116,4 +116,80 @@ class MasterDataSyncTest extends ApiTestCase
         $this->assertNull(app(ExternalRefs::class)->internalId('sales', 'product', $pid));
         $this->assertSame(1, Product::where('sku', $p->sku)->count());
     }
+
+    public function test_a_sales_product_that_ops_does_not_have_is_created_in_ops_and_linked(): void
+    {
+        $pid = 'P-'.self::uid();
+        $this->send($this->envelope('product.created', $pid, ['id' => $pid, 'name' => 'بطاطس مقلية مجمدة 9مم', 'unit' => 'كرتون 4×2.5 كجم', 'category' => 'مجمدات', 'price' => 64, 'active' => true], 1));
+        $x = IntException::where('code', 'PRODUCT_UNMAPPED')->where('entity_ref', $pid)->where('status', 'open')->first();
+
+        // the tower pre-fills the form with an estimate read from the pack text (a person confirms it)
+        $row = collect($this->expectOk($this->getAs('admin', "/api/integration/mappings/product?state=unmapped&q={$pid}"))['items'])->firstWhere('externalId', $pid);
+        $this->assertSame([10.0, 'frozen', 'ctn', 'pack'], [(float) $row['estimate']['weightKg'], $row['estimate']['storageClass'], $row['estimate']['uomCode'], $row['estimate']['basis']]);
+
+        // physical attributes are mandatory, and creating a product needs product.manage on top of integration.manage
+        $this->expectRejected($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => $pid, 'weightKg' => 0, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'INVALID_INPUT', [400, 422]);
+        $this->expectRejected($this->postAs('gm', '/api/integration/mappings/product/adopt', ['externalId' => $pid, 'weightKg' => 10, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'FORBIDDEN', [403]);
+
+        $r = $this->expectOk($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => $pid, 'weightKg' => 10.5, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20, 'storageClass' => 'frozen', 'estimated' => true]));
+        $p = Product::where('sku', mb_strtoupper($pid))->first();
+        $this->assertSame([true, $p->sku, $p->id], [$r['created'], $r['sku'], $r['internalId']]);
+        $this->assertSame(['بطاطس مقلية مجمدة 9مم', 10.5, 'frozen', false], [$p->name_ar, (float) $p->weight_kg, $p->storage_class, (bool) $p->tracks_expiry]);
+        $this->assertSame($p->id, app(ExternalRefs::class)->internalId('sales', 'product', $pid));
+        $this->assertSame('resolved', $x->refresh()->status);
+        $audit = AuditLog::where('action', 'PRODUCT.CREATE')->where('entity_id', $p->id)->where('username', 'admin')->first();
+        $this->assertStringContainsString("adopted from sales:{$pid}", (string) json_encode($audit->new_value, JSON_UNESCAPED_UNICODE));
+        $this->assertSame(0, (int) \App\Models\InventoryBalance::where('product_id', $p->id)->count()); // a new product has no stock
+
+        // once only; an order line for it is now understood by OPS
+        $this->expectRejected($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => $pid, 'weightKg' => 10, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'ALREADY_MAPPED', [409]);
+        $this->expectRejected($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => 'P-NEVER-SENT', 'weightKg' => 10, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'EXTERNAL_RECORD_UNKNOWN', [404]);
+        $this->assertSame(['processed', true, $p->sku], [($u = $this->send($this->envelope('product.updated', $pid, ['id' => $pid, 'name' => 'بطاطس مقلية مجمدة 9مم'], 2))->json('results.0'))['status'], $u['result']['mapped'], $u['result']['sku']]);
+    }
+
+    public function test_the_pilot_bootstrap_creates_every_unmapped_product_with_a_trial_opening_balance(): void
+    {
+        $dry = 'P-'.self::uid().'D';
+        $frozen = 'P-'.self::uid().'F';
+        $this->send($this->envelope('product.created', $dry, ['id' => $dry, 'name' => 'سكر ناعم', 'unit' => 'كيس 50 كجم', 'category' => 'مواد غذائية'], 1));
+        $this->send($this->envelope('product.created', $frozen, ['id' => $frozen, 'name' => 'صدور دجاج مجمدة', 'unit' => 'كرتون 10 كجم', 'category' => 'لحوم ودواجن'], 1));
+
+        // a dry run changes nothing
+        $this->artisan('scm:integration-adopt-products', ['system' => 'sales', '--stock' => 100, '--dry-run' => true])->assertExitCode(0);
+        $this->assertNull(app(ExternalRefs::class)->internalId('sales', 'product', $dry));
+
+        $this->artisan('scm:integration-adopt-products', ['system' => 'sales', '--stock' => 100, '--warehouse' => 'RYD'])->assertExitCode(0);
+        foreach ([[$dry, 'ambient', 50.0], [$frozen, 'frozen', 10.0]] as [$pid, $class, $kg]) {
+            $p = Product::where('sku', mb_strtoupper($pid))->first();
+            $this->assertSame([$class, $kg, $p->id], [$p->storage_class, (float) $p->weight_kg, app(ExternalRefs::class)->internalId('sales', 'product', $pid)]);
+            $rows = \App\Models\InventoryBalance::with('bin.zone')->where('product_id', $p->id)->get();
+            $this->assertSame([1, 100, $class], [$rows->count(), (int) $rows[0]->on_hand, $rows[0]->bin->zone->type]); // stored in a zone of its storage class
+            $this->assertTrue(AuditLog::where('action', 'INVENTORY.ADJUST')->where('username', 'svc.sales')->where('new_value', 'like', '%تجريبي%')->exists());
+            $this->assertSame(0, IntException::where('code', 'PRODUCT_UNMAPPED')->where('entity_ref', $pid)->where('status', 'open')->count());
+        }
+        // Sales now reads the availability of its own product ids, and the ledger still equals the balances
+        $atp = $this->signed('GET', '/api/v1/inventory/availability?products='.rawurlencode("{$dry},{$frozen}"))->json('items');
+        $this->assertSame([[true, 100], [true, 100]], array_map(fn ($i) => [$i['mapped'], $i['atp']], $atp));
+        $this->artisan('scm:reconcile')->assertExitCode(0);
+
+        // running it again finds nothing left to do
+        $before = Product::count();
+        $this->artisan('scm:integration-adopt-products', ['system' => 'sales', '--stock' => 100])->assertExitCode(0);
+        $this->assertSame($before, Product::count());
+    }
+
+    public function test_pack_texts_are_read_into_weight_estimates(): void
+    {
+        $w = fn (string $name, ?string $pack) => \App\Integration\Support\PackEstimator::estimate($name, $pack);
+        $this->assertSame([40.0, 'pack', 'bag'], [$w('أرز بسمتي هندي', 'كيس 40 كجم')['weightKg'], $w('أرز بسمتي هندي', 'كيس 40 كجم')['basis'], $w('أرز بسمتي هندي', 'كيس 40 كجم')['uomCode']]);
+        $this->assertSame(16.0, $w('زيت دوار الشمس', 'كرتون 4×4 لتر')['weightKg']);
+        $this->assertSame(7.92, $w('مشروب غازي — علب', 'كرتون 24×330 مل')['weightKg']);
+        $this->assertSame(10.0, $w('فلفل أسود مطحون', 'كيس 1 كجم × 10')['weightKg']);
+        $this->assertSame([11.0, 'name', 'chilled'], [$w('دجاج كامل 1100 جم', 'كرتون 10 حبات')['weightKg'], $w('دجاج كامل 1100 جم', 'كرتون 10 حبات')['basis'], $w('دجاج كامل 1100 جم', 'كرتون 10 حبات')['storageClass']]);
+        // a container's "750 مل" is its capacity, not its weight; no measure at all → the default
+        $this->assertSame([5.0, 'default'], [$w('عبوات سلطة 750 مل', 'كرتون 400 عبوة')['weightKg'], $w('عبوات سلطة 750 مل', 'كرتون 400 عبوة')['basis']]);
+        $this->assertSame([10.0, 'default', 'ambient'], [$w('طماطم معلبة مقشرة', 'كرتون 12 علبة')['weightKg'], $w('طماطم معلبة مقشرة', 'كرتون 12 علبة')['basis'], $w('طماطم معلبة مقشرة', 'كرتون 12 علبة')['storageClass']]);
+        $e = $w('سكر ناعم', 'كيس 50 كجم');
+        $this->assertTrue($e['lengthCm'] > $e['widthCm'] && $e['widthCm'] > $e['heightCm'] && $e['heightCm'] >= 5);
+    }
 }

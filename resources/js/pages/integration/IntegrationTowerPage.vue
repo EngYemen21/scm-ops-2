@@ -5,7 +5,7 @@
 // integration.view; retry / replay / resolve / map / run need integration.manage (enforced by the server).
 import { computed, ref } from 'vue';
 import { api, useAction, useGet, useList } from '@/api/client';
-import { Btn, Chip, DataTable, Drawer, EmptyState, ErrorBanner, KpiCard, KpiGrid, PageHead, Tabs, TextInput } from '@/components';
+import { Btn, Chip, DataTable, Drawer, EmptyState, ErrorBanner, KpiCard, KpiGrid, PageHead, SelectInput, Tabs, TextInput } from '@/components';
 import { fmtAgo, fmtDate, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { ask } from '@/stores/ui';
@@ -13,6 +13,7 @@ import { useQueryState } from '../dashboard/shared';
 
 const auth = useAuth();
 const canManage = auth.can('integration.manage');
+const canCreateProduct = canManage && auth.can('product.manage');
 const qs = useQueryState();
 const TABS = ['overview', 'trace', 'inbox', 'deliveries', 'exceptions', 'mappings'];
 const tab = computed(() => (TABS.includes(qs.get('tab')) ? qs.get('tab') : 'overview'));
@@ -92,6 +93,24 @@ const resolve = async (row, st) => {
 const runCycle = () => act.run(() => api.post('/integration/run'), { success: (r) => (r?.ran ? t(`اكتملت الدورة في ${r.ms}ms`, `Cycle done in ${r.ms}ms`) : t('دورة أخرى قيد التشغيل', 'Another cycle is running')) });
 const reconcile = () => act.run(() => api.post('/integration/reconcile'), { success: { ar: 'اكتملت المطابقة', en: 'Reconciled' } });
 const map = (row, sku) => sku && act.run(() => api.post('/integration/mappings/product', { externalId: row.externalId, internal: sku }), { success: (r) => (lang.value === 'ar' ? r.messageAr : r.messageEn) });
+// "create in OPS": the other system sells a product OPS does not have — the form opens with an estimate read from the
+// pack text; the steward corrects the numbers, then the product is created and linked in one step
+const adoptRow = ref(null);
+const adoptForm = ref({});
+const STORAGE = computed(() => [['ambient', t('عادي', 'Ambient')], ['chilled', t('مبرد +4°', 'Chilled')], ['frozen', t('مجمد −18°', 'Frozen')]]);
+const openAdopt = (row) => {
+  const e = row.estimate || {};
+  adoptForm.value = { sku: row.externalId, weightKg: e.weightKg ?? '', lengthCm: e.lengthCm ?? '', widthCm: e.widthCm ?? '', heightCm: e.heightCm ?? '', storageClass: e.storageClass || 'ambient', uomCode: e.uomCode || null, touched: false };
+  adoptRow.value = row;
+};
+const adoptReady = computed(() => ['weightKg', 'lengthCm', 'widthCm', 'heightCm'].every((k) => Number(adoptForm.value[k]) > 0) && String(adoptForm.value.sku || '').trim().length >= 3);
+const adopt = () => {
+  const f = adoptForm.value;
+  return act.run(() => api.post('/integration/mappings/product/adopt', {
+    externalId: adoptRow.value.externalId, sku: String(f.sku).trim(), weightKg: Number(f.weightKg), lengthCm: Number(f.lengthCm), widthCm: Number(f.widthCm), heightCm: Number(f.heightCm),
+    storageClass: f.storageClass, uomCode: f.uomCode || undefined, estimated: !f.touched,
+  }), { success: (r) => { adoptRow.value = null; return lang.value === 'ar' ? r.messageAr : r.messageEn; } });
+};
 const unmap = (row) => act.run(() => api.del(`/integration/mappings/product/${encodeURIComponent(row.externalId)}`), { success: { ar: 'أُلغي الربط', en: 'Unlinked' } });
 const filter = (k, v) => qs.replace({ tab: tab.value, [k]: v || undefined });
 </script>
@@ -233,7 +252,7 @@ const filter = (k, v) => qs.replace({ tab: tab.value, [k]: v || undefined });
     <div class="flex flex-wrap gap-1.5 p-3">
       <Btn v-for="s in ['unmapped', 'mapped', 'all']" :key="s" size="sm" :tone="(qs.get('state') || 'unmapped') === s ? 'dark' : 'ghost'" :label="{ unmapped: { ar: 'غير مربوط', en: 'Unmapped' }, mapped: { ar: 'مربوط', en: 'Mapped' }, all: { ar: 'الكل', en: 'All' } }[s]" @click="filter('state', s)" />
       <div class="flex-1" />
-      <div class="self-center text-[10px] text-faint">{{ t('الربط يدوي دائمًا — الاقتراحات بالتشابه للمساعدة فقط', 'Links are always made by a person — suggestions are hints only') }}</div>
+      <div class="self-center text-[10px] text-faint">{{ t('الربط يدوي دائمًا — الاقتراحات بالتشابه للمساعدة فقط. صنف لا مقابل له هنا؟ «إنشاء في العمليات»', 'Links are always made by a person — suggestions are hints only. No counterpart here? “Create in OPS”') }}</div>
     </div>
     <DataTable :columns="mapCols" :paged="mappings.data.value" :loading="mappings.isLoading.value" :row-key="(r) => r.externalId" :min-width="760" dense @page="setPage">
       <template #cell-externalId="{ row }"><b>{{ row.label }}</b><div class="cell-sub num">{{ row.externalId }} · {{ row.data?.unit }}</div></template>
@@ -249,12 +268,35 @@ const filter = (k, v) => qs.replace({ tab: tab.value, [k]: v || undefined });
           <template v-if="!row.mapped">
             <TextInput v-model="mapDraft[row.externalId]" small mono field-class="w-[140px]" placeholder="SKU" />
             <Btn size="sm" tone="dark" :label="{ ar: 'ربط', en: 'Map' }" @click="map(row, mapDraft[row.externalId])" />
+            <Btn v-if="canCreateProduct" size="sm" tone="soft" :label="{ ar: 'إنشاء في العمليات', en: 'Create in OPS' }" @click="openAdopt(row)" />
           </template>
           <Btn v-else size="sm" tone="softRed" :label="{ ar: 'إلغاء الربط', en: 'Unlink' }" @click="unmap(row)" />
         </div>
       </template>
     </DataTable>
   </div>
+
+  <Drawer :open="!!adoptRow" :title="{ ar: 'إنشاء الصنف في العمليات وربطه', en: 'Create the product in OPS and link it' }" :width="460" @close="adoptRow = null">
+    <template v-if="adoptRow">
+      <div class="text-[13px] font-extrabold">{{ adoptRow.label }}</div>
+      <div class="num mt-0.5 text-[10.5px] text-faint">{{ adoptRow.externalId }} · {{ adoptRow.data?.unit || '—' }}</div>
+      <div class="mt-3 rounded-[12px] border border-dashed border-line bg-[#FBFAFD] p-3 text-[10.5px] leading-[1.8] text-muted">
+        {{ t('الاسم والعبوة من منصة المبيعات. الوزن والأبعاد أدناه تقدير من وصف العبوة — صحّحها بالقياس الفعلي إن عرفته؛ يمكن تعديلها لاحقًا من شاشة المنتج. الصنف يُنشأ بلا مخزون.', 'Name and pack come from Sales. Weight and dimensions below are an estimate from the pack text — correct them if you know the measured values; they can be edited later on the product screen. The product starts with no stock.') }}
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2.5">
+        <TextInput v-model="adoptForm.sku" full mono :label="{ ar: 'رمز الصنف SKU', en: 'SKU' }" required />
+        <SelectInput v-model="adoptForm.storageClass" full :options="STORAGE" :label="{ ar: 'فئة التخزين', en: 'Storage class' }" />
+        <TextInput v-model="adoptForm.weightKg" full type="number" :label="{ ar: 'الوزن (كجم)', en: 'Weight (kg)' }" required @update:model-value="adoptForm.touched = true" />
+        <TextInput v-model="adoptForm.lengthCm" full type="number" :label="{ ar: 'الطول (سم)', en: 'Length (cm)' }" required @update:model-value="adoptForm.touched = true" />
+        <TextInput v-model="adoptForm.widthCm" full type="number" :label="{ ar: 'العرض (سم)', en: 'Width (cm)' }" required @update:model-value="adoptForm.touched = true" />
+        <TextInput v-model="adoptForm.heightCm" full type="number" :label="{ ar: 'الارتفاع (سم)', en: 'Height (cm)' }" required @update:model-value="adoptForm.touched = true" />
+      </div>
+      <div class="mt-4 flex gap-2">
+        <Btn tone="dark" :disabled="!adoptReady" :loading="act.pending.value" :label="{ ar: 'إنشاء وربط', en: 'Create and link' }" @click="adopt" />
+        <Btn tone="ghost" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="adoptRow = null" />
+      </div>
+    </template>
+  </Drawer>
 
   <Drawer :open="!!payloadId" :title="{ ar: 'حمولة الحدث', en: 'Event payload' }" :width="560" @close="payloadId = null">
     <ErrorBanner :error="payload.error.value" :closable="false" />

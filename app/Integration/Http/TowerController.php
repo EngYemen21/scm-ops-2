@@ -89,6 +89,18 @@ class TowerController
         return $mappings->map(AuthUser::current(), $v['system'] ?? 'sales', $entity, $v['externalId'], $v['internal']);
     }
 
+    /** Create the mirrored product in OPS and link it — the steward confirms the physical attributes. */
+    public function adopt(Request $request, MappingService $mappings): array
+    {
+        $v = $request->validate([
+            'system' => 'nullable|string|max:40', 'externalId' => 'required|string|max:120', 'sku' => 'nullable|string|min:3|max:32',
+            'weightKg' => 'required|numeric|gt:0', 'lengthCm' => 'required|numeric|gt:0', 'widthCm' => 'required|numeric|gt:0', 'heightCm' => 'required|numeric|gt:0',
+            'storageClass' => 'nullable|in:ambient,chilled,frozen', 'uomCode' => 'nullable|string|max:20', 'estimated' => 'nullable|boolean',
+        ]);
+
+        return $mappings->adopt(AuthUser::current(), $v['system'] ?? 'sales', $v['externalId'], $v);
+    }
+
     public function unmap(Request $request, MappingService $mappings, string $entity, string $externalId): array
     {
         return $mappings->unmap(AuthUser::current(), (string) ($request->query('system') ?: 'sales'), $entity, $externalId);

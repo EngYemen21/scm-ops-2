@@ -4,9 +4,11 @@ namespace App\Integration\Services;
 
 use App\Integration\Models\IntExternalRef;
 use App\Integration\Models\IntMirror;
+use App\Integration\Support\PackEstimator;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Services\Core\AuditService;
+use App\Services\Master\ProductsService;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
@@ -28,6 +30,7 @@ class MappingService
         private readonly IntegrationExceptions $exceptions,
         private readonly InboxService $inbox,
         private readonly AuditService $audit,
+        private readonly ProductsService $products,
     ) {}
 
     /** Mirrored records of $system/$entity with their link (and suggestions when unlinked). $state: all | mapped | unmapped */
@@ -56,6 +59,10 @@ class MappingService
             if (! $row['mapped']) {
                 $catalog ??= $this->catalog($entity);
                 $row['suggestions'] = self::suggest((string) $m['label'], $catalog);
+                if ($entity === 'product') {
+                    // pre-fill for "create in OPS": estimated from the pack text — a person confirms the numbers
+                    $row['estimate'] = PackEstimator::estimate((string) $m['label'], $m['data']['unit'] ?? null, $m['data']['category'] ?? null);
+                }
             }
 
             return $row;
@@ -85,6 +92,40 @@ class MappingService
         return ['externalId' => $externalId, 'internalId' => $id, 'internalCode' => $ref->internal_code, 'replayed' => $replayed,
             'messageAr' => "رُبط {$externalId} بـ {$ref->internal_code}".($replayed ? " — أُعيد تنفيذ {$replayed} حدث كان بانتظاره" : ''),
             'messageEn' => "{$externalId} linked to {$ref->internal_code}".($replayed ? "; {$replayed} waiting event(s) replayed" : '')];
+    }
+
+    /**
+     * The other system sells a product OPS does not have: create it in OPS from the mirrored record and link it, in one
+     * step. Name and pack come from the source system; weight, dimensions and storage class are what the steward entered
+     * (the tower pre-fills them with PackEstimator's guess). The new product starts with no stock.
+     *
+     * @param  array{sku?: ?string, weightKg: float|int|string, lengthCm: float|int|string, widthCm: float|int|string, heightCm: float|int|string, storageClass?: ?string, uomCode?: ?string, estimated?: bool}  $dto
+     */
+    public function adopt(AuthUser $user, string $system, string $externalId, array $dto): array
+    {
+        $mirror = IntMirror::where('system', $system)->where('entity', 'product')->where('external_id', $externalId)->first()
+            ?? throw AppError::notFound('EXTERNAL_RECORD_UNKNOWN', 'السجل غير معروف — لم يصل من النظام الآخر بعد', 'The other system has not sent this record yet');
+        if ($this->refs->internalId($system, 'product', $externalId) !== null) {
+            throw AppError::conflict('ALREADY_MAPPED', "الصنف {$externalId} مربوط مسبقًا", "{$externalId} is already mapped");
+        }
+        $data = (array) $mirror->data;
+        $uom = trim((string) ($dto['uomCode'] ?? '')) ?: null;
+
+        return DB::transaction(function () use ($user, $system, $externalId, $mirror, $data, $dto, $uom) {
+            $product = $this->products->create($user, [
+                'sku' => trim((string) ($dto['sku'] ?? '')) ?: $externalId,
+                'nameAr' => (string) $mirror->label, 'nameEn' => (string) ($data['nameEn'] ?? $mirror->label),
+                'weightKg' => (float) $dto['weightKg'], 'lengthCm' => (float) $dto['lengthCm'], 'widthCm' => (float) $dto['widthCm'], 'heightCm' => (float) $dto['heightCm'],
+                'storageClass' => $dto['storageClass'] ?? 'ambient', 'tracksExpiry' => false, 'reorderMin' => 0,
+                // where it came from stays in the audit trail of the product
+                'origin' => "adopted from {$system}:{$externalId}".(! empty($dto['estimated']) ? ' — physical attributes estimated from the pack text' : ''),
+            ] + ($uom ? ['uomCode' => $uom] : []));
+            $out = $this->map($user, $system, 'product', $externalId, $product['id']);
+
+            return ['created' => true, 'sku' => $product['sku'],
+                'messageAr' => "أُنشئ الصنف {$product['sku']} في العمليات ورُبط بـ {$externalId}".($out['replayed'] ? " — أُعيد تنفيذ {$out['replayed']} حدث كان بانتظاره" : ''),
+                'messageEn' => "Product {$product['sku']} created in OPS and linked to {$externalId}".($out['replayed'] ? "; {$out['replayed']} waiting event(s) replayed" : '')] + $out;
+        });
     }
 
     public function unmap(AuthUser $user, string $system, string $entity, string $externalId): array
