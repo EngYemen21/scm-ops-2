@@ -132,23 +132,38 @@ class MappingService
             : Customer::where('active', true)->get(['id', 'code', 'name_ar'])->map(fn ($c) => ['id' => $c->id, 'code' => $c->code, 'name' => $c->name_ar])->all();
     }
 
-    /** Up to 3 OPS records whose name resembles $label (a hint for the person mapping — never applied automatically). */
+    /** Pack / unit words: shared by unrelated products, so they say nothing about identity. */
+    private const NOISE = ['كجم', 'جم', 'كغ', 'غرام', 'جرام', 'مل', 'لتر', 'ليتر', 'كرتون', 'كيس', 'علبه', 'حبه', 'عبوه', 'جالون', 'تنكه', 'زجاج', 'باكت', 'kg', 'g', 'ml', 'l', 'pcs', 'box'];
+
+    /**
+     * Up to 3 OPS records whose NAME WORDS overlap $label's (a hint for the person mapping — never applied
+     * automatically). Numbers and pack / unit words are ignored: "أرز 40 كجم" must not suggest "عسل 6×1 كجم".
+     * Score = share of the label's words found in the candidate; at least half of them must match.
+     */
     private static function suggest(string $label, array $catalog): array
     {
-        $norm = fn (string $s) => preg_replace('/\s+/u', ' ', str_replace(['أ', 'إ', 'آ', 'ة', 'ى'], ['ا', 'ا', 'ا', 'ه', 'ي'], mb_strtolower(trim($s))));
-        $a = $norm($label);
-        if ($a === '') {
+        $words = function (string $s): array {
+            $s = str_replace(['أ', 'إ', 'آ', 'ة', 'ى'], ['ا', 'ا', 'ا', 'ه', 'ي'], mb_strtolower($s));
+            $tokens = preg_split('/[^\p{L}]+/u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+            return array_values(array_unique(array_filter($tokens, fn ($t) => mb_strlen($t) >= 2 && ! in_array($t, self::NOISE, true))));
+        };
+        $mine = $words($label);
+        if (! $mine) {
             return [];
         }
         $scored = [];
         foreach ($catalog as $c) {
-            similar_text($a, $norm($c['name']), $pct);
-            if ($pct >= 45) {
-                $scored[] = $c + ['score' => (int) round($pct)];
+            $theirs = $words($c['name']);
+            $shared = count(array_intersect($mine, $theirs));
+            $score = (int) round(100 * $shared / count($mine));
+            if ($shared > 0 && $score >= 50) {
+                // tie-break: the candidate with fewer extra words is the closer product
+                $scored[] = $c + ['score' => $score, '_extra' => count($theirs) - $shared];
             }
         }
-        usort($scored, fn ($x, $y) => $y['score'] <=> $x['score']);
+        usort($scored, fn ($x, $y) => [$y['score'], $x['_extra']] <=> [$x['score'], $y['_extra']]);
 
-        return array_slice($scored, 0, 3);
+        return array_map(fn ($x) => array_diff_key($x, ['_extra' => 1]), array_slice($scored, 0, 3));
     }
 }

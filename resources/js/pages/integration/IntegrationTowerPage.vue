@@ -8,6 +8,7 @@ import { api, useAction, useGet, useList } from '@/api/client';
 import { Btn, Chip, DataTable, Drawer, EmptyState, ErrorBanner, KpiCard, KpiGrid, PageHead, Tabs, TextInput } from '@/components';
 import { fmtAgo, fmtDate, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
+import { ask } from '@/stores/ui';
 import { useQueryState } from '../dashboard/shared';
 
 const auth = useAuth();
@@ -79,9 +80,14 @@ const mapCols = [
 
 const retry = (id) => act.run(() => api.post(`/integration/deliveries/${id}/retry`), { success: { ar: 'أُعيد الإرسال', en: 'Retried' } });
 const replay = (id) => act.run(() => api.post(`/integration/inbox/${id}/replay`), { success: { ar: 'أُعيدت المعالجة', en: 'Replayed' } });
-const resolve = (id, st) => {
-  const note = window.prompt(t('ملاحظة الإغلاق (إلزامية)', 'Closing note (required)'));
-  if (note && note.trim().length >= 3) act.run(() => api.post(`/integration/exceptions/${id}/resolve`, { status: st, note }), { success: { ar: 'أُغلق', en: 'Closed' } });
+const resolve = async (row, st) => {
+  const note = await ask({
+    title: st === 'resolved' ? { ar: `إغلاق الاستثناء ${row.code}`, en: `Resolve ${row.code}` } : { ar: `تجاهل الاستثناء ${row.code}`, en: `Ignore ${row.code}` },
+    sub: row.message, label: { ar: 'ملاحظة الإغلاق — ماذا فُعل؟', en: 'Closing note — what was done?' }, required: true,
+    okLabel: st === 'resolved' ? { ar: 'حُلّ', en: 'Resolve' } : { ar: 'تجاهل', en: 'Ignore' },
+  });
+  if (note === null) return;
+  act.run(() => api.post(`/integration/exceptions/${row.id}/resolve`, { status: st, note }), { success: { ar: 'أُغلق', en: 'Closed' } });
 };
 const runCycle = () => act.run(() => api.post('/integration/run'), { success: (r) => (r?.ran ? t(`اكتملت الدورة في ${r.ms}ms`, `Cycle done in ${r.ms}ms`) : t('دورة أخرى قيد التشغيل', 'Another cycle is running')) });
 const reconcile = () => act.run(() => api.post('/integration/reconcile'), { success: { ar: 'اكتملت المطابقة', en: 'Reconciled' } });
@@ -215,8 +221,8 @@ const filter = (k, v) => qs.replace({ tab: tab.value, [k]: v || undefined });
       <template #cell-act="{ row }">
         <button v-if="row.correlationId" type="button" class="link text-[10.5px]" @click="qs.replace({ tab: 'trace', key: row.correlationId })">{{ t('تتبع', 'Trace') }}</button>
         <template v-if="canManage && row.status === 'open'">
-          <button type="button" class="link ms-2.5 text-[10.5px]" @click="resolve(row.id, 'resolved')">{{ t('حُلّ', 'Resolve') }}</button>
-          <button type="button" class="link ms-2.5 text-[10.5px]" @click="resolve(row.id, 'ignored')">{{ t('تجاهل', 'Ignore') }}</button>
+          <button type="button" class="link ms-2.5 text-[10.5px]" @click="resolve(row, 'resolved')">{{ t('حُلّ', 'Resolve') }}</button>
+          <button type="button" class="link ms-2.5 text-[10.5px]" @click="resolve(row, 'ignored')">{{ t('تجاهل', 'Ignore') }}</button>
         </template>
       </template>
     </DataTable>
