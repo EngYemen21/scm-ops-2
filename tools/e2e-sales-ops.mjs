@@ -6,14 +6,14 @@
 //   when stock arrives, and Sales delivering an order while OPS is down (outbox retry).
 //
 // Never point this at production. Local servers (see docs/integration/RUNBOOK.md §E2E):
-//   SALES=http://127.0.0.1:3100 OPS=http://127.0.0.1:8100 OPS_PASSWORD=… SALES_ADMIN_KEY=… SALES_SECRET=… SCHED_SECRET=… \
+//   SALES=http://127.0.0.1:3100 OPS=http://127.0.0.1:8100 OPS_PASSWORD=… SALES_PIN=… SALES_ADMIN_KEY=… SALES_SECRET=… SCHED_SECRET=… \
 //   node tools/e2e-sales-ops.mjs
 import { createHash, createHmac } from 'node:crypto';
 
 const SALES = process.env.SALES || 'http://127.0.0.1:3100';
 const OPS = process.env.OPS || 'http://127.0.0.1:8100';
-const { OPS_PASSWORD, SALES_ADMIN_KEY, SALES_SECRET, SCHED_SECRET } = process.env;
-if (!OPS_PASSWORD || !SALES_ADMIN_KEY || !SALES_SECRET || !SCHED_SECRET) throw new Error('OPS_PASSWORD, SALES_ADMIN_KEY, SALES_SECRET and SCHED_SECRET are required');
+const { OPS_PASSWORD, SALES_PIN, SALES_ADMIN_KEY, SALES_SECRET, SCHED_SECRET } = process.env;
+if (!OPS_PASSWORD || !SALES_PIN || !SALES_ADMIN_KEY || !SALES_SECRET || !SCHED_SECRET) throw new Error('OPS_PASSWORD, SALES_PIN, SALES_ADMIN_KEY, SALES_SECRET and SCHED_SECRET are required');
 if (!/127\.0\.0\.1|localhost/.test(SALES + OPS)) throw new Error('local instances only');
 
 let passed = 0;
@@ -55,7 +55,9 @@ async function heartbeat() {
   return r.json();
 }
 
-// ── Sales as people (cookie session + role) ──
+// ── Sales as people: a registered account (phone + PIN). Role and tenant come from the account, not the request. ──
+// Seeded demo accounts of the Sales sample tenant; the PIN is the SEED_PIN the local Sales was migrated with.
+const SALES_PHONE = { worker: '0500000001', ops: '0500000002', owner: '0500000003', fin: '0500000004', b2b: '0500000000' };
 async function salesSession(role) {
   let cookie = '';
   const call = async (body) => {
@@ -64,8 +66,7 @@ async function salesSession(role) {
     if (set) cookie = set.split(';')[0];
     if (r.status >= 300) throw new Error(`Sales auth ${JSON.stringify(body)} → ${r.status} ${await r.text()}`);
   };
-  await call({ action: 'verify', phone: `05${uid}${role.length}00`.slice(0, 10), otp: '1234' });
-  await call({ action: 'role', role, adminKey: role === 'b2b' ? SALES_ADMIN_KEY : undefined });
+  await call({ action: 'login', phone: SALES_PHONE[role], pin: SALES_PIN, adminKey: role === 'b2b' ? SALES_ADMIN_KEY : undefined });
   return {
     async cmd(cmd, payload = {}) {
       const r = await fetch(`${SALES}/api/command`, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ cmd, ...payload }) });
@@ -173,8 +174,10 @@ ok(hb.backordersCompleted >= 1, `the integration cycle completed ${hb.backorders
 ok(hb.systems?.sales?.status === 200, 'the same cycle triggered the Sales cycle (one scheduler for both)');
 await waitFor(async () => (await salesOrder(owner, ref2))?.ops?.status === 'reserved', 'reserved after stock arrival');
 ok(true, 'Sales shows the backorder fully reserved');
-const st = await owner.state();
-ok(st.opsStock?.['P-1042']?.atp === 45, `Sales catalogue shows OPS availability (P-1042 ATP ${st.opsStock?.['P-1042']?.atp})`);
+const stB = await b2b.state();
+ok(stB.opsStock?.['P-1042']?.atp === 45, `Sales shows its B2B team the OPS availability (P-1042 ATP ${stB.opsStock?.['P-1042']?.atp})`);
+const stO = await owner.state();
+ok(stO.opsStock?.['P-1042']?.level === 'ok' && stO.opsStock['P-1042'].atp === undefined, 'the customer sees the availability level only, never the exact quantity');
 
 step('7. Cancelling in Sales before picking releases the reservation in OPS');
 const sub3 = await owner.cmd('orders.submit', { items: [{ pid: 'P-1042', qty: 4 }] });

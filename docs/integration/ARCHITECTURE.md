@@ -1,7 +1,8 @@
 # B2B Integration & Synchronization — Architecture
 
-Status: **phases 1–12 built and verified locally end-to-end; not enabled in production** (2026-10-04) — production
-enabling waits for the Sales go-live gate (§9, §10 phase 0). Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
+Status: **phases 0–12 built and verified locally end-to-end; not enabled in production** (2026-10-04) — the Sales
+hardening (phase 0) is on its `integration-ops` branch awaiting the owner's approval of the production deploy; enabling
+then follows the gates in RUNBOOK §1. Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
 Systems: **B2B Sales** (`salem-cell/b2b-platform`, vanilla JS + Vercel functions + Neon Postgres, live at
 b2b-platform-ten.vercel.app) and **B2B OPS** (this repository, Laravel 13 + Vue 3, live at scm-ops-laravel.vercel.app).
 
@@ -18,8 +19,8 @@ Nothing is assumed to exist that does not.
 |---|---|---|
 | Runtime | Static ES-module front end; 6 serverless functions; `POST /api/command {cmd}` dispatches 63 commands in `api/_lib/logic.js` | One choke point to emit events from |
 | Database | 22 tables, **no foreign keys, no CHECK constraints, no transactions** (Neon HTTP driver, one HTTP call per statement) | Multi-write commands can half-apply; event emission must be atomic with the change (`sql.transaction([...])`) |
-| Auth | OTP accepts **any 4 digits**; after login the caller **picks any non-admin role**; tenant = f(role) (`sessionClientId`) | **Blocking risk**: anyone can act as owner/worker and approve orders. Integrated orders would reserve real stock. Must be fixed before go-live (§9) |
-| Data exposure | `GET /api/state` returns the **whole database** (all clients, staff, new-client contacts, finance) to any session | OPS data (stock, delivery) must not be added to this snapshot until access is scoped |
+| Auth | *At discovery:* OTP accepted any 4 digits, the caller picked any non-admin role, tenant = f(role). **Fixed (phase 0):** registered account = phone + 4-digit PIN with lockout; role and tenant come from the account record (Sales `docs/SECURITY.md`) | Was the blocking risk for go-live (§9); SMS OTP can later replace the PIN check in one function (`verifyLogin`) |
+| Data exposure | *At discovery:* `GET /api/state` returned the whole database to any session. **Fixed (phase 0):** the snapshot is built per account scope; every command checks record ownership | Customers see the availability *level* only; exact ATP is for the B2B team |
 | Products | `products(id P-xxxx, name, unit free text, cat, price, img, is_out)`; no SKU/barcode/UoM/stock; ids from `count(*)` | Product identity must be **mapped** to OPS SKUs; never auto-created from names |
 | Orders | `orders(id ORD-n, st, items jsonb [{pid,qty}], stamps 6×'HH:MM', branch NAME, by_user persona)`; **no price snapshot**, no line ids, no dates | Order event must carry a price snapshot (fix in Sales); lines keyed by `pid` |
 | Lifecycle | `ops → purch → b2b → (hold) → ship → done/short`, `rej`; partial release creates `ORD-n-B` | `b2b` = commercially confirmed = hand-over point to OPS |
@@ -43,7 +44,7 @@ Nothing is assumed to exist that does not.
 
 | # | Weakness | Handling |
 |---|---|---|
-| W1 | Sales auth/tenancy (any role, whole-DB snapshot) | Integration go-live gate; hardening is Phase 0 on the Sales side (§9, §10) |
+| W1 | Sales auth/tenancy (any role, whole-DB snapshot) | Closed by phase 0 on the Sales side: PIN accounts, tenant isolation, 93 HTTP security checks in Sales CI (§9, §10) |
 | W2 | Sales has no product master codes | `int_external_refs` mapping + Control Tower "unmapped product" queue; orders with unmapped lines park as exceptions (never lost, never guessed) |
 | W3 | Sales lines have no price | Sales snapshots unit price (customer price when present) into the line at submit; event carries it |
 | W4 | OPS rejects short orders | New intake: reserve what exists, backorder the rest, raise a procurement requirement, return ETA |
@@ -266,9 +267,10 @@ to OPS — those are operational and now driven by OPS events.
 * **Audit:** every accepted inbound event, handler outcome, manual retry/replay/resolve is written to `audit_logs`
   (who, what, when, source, destination, before/after, correlation id, event id, result) + `int_*` tables.
 * **Human access:** Control Tower requires `integration.view` / `integration.manage` permissions.
-* **Go-live gate (Sales):** the integration switch (`INTEGRATION_ENABLED`) must stay off on Sales until (1) login
-  verifies a real OTP and binds the phone to a user record with a fixed role and tenant, (2) `/api/state` returns
-  only the caller's tenant data. Otherwise an anonymous visitor could approve orders that reserve real stock.
+* **Go-live gate (Sales):** order hand-off requires that (1) login binds the caller to a registered account with a
+  fixed role and tenant, and (2) `/api/state` returns only the caller's tenant data — both delivered by phase 0
+  (phone + 4-digit PIN with lockout for now; SMS OTP later). The remaining gate is operational, not security:
+  Sales products must be mapped to OPS products with stock before `OPS_INTEGRATION_ORDERS` is switched on (RUNBOOK §1).
 
 ---
 
@@ -276,7 +278,7 @@ to OPS — those are operational and now driven by OPS events.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Sales hardening: real OTP binding, role/tenant from user record, scoped snapshot (price snapshot on order lines: done) | **not done — needs owner decision** (SMS/WhatsApp OTP provider); blocks production enabling |
+| 0 | Sales hardening: registered accounts (phone + 4-digit PIN, lockout, forced change of temporary PIN), role/tenant from the account record, scoped snapshot, object-level ownership checks, per-tenant wallets, price snapshot on order lines | done in Sales (`docs/SECURITY.md`, `scripts/test-security.mjs` — 93 checks, upgrade rehearsed on the previous schema). SMS OTP: later, replaces the PIN check only |
 | 1 | Discovery (this document) | done |
 | 2 | Integration layer core in OPS: `int_*` tables, HMAC gateway `/api/v1`, inbox (dedupe/sequence), outbox deliveries (backoff, DLQ, breaker), external refs, exceptions, scheduler + heartbeat | done — `app/Integration`, `IntegrationCoreTest` |
 | 3 | Master data: customer + branch intake, product mapping queue + UI | done — `MasterDataSyncTest`, tower → mappings |
@@ -287,7 +289,7 @@ to OPS — those are operational and now driven by OPS events.
 | 8 | Returns + procurement requirement + ETA | done — returns events, shortage → procurement exception + ETA (PR/PO creation stays a buyer's action) |
 | 9 | Reliability hardening on Sales side (outbox, dispatcher, inbox) | done — Sales `api/_lib/integration.js` |
 | 10 | Control Tower UI, traceability by correlation id, reconciliation engine | done — `/itower`, `TowerService`, `ReconciliationService`, `ControlTowerTest` |
-| 11 | End-to-end + failure-scenario tests (the 20 mandatory scenarios) | done — 19 integration tests on MySQL + PostgreSQL, `tools/e2e-sales-ops.mjs` (34 checks across both real systems); no load test |
+| 11 | End-to-end + failure-scenario tests (the 20 mandatory scenarios) | done — 19 integration tests on MySQL + PostgreSQL, `tools/e2e-sales-ops.mjs` (35 checks across both real systems, signing in to Sales with PIN accounts); no load test |
 | 12 | Production readiness: runbook, monitoring, rollback (feature flags both sides) | done — `RUNBOOK.md` (enable, monitor, rotate, roll back); production enabling not done |
 
 Definition of done = the journey Customer → Sales order → availability → reservation → OPS fulfilment → picking →

@@ -9,15 +9,21 @@ The integration is **off by default on both sides**. With it off, both systems b
 
 ## 1. Go-live gate (read first)
 
-Do **not** enable the integration on the live Sales platform until its sign-in is hardened:
+Go-live is a sequence of gates; each must be true before the next step.
 
-| Gap in Sales today | Why it blocks go-live |
-|---|---|
-| Any 4 digits pass as OTP, and the caller then picks any role | an anonymous visitor could approve an order — which now reserves real stock and starts real fulfilment |
-| `/api/state` returns the whole database to any session | OPS availability and delivery data would be exposed with it |
-| Tenant derived from the role (`sessionClientId`) | every order is sent as customer `1` or `2`/`6`; real customers need a user ↔ customer link |
+| # | Gate | State (2026-10-04) |
+|---|---|---|
+| 1 | **Sales sign-in is hardened** — registered account (phone + 4-digit PIN with lockout; SMS OTP later), role and tenant from the account record, `/api/state` scoped to the tenant, ownership checked on every command | built and tested in Sales (`docs/SECURITY.md`, 93 HTTP checks in CI, upgrade rehearsed on the previous schema) — **merged to the Sales production branch only when the owner approves the production deploy** |
+| 2 | **Sales production is on that version** — deploy, then `POST /api/admin/migrate` (additive + data upgrade), then sign in once per account to replace the temporary PIN | pending gate 1's deploy |
+| 3 | **Stage 1 — preparation** (`OPS_INTEGRATION_ORDERS=false` on Sales): customers and products flow to OPS, availability flows back; **orders stay manual in Sales** | pending gate 2 |
+| 4 | **Products mapped and stocked** — every Sales product linked to its OPS SKU in برج التكامل → ربط الأصناف, with stock received in OPS | business task (the two catalogues are different lists; a person decides each link) |
+| 5 | **Stage 2 — operation** (`OPS_INTEGRATION_ORDERS=true`, `OPS_INTEGRATION_SINCE=<switch date>`): approved orders reserve stock in OPS and are fulfilled there | after gate 4 |
 
-Enabling on a **staging** copy of Sales (or locally, §6) has none of these risks.
+Why the gates matter: before gate 1 an anonymous visitor could approve an order, which with the integration on reserves
+real stock; before gate 4 an order would wait in OPS as "product not mapped" while Sales has already disabled its manual
+fulfilment buttons for it.
+
+Enabling locally (§6) has none of these risks.
 
 ## 2. Configuration
 
@@ -51,6 +57,8 @@ php -r "echo bin2hex(random_bytes(32));"
 | `OPS_KEY_ID` / `OPS_KEY_SECRET` | `k1` / the same `<secret>` as in `INTEGRATION_KEYS_SALES` |
 | `OPS_KEY_ID_PREV` / `OPS_KEY_SECRET_PREV` | the previous pair, only during a rotation |
 | `OPS_INTEGRATION_SINCE` | ISO date: orders created before it are never sent by the repair step (set it to the go-live day) |
+| `OPS_INTEGRATION_ORDERS` | `false` = stage 1 (master data + availability only, orders stay manual in Sales); unset / `true` = orders are handed to OPS |
+| `PIN_PEPPER`, `SEED_PIN`, `SEED_PHONE_BASE`, `SEED_PIN_TEMPORARY` | Sales sign-in (not integration) — see Sales `docs/SECURITY.md`; must be set before the Sales migration |
 
 Then: OPS `php artisan migrate --force` (creates `int_*`, adds the service user `svc.sales` and the permissions
 `integration.view` / `integration.manage`), Sales `POST /api/admin/migrate` (adds the `integration_*` tables and the
@@ -99,7 +107,7 @@ Runs the real Sales code and the real OPS code against local databases, connecte
 
 ```bash
 # Sales on a local PostgreSQL (never the live database)
-LOCAL_PG_URL=postgres://… PORT=3100 MIGRATE_KEY=local ADMIN_KEY=local \
+LOCAL_PG_URL=postgres://… PORT=3100 MIGRATE_KEY=local ADMIN_KEY=local SEED_PIN=<4 digits> PIN_PEPPER=local \
 OPS_INTEGRATION_ENABLED=true OPS_API_URL=http://127.0.0.1:8101 OPS_KEY_ID=k1 OPS_KEY_SECRET=<secret> \
 node scripts/local-server.mjs                      # in the Sales repository
 
@@ -110,7 +118,7 @@ INTEGRATION_SALES_CYCLE_URL=http://127.0.0.1:3100/api/integration/run \
 INTEGRATION_SALES_RECONCILE_URL=http://127.0.0.1:3100/api/integration/orders \
 php -S 127.0.0.1:8100 -t public vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php   # from public/, and again on :8101
 
-OPS_PASSWORD=<seed password> SALES_ADMIN_KEY=local SALES_SECRET=<secret> SCHED_SECRET=<sched> node tools/e2e-sales-ops.mjs
+OPS_PASSWORD=<seed password> SALES_PIN=<SEED_PIN> SALES_ADMIN_KEY=local SALES_SECRET=<secret> SCHED_SECRET=<sched> node tools/e2e-sales-ops.mjs
 ```
 
 It walks the definition of done: customer → Sales order → availability → reservation → fulfilment → picking →
