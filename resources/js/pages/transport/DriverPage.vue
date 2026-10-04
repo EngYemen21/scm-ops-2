@@ -3,6 +3,7 @@
 // (polled every 30s). Start route / arrive / deliver (POD: receiver, signature, photo, phone GPS) / partial / fail; ops requests.
 // ETA, live tracking and file upload are "Integration Pending" — shown as such, never simulated.
 import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { api, useAction, useGet, useList } from '@/api/client';
 import { Chip, ErrorBanner, PageHead } from '@/components';
 import { bi, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
@@ -16,7 +17,11 @@ import { OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, drvName, labelOf, vehName } from
 
 const auth = useAuth();
 const act = useAction();
-const q = useGet('/delivery/my-trips', undefined, { refetchInterval: 30_000 });
+// Dispatch on behalf of a driver (phone dead, no account yet): /driver?driver=DRV-15 — only for users who manage trips.
+// The server applies the same rule (DeliveryService::myTrips); every action is recorded under the signed-in user.
+const route = useRoute();
+const onBehalf = computed(() => (auth.can('trip.manage') && typeof route.query.driver === 'string' && route.query.driver ? route.query.driver : null));
+const q = useGet('/delivery/my-trips', computed(() => (onBehalf.value ? { driver: onBehalf.value } : undefined)), { refetchInterval: 30_000 });
 const opr = useList('/transport/ops-requests', { pageSize: 5 });
 const oprOpen = ref(false);
 
@@ -59,6 +64,9 @@ const sub = computed(() => `${userName.value} · ${t('واجهة السائق Mo
       </div>
     </div>
 
+    <div v-if="onBehalf" class="mb-3 rounded-[14px] border border-[#F0D9A8] bg-[#FFF8E8] px-3.5 py-2.5 text-[11px] font-bold leading-[1.8] text-[#8a5a00]">
+      {{ t(`تسجيل بالنيابة عن السائق ${onBehalf} — كل إجراء يُسجَّل باسمك في سجل الرحلة وإثبات التسليم.`, `Acting on behalf of driver ${onBehalf} — every action is recorded under your name.`) }}
+    </div>
     <ErrorBanner v-if="!notDriver" :error="q.error.value" :closable="false" />
     <ErrorBanner :error="act.error.value" @close="act.clearError()" />
     <div v-if="q.isLoading.value && !q.data.value" class="skel h-[140px] !rounded-[20px]" />
@@ -77,7 +85,7 @@ const sub = computed(() => `${userName.value} · ${t('واجهة السائق Mo
           <div class="num text-[13px] font-bold text-brand">{{ prog.done }}/{{ prog.total }}</div>
         </div>
         <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-night-3"><div class="h-full bg-brand" :style="{ width: progPct + '%' }" /></div>
-        <DriverTrackingStatus />
+        <DriverTrackingStatus v-if="!onBehalf" />
         <button v-if="canStart" type="button" :class="BIG" class="mt-[13px] h-[46px] w-full rounded-xl bg-brand text-[12.5px] text-[#0b2a30]" :disabled="act.pending.value" @click="start">{{ t('بدء الرحلة — Start Route', 'Start Route') }}</button>
         <div v-if="waitingDispatch" class="mt-2.5 text-[9.5px] text-[#8b90a5]">{{ t('بانتظار التحميل والإرسال من المستودع (Dispatch) قبل بدء الرحلة.', 'Waiting for warehouse loading & dispatch before the trip can start.') }}</div>
       </div>
