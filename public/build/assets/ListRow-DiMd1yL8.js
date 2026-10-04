@@ -1,1 +1,0 @@
-import{D as e,ht as t,u as n,w as r}from"./runtime-core.esm-bundler-BMzhbq6t.js";var i={__name:`ListRow`,props:{clickable:{type:Boolean,default:!1}},setup(i){return(a,o)=>(r(),n(`div`,{class:t([`list-row flex items-center gap-2.5 border-t border-line-2 px-[18px] py-2.5`,{"cursor-pointer hover:bg-soft":i.clickable}])},[e(a.$slots,`default`)],2))}};export{i as default};

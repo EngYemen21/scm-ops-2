@@ -1,0 +1,1 @@
+import{D as e,gt as t,u as n,w as r}from"./runtime-core.esm-bundler-BLlu7XAr.js";var i={__name:`Hint`,props:{tone:{type:String,default:null}},setup(i){return(a,o)=>(r(),n(`div`,{class:t([`hint`,i.tone])},[e(a.$slots,`default`)],2))}};export{i as default};

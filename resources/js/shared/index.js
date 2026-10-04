@@ -2,8 +2,14 @@
 // constants.json is generated from the same source as the server's config/scm.php, so both sides agree.
 import constants from './constants.json';
 
+/** Page labels: the generated set + pages added outside it (Integration Control Tower). */
+export const NAV_LABELS = { ...constants.NAV_LABELS, itower: { ar: 'برج التكامل', en: 'Integration tower' } };
+
+/** Role labels: the generated set + the integration layer's service role (users `svc.<system>`, cannot sign in). */
+export const ROLE_LABELS = { ...constants.ROLE_LABELS, integration: { ar: 'تكامل الأنظمة', en: 'System integration' } };
+
 export const {
-  ROLE_LABELS, NAV_LABELS, MOVEMENT_LABELS, PO_LABELS, PR_LABELS, SHIPMENT_LABELS, QT_LABELS, SO_LABELS, OC_LABELS, FO_LABELS,
+  MOVEMENT_LABELS, PO_LABELS, PR_LABELS, SHIPMENT_LABELS, QT_LABELS, SO_LABELS, OC_LABELS, FO_LABELS,
   TRIP_LABELS, STOP_LABELS, VEHICLE_LABELS, RETURN_LABELS, RETURN_DECISION_LABELS, TRANSFER_LABELS, EXCEPTION_STATE_LABELS,
   FAIL_REASON_LABELS, OWNERSHIP_LABELS, ALERT_CATEGORY_LABELS, DESIGN_TOKENS,
   PERMISSIONS, ROLE_PERMISSIONS, ROLE_NAV, ROLE_KEYS,

@@ -134,11 +134,11 @@ class OrderIntakeService
         $this->notify->activity($actor, 'SalesOrder', $so->id, $number,
             "وصل طلب المبيعات {$ref} → {$number}".($short ? ' — ينقصه مخزون لـ '.count($short).' صنف' : ' — حُجز بالكامل'), "Sales order {$ref} received as {$number}", ['wm', 'disp', 'sales']);
 
-        $this->publisher->publish('order.accepted', $ref, ['opsOrder' => $number, 'warehouse' => $warehouse->code, 'availability' => $availability, 'lines' => $outLines], $ref, $event->event_id);
+        $this->publisher->publish('order.accepted', $ref, ['opsOrder' => $number, 'status' => ['full' => 'reserved', 'partial' => 'partially_reserved', 'none' => 'backordered'][$availability], 'warehouse' => $warehouse->code, 'availability' => $availability, 'lines' => $outLines], $ref, $event->event_id);
         if ($short) {
             $this->backorder($actor, $so, $ref, $short, $event->event_id);
         } else {
-            $this->publisher->publish('order.reserved', $ref, ['opsOrder' => $number, 'lines' => array_map(fn ($x) => ['productId' => $x['productId'], 'reserved' => $x['reserved']], $outLines)], $ref, $event->event_id);
+            $this->publisher->publish('order.reserved', $ref, ['opsOrder' => $number, 'status' => 'reserved', 'lines' => array_map(fn ($x) => ['productId' => $x['productId'], 'reserved' => $x['reserved']], $outLines)], $ref, $event->event_id);
         }
 
         return ['opsOrder' => $number, 'created' => true, 'availability' => $availability, 'warehouse' => $warehouse->code];
@@ -169,7 +169,7 @@ class OrderIntakeService
             return ['cancelled' => false, 'opsOrder' => $so->number, 'status' => $so->status];
         }
         $this->sales->cancelOrder($actor, $so->id, "إلغاء من المبيعات: {$reason}");
-        $this->publisher->publish('order.cancelled', $ref, ['opsOrder' => $so->number, 'reason' => $reason], $ref, $event->event_id);
+        $this->publisher->publish('order.cancelled', $ref, ['opsOrder' => $so->number, 'status' => 'cancelled', 'reason' => $reason], $ref, $event->event_id);
 
         return ['cancelled' => true, 'opsOrder' => $so->number];
     }
@@ -238,14 +238,14 @@ class OrderIntakeService
                 if (! $short) {
                     $so->update(['status' => 'allocated', 'fulfil_status' => 'full']);
                     $this->audit->status($actor, 'SalesOrder', $so->id, $so->number, 'confirmed', 'allocated', 'وصل المخزون — اكتمل الحجز', $txId);
-                    $this->publisher->publish('order.reserved', $so->external_ref, ['opsOrder' => $so->number, 'completedBackorder' => true,
+                    $this->publisher->publish('order.reserved', $so->external_ref, ['opsOrder' => $so->number, 'status' => 'reserved', 'completedBackorder' => true,
                         'lines' => $this->linesForEvent($so)], $so->external_ref);
 
                     return 1;
                 }
                 if ($gained > 0) {
                     $so->update(['fulfil_status' => 'partial']);
-                    $this->publisher->publish('order.backordered', $so->external_ref, ['opsOrder' => $so->number, 'lines' => $this->shortLines($so),
+                    $this->publisher->publish('order.backordered', $so->external_ref, ['opsOrder' => $so->number, 'status' => 'partially_reserved', 'lines' => $this->shortLines($so),
                         'eta' => $this->eta($so)], $so->external_ref);
                 }
 
@@ -325,8 +325,8 @@ class OrderIntakeService
             'textAr' => "نقص مخزون لطلب المبيعات {$ref} ({$so->number}): {$text} — يلزم توريد", 'textEn' => "Stock shortage for sales order {$ref} ({$so->number}): {$text}",
         ]);
         $lines = array_map(fn ($x) => ['productId' => $x['productId'], 'missing' => $x['backordered']], $short);
-        $this->publisher->publish('order.backordered', $ref, ['opsOrder' => $so->number, 'lines' => $lines, 'eta' => $eta], $ref, $causation);
-        $this->publisher->publish('procurement.required', $ref, ['opsOrder' => $so->number, 'lines' => $lines, 'eta' => $eta], $ref, $causation);
+        $this->publisher->publish('order.backordered', $ref, ['opsOrder' => $so->number, 'status' => $this->salesStatus($so), 'lines' => $lines, 'eta' => $eta], $ref, $causation);
+        $this->publisher->publish('procurement.required', $ref, ['opsOrder' => $so->number, 'status' => $this->salesStatus($so), 'lines' => $lines, 'eta' => $eta], $ref, $causation);
     }
 
     /** Earliest date the missing quantities are expected (open purchase orders), null when nothing is on order. */

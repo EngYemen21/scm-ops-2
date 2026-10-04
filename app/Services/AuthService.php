@@ -82,6 +82,9 @@ class AuthService
         $roles = $u->roles->map(fn ($r) => $r->role->key)->values()->all();
         $permissions = $u->roles->flatMap(fn ($r) => $r->role->permissions->map(fn ($p) => $p->permission->key))->unique()->values()->all();
         $nav = collect($roles)->flatMap(fn ($r) => config('scm.ROLE_NAV.'.$r, []))->unique()->values()->all();
+        if (in_array('integration.view', $permissions, true)) {
+            $nav[] = 'itower'; // Integration Control Tower (App\Integration) — page guarded by the same permission
+        }
 
         return [
             'id' => $u->id, 'username' => $u->username, 'nameAr' => $u->name_ar, 'nameEn' => $u->name_en, 'initials' => $u->initials,

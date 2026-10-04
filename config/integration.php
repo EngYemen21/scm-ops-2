@@ -21,6 +21,10 @@ return [
             ],
             // where our events for it go (its signed inbound endpoint) and which types it wants
             'deliver_url' => env('INTEGRATION_SALES_EVENTS_URL'),
+            // its own integration cycle (retries, repair, stock refresh), triggered signed at the end of ours
+            'cycle_url' => env('INTEGRATION_SALES_CYCLE_URL'),
+            // how it sees the orders it sent (reconciliation): GET {reconcile_url}?ids=…
+            'reconcile_url' => env('INTEGRATION_SALES_RECONCILE_URL'),
             'subscribes' => [
                 'order.*', 'picking.*', 'shipment.*', 'delivery.*', 'return.*', 'procurement.required', 'inventory.changed',
                 'integration.ping',
@@ -62,6 +66,9 @@ return [
 
     // Delivery / processing retry delays in seconds (after attempt 1, 2, …); past the last one → dead letter
     'backoff' => [30, 120, 600, 1800, 3600, 10800, 21600, 43200],
+
+    // Without a scheduler: run a full cycle after a relevant request, at most once per this many seconds (0 = never)
+    'opportunistic_seconds' => (int) env('INTEGRATION_OPPORTUNISTIC_SECONDS', 120),
 
     // Outbound HTTP timeout and circuit breaker per subscriber
     'timeout_seconds' => 5,

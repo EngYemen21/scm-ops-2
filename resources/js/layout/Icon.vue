@@ -30,6 +30,7 @@ const NAV = {
   trips: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17h7a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h7',
   fleet: 'M3 16V7h11v9M14 10h4l3 3v3h-7M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   ttower: 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14',
+  itower: 'M4 7h6v4H4zM14 13h6v4h-6zM10 9h2a2 2 0 0 1 2 2v4M7 11v6h7M17 13V7h-5',
   returns: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-5',
   counts: 'M8 4h8v3H8zM6 6H5v15h14V6h-1M9 12l2 2 4-4',
   reports: 'M5 4h14v16H5zM8 15l3-3 2 2 3-4',

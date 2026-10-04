@@ -1,7 +1,10 @@
 // Route metadata: sidebar pages (`/<key>`, guarded by `page.<key>`) and entity deep links (`/po/:number` …).
 import { NAV_LABELS } from '../shared';
 
-export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver'];
+export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver', 'itower'];
+
+/** Pages guarded by something other than `page.<key>` (the integration tower uses the integration layer's permission). */
+const PAGE_PERMISSION = { itower: 'integration.view' };
 
 /** Page component file of each route key, relative to resources/js/pages/. A missing file renders <ComingSoon />. */
 export const PAGE_FILES = {
@@ -14,9 +17,10 @@ export const PAGE_FILES = {
   picking: 'fulfillment/PickingPage.vue', dispatch: 'fulfillment/DispatchPage.vue', fo: 'fulfillment/FoPage.vue',
   trips: 'transport/TripsPage.vue', fleet: 'transport/FleetPage.vue', ttower: 'transport/TransportTowerPage.vue', driver: 'transport/DriverPage.vue', trip: 'transport/TripPage.vue',
   returns: 'returns/ReturnsPage.vue', rtn: 'returns/ReturnPage.vue', exc: 'dashboard/ExceptionPage.vue',
+  itower: 'integration/IntegrationTowerPage.vue',
 };
 
-export const NAV_ROUTES = NAV_KEYS.map((key) => ({ key, path: `/${key}`, title: NAV_LABELS[key] || { ar: key, en: key }, permission: `page.${key}`, nav: true }));
+export const NAV_ROUTES = NAV_KEYS.map((key) => ({ key, path: `/${key}`, title: NAV_LABELS[key] || { ar: key, en: key }, permission: PAGE_PERMISSION[key] || `page.${key}`, nav: true }));
 
 /** Entity deep links; `param` is the route param name. The API enforces access, so they carry no page permission. */
 export const ENTITY_ROUTES = [

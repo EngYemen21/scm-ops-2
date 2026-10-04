@@ -1,0 +1,1 @@
+import{Z as e,u as t,vt as n,w as r}from"./runtime-core.esm-bundler-BLlu7XAr.js";import{f as i,i as a}from"./i18n-DYJXa4_H.js";var o=[`title`],s={__name:`Ago`,props:{at:{type:String,default:null}},setup(s){return(c,l)=>(r(),t(`span`,{class:`num flex-none text-[9px] text-faint`,title:s.at||null},n(e(a)(s.at,e(i))),9,o))}};export{s as default};

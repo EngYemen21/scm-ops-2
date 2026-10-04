@@ -19,7 +19,8 @@ class AuthSessionTest extends ApiTestCase
         // every permission of the system, plus the integration layer's own (App\Integration\IntegrationBootstrap)
         $this->assertCount(count(config('scm.PERMISSIONS')) + count(IntegrationBootstrap::PERMISSIONS), $body['user']['permissions']);
         $this->assertContains('integration.manage', $body['user']['permissions']);
-        $this->assertSame(config('scm.ROLE_NAV.super'), $body['user']['nav']);
+        // the role's pages, plus the Integration Control Tower for whoever holds integration.view
+        $this->assertSame([...config('scm.ROLE_NAV.super'), 'itower'], $body['user']['nav']);
     }
 
     public function test_bad_credentials_are_rejected_and_audited(): void

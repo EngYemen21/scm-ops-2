@@ -32,7 +32,7 @@ const GROUPS = [
   { key: 'stock', label: { ar: 'المخزون والبيانات الأساسية', en: 'Stock & master data' }, tint: ['#efeaf8', '#654e92'], pages: ['inv', 'ledger', 'batches', 'products', 'whs'] },
   { key: 'buy', label: { ar: 'المشتريات', en: 'Purchasing' }, tint: ['#fbf0dd', '#b26a16'], pages: ['procurement'] },
   { key: 'tms', label: { ar: 'التوصيل والنقل', en: 'Delivery & transport' }, tint: ['#e8effe', '#3c79f5'], pages: ['dispatch', 'trips', 'fleet', 'ttower', 'driver'] },
-  { key: 'mgmt', label: { ar: 'المتابعة والإدارة', en: 'Monitoring & admin' }, tint: ['#f1eff6', '#55506a'], pages: ['dash', 'tower', 'reports', 'activity', 'settings'] },
+  { key: 'mgmt', label: { ar: 'المتابعة والإدارة', en: 'Monitoring & admin' }, tint: ['#f1eff6', '#55506a'], pages: ['dash', 'tower', 'itower', 'reports', 'activity', 'settings'] },
 ];
 
 export function moreGroups(user) {

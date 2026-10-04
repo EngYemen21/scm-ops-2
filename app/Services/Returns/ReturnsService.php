@@ -2,6 +2,7 @@
 
 namespace App\Services\Returns;
 
+use App\Integration\Services\OrderEvents;
 use App\Models\Batch;
 use App\Models\Bin;
 use App\Models\Customer;
@@ -127,6 +128,7 @@ class ReturnsService
             $this->audit->status($user, 'ReturnOrder', $r->id, $number, null, $status);
             $typeAr = self::TYPE_AR[$dto['type']] ?? 'مرتجع';
             $this->notify->activity($user, 'ReturnOrder', $r->id, $number, "أُنشئ {$typeAr} {$number} — سبب: {$reasonAr}", "Return {$number} created", ['wm', 'super']);
+            $this->emitReturn($r, 'return.created', ['reasonAr' => $reasonAr, 'lines' => $dto['lines']]);
 
             return $r->refresh();
         });
@@ -225,6 +227,7 @@ class ReturnsService
                 $msgs[] = "{$l->product->name_ar} × {$l->qty}: {$note}";
             }
             $r->update(['status' => 'closed', 'decision' => $decision, 'decided_by_id' => $user->id, 'decided_by' => $user->username, 'decided_at' => now(), 'closed_at' => now()]);
+            $this->emitReturn($r, 'return.closed', ['decision' => $decision, 'decisionAr' => config("scm.RETURN_DECISION_LABELS.{$decision}.ar")]);
             $this->audit->status($user, 'ReturnOrder', $r->id, $r->number, 'inspect', 'closed', $decision, $txId);
             $this->audit->log($user, ['action' => 'RTN.DECIDE', 'entityType' => 'ReturnOrder', 'entityId' => $r->id, 'entityNumber' => $r->number,
                 'field' => 'decision', 'oldValue' => 'inspect', 'newValue' => $decision, 'transactionId' => $txId]);
@@ -277,11 +280,19 @@ class ReturnsService
             $from = $r->status;
             $r->update(['status' => $to] + $extra($r));
             $this->audit->status($user, 'ReturnOrder', $r->id, $r->number, $from, $to, $note);
+            $this->emitReturn($r, "return.{$to}");
 
             return $r->id;
         });
 
         return $this->get($id);
+    }
+
+    /** A return of an order received from another system is reported to it (return.created / approved / received / inspect / closed …). */
+    private function emitReturn(ReturnOrder $r, string $type, array $extra = []): void
+    {
+        $soId = $r->fo_id ? FulfillmentOrder::whereKey($r->fo_id)->value('so_id') : null;
+        app(OrderEvents::class)->emit($soId, $type, ['return' => $r->number, 'returnType' => $r->type, 'returnStatus' => $r->status] + $extra);
     }
 
     private function with(): array

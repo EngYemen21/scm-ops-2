@@ -1,6 +1,7 @@
 # B2B Integration & Synchronization — Architecture
 
-Status: **design approved for build, phase 1–2 in progress** (2026-10-04). Owner: B2B engineering.
+Status: **phases 1–12 built and verified locally end-to-end; not enabled in production** (2026-10-04) — production
+enabling waits for the Sales go-live gate (§9, §10 phase 0). Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
 Systems: **B2B Sales** (`salem-cell/b2b-platform`, vanilla JS + Vercel functions + Neon Postgres, live at
 b2b-platform-ten.vercel.app) and **B2B OPS** (this repository, Laravel 13 + Vue 3, live at scm-ops-laravel.vercel.app).
 
@@ -132,9 +133,11 @@ Decisions:
 7. **No AI in operational decisions.** Data is captured clean (events, ledger, ETA vs actual) so forecasting can be
    added later as advisory only.
 
-Scheduling (Vercel has no worker): `php artisan scm:integration-run` every minute where a scheduler exists; on
-Vercel the same run is triggered by the signed `POST /api/v1/ops/heartbeat` (GitHub Actions cron, every 5 min) and
-opportunistically after inbound calls. The inline attempt makes the normal path immediate; the run only repairs.
+Scheduling (Vercel has no worker): `php artisan scm:integration-run` every minute where a scheduler exists; without
+one the same cycle runs opportunistically after a mutating / system request (at most every
+`INTEGRATION_OPPORTUNISTIC_SECONDS`) and from the signed `POST /api/v1/ops/heartbeat` (GitHub Actions cron in the
+Sales repository, every 5 min once configured). One OPS cycle also triggers the Sales cycle. The inline attempt makes
+the normal path immediate; the cycle only repairs.
 
 ---
 
@@ -146,14 +149,19 @@ requestId}`. Every response echoes `X-Request-Id`; `X-Correlation-Id` is echoed 
 | Method & path | Scope | Purpose |
 |---|---|---|
 | `GET /api/v1/health` | any | liveness + this system's view of the caller (key id, scopes) |
-| `POST /api/v1/events` | `events:write` | Receive one event or a batch (≤ 100). Answers per event: `accepted` / `duplicate` / `stale` / `rejected` (with code). 202 when stored; processing is asynchronous-but-immediate |
+| `POST /api/v1/events` | `events:write` | Receive one event or a batch (≤ 100). Answers per event, in order: `processed` / `duplicate` / `stale` / `blocked` (parked until a mapping exists) / `rejected` / `failed` (will be retried here), each with its code. 202 when stored |
 | `GET /api/v1/inventory/availability?products=P-1,P-2&warehouse=` | `inventory:read` | ATP per mapped Sales product: `{onHand, reserved, available, quarantine, damaged, expired, nearExpiry, incoming, incomingEta, atp, asOf}` |
 | `GET /api/v1/orders/{externalRef}` | `orders:read` | OPS view of a Sales order: status, mapped Sales status, timeline, ETA, shipment/driver, POD summary, returns, exceptions |
-| `GET /api/v1/products?mapped=1` | `products:read` | OPS operational master for mapped products |
-| `POST /api/v1/ops/heartbeat` | `ops:run` | Runs one integration cycle (retries, deliveries, reconciliation sample) |
+| `GET /api/v1/products?mapped=1` | `products:read` | OPS operational master for mapped products — **planned, not built** (Sales shows only availability today) |
+| `POST /api/v1/ops/heartbeat` | `ops:run` | Runs one integration cycle (inbox retries, waiting backorders, deliveries, the other systems' cycles, reconciliation when due) |
 
-Sales exposes `POST /api/integration/events` (same envelope, OPS→Sales) and `GET /api/integration/orders/{id}`
-(reconciliation read).
+Sales exposes, all signed by OPS: `POST /api/integration/events` (same envelope, OPS→Sales), `POST /api/integration/run`
+(its cycle: outbox retries, repair of unsent approved orders, changed customers / products, availability refresh) and
+`GET /api/integration/orders?ids=…` (reconciliation read).
+
+People use the Control Tower API `/api/integration/*` (session + `integration.view` / `integration.manage`): overview,
+inbox, deliveries, exceptions, `events/{id}` (payload), `trace/{key}`, retry / replay / resolve, `mappings/{entity}`,
+`run`, `reconcile`.
 
 ---
 
@@ -186,14 +194,14 @@ Envelope (CloudEvents-compatible names):
 | `order.accepted` | ops | ORD-id | `{opsOrder: SO-…, warehouse, availability: full\|partial\|none, lines:[{productId, qty, reserved, backordered}]}` |
 | `order.backordered` | ops | ORD-id | `{opsOrder, lines:[{productId, missing}], eta?}` |
 | `order.reserved` | ops | ORD-id | `{opsOrder, lines:[{productId, reserved}]}` |
-| `order.released` / `picking.started` / `picking.completed` / `order.packed` | ops | ORD-id | `{opsOrder, fulfilmentOrders:[FO-…], at}` |
+| `order.released` / `picking.started` / `picking.completed` / `order.packed` / `order.loaded` | ops | ORD-id | `{opsOrder, status, fulfilmentOrder, at}` |
 | `shipment.dispatched` | ops | ORD-id | `{trip, vehicle, driver, eta?, at}` |
 | `delivery.completed` / `delivery.partial` / `delivery.failed` | ops | ORD-id | `{trip, pod, at, receiver?, deliveredQty, returnedQty, reason?, gps?}` |
-| `order.cancelled` | ops | ORD-id | `{opsOrder, reason}` |
-| `order.eta_updated` | ops | ORD-id | `{eta, reason}` |
-| `inventory.changed` | ops | P-id | `{atp, available, incoming, incomingEta, asOf}` (throttled, last value wins) |
+| `order.cancelled` / `order.cancel_rejected` | ops | ORD-id | `{opsOrder, status, reason}` — the answer to `sales_order.cancelled` (released, or refused because execution started) |
+| `order.eta_updated` | ops | ORD-id | `{eta, reason}` — **planned** (today the ETA travels with `order.backordered` / `procurement.required`) |
+| `inventory.changed` | ops | P-id | `{atp, available, incoming, incomingEta, asOf}` — accepted by Sales, **not yet emitted by OPS**: Sales pulls availability every cycle instead |
 | `procurement.required` | ops | ORD-id | `{lines:[{productId, missing}], pr?, po?, eta?}` |
-| `return.created` / `return.received` / `return.closed` | ops | ORD-id | `{rtn, type, lines, decision?}` |
+| `return.created` / `return.approved` / `return.received` / `return.inspect` / `return.closed` / `return.rejected` | ops | ORD-id | `{return, returnType, returnStatus, decision?}` |
 | `integration.exception` | either | entity | `{code, details}` — informational |
 
 Schema versions are additive within a major version; a breaking change ships as `schemaVersion: 2` while v1 is
@@ -268,19 +276,19 @@ to OPS — those are operational and now driven by OPS events.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Sales hardening: real OTP binding, role/tenant from user record, scoped snapshot, price snapshot on lines, `updated_at` | **needs owner decision** (SMS/WhatsApp OTP provider) |
+| 0 | Sales hardening: real OTP binding, role/tenant from user record, scoped snapshot (price snapshot on order lines: done) | **not done — needs owner decision** (SMS/WhatsApp OTP provider); blocks production enabling |
 | 1 | Discovery (this document) | done |
-| 2 | Integration layer core in OPS: `int_*` tables, HMAC gateway `/api/v1`, inbox (dedupe/sequence), outbox deliveries (backoff, DLQ, breaker), external refs, exceptions, scheduler + heartbeat | in progress |
-| 3 | Master data: customer + branch intake, product mapping queue + UI | |
-| 4 | Inventory/ATP API + `inventory.changed` | |
-| 5 | Order intake: `sales_order.confirmed` → SO with reserve-what-exists + backorder; cancel | |
-| 6 | Fulfilment status events → Sales; Sales inbound endpoint + drawer timeline | |
-| 7 | Delivery + POD events | |
-| 8 | Returns + procurement requirement + ETA | |
-| 9 | Reliability hardening on Sales side (outbox, dispatcher, inbox) | |
-| 10 | Control Tower UI, traceability by correlation id, reconciliation engine | |
-| 11 | End-to-end + failure-scenario tests (the 20 mandatory scenarios) | |
-| 12 | Production readiness: runbook, monitoring, rollback (feature flags both sides) | |
+| 2 | Integration layer core in OPS: `int_*` tables, HMAC gateway `/api/v1`, inbox (dedupe/sequence), outbox deliveries (backoff, DLQ, breaker), external refs, exceptions, scheduler + heartbeat | done — `app/Integration`, `IntegrationCoreTest` |
+| 3 | Master data: customer + branch intake, product mapping queue + UI | done — `MasterDataSyncTest`, tower → mappings |
+| 4 | Inventory/ATP API + `inventory.changed` | done (pull API; `inventory.changed` push not built) |
+| 5 | Order intake: `sales_order.confirmed` → SO with reserve-what-exists + backorder; cancel | done — `OrderIntakeService`, `OrderJourneyTest` |
+| 6 | Fulfilment status events → Sales; Sales inbound endpoint + drawer timeline | done — `OrderEvents`; Sales `api/integration/events.js` + drawer panel |
+| 7 | Delivery + POD events | done |
+| 8 | Returns + procurement requirement + ETA | done — returns events, shortage → procurement exception + ETA (PR/PO creation stays a buyer's action) |
+| 9 | Reliability hardening on Sales side (outbox, dispatcher, inbox) | done — Sales `api/_lib/integration.js` |
+| 10 | Control Tower UI, traceability by correlation id, reconciliation engine | done — `/itower`, `TowerService`, `ReconciliationService`, `ControlTowerTest` |
+| 11 | End-to-end + failure-scenario tests (the 20 mandatory scenarios) | done — 19 integration tests on MySQL + PostgreSQL, `tools/e2e-sales-ops.mjs` (34 checks across both real systems); no load test |
+| 12 | Production readiness: runbook, monitoring, rollback (feature flags both sides) | done — `RUNBOOK.md` (enable, monitor, rotate, roll back); production enabling not done |
 
 Definition of done = the journey Customer → Sales order → availability → reservation → OPS fulfilment → picking →
 packing → dispatch → driver → delivery → POD → Sales status updated runs with no double entry, proven by an

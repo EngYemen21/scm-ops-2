@@ -29,6 +29,9 @@
         <env name="WIALON_BASE_URL" value=""/>
         <env name="WIALON_TOKEN" value=""/>
         <env name="GPS_PROVIDER_URL" value=""/>
+        <env name="INTEGRATION_OPPORTUNISTIC_SECONDS" value="0"/>
+        <env name="INTEGRATION_SALES_ENABLED" value="false"/>
+        <env name="INTEGRATION_SCHEDULER_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
