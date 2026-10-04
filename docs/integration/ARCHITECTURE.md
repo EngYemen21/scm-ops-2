@@ -3,8 +3,8 @@
 Status: **phases 0–12 built and verified locally end-to-end; stage 1 is live in production since 2026-10-04** —
 signed link between the two live sites, customers and products flowing Sales → OPS, availability flowing back, a
 5-minute heartbeat. The 28 Sales products were created in OPS and linked as a pilot (estimated physical
-attributes, trial opening balance — RUNBOOK §1 gate 4). **Order hand-off (stage 2) is still off**: one settings change
-and redeploy on the Sales project (RUNBOOK §1 gate 5); until then Sales orders are fulfilled manually in Sales. Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
+attributes, trial opening balance — RUNBOOK §1 gate 4). **Order hand-off (stage 2) was switched on the same day** for orders approved
+after the switch; a first real order on the live sites has not been run yet (RUNBOOK §1 gate 5). Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
 Systems: **B2B Sales** (`salem-cell/b2b-platform`, vanilla JS + Vercel functions + Neon Postgres, live at
 b2b-platform-ten.vercel.app) and **B2B OPS** (this repository, Laravel 13 + Vue 3, live at scm-ops-laravel.vercel.app).
 
