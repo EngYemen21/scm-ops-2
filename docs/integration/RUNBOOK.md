@@ -5,6 +5,9 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md). Code: `app/Integration/` (OPS), `api
 
 The integration is **off by default on both sides**. With it off, both systems behave exactly as before.
 
+Lesson from the first live run: a signed path must not contain a raw comma — Vercel re-encodes it (`,` → `%2C`) before
+the request reaches the application, so the signature no longer matches. Lists in query strings are sent encoded.
+
 ---
 
 ## 1. Go-live gate (read first)
@@ -15,8 +18,8 @@ Go-live is a sequence of gates; each must be true before the next step.
 |---|---|---|
 | 1 | **Sales sign-in is hardened** — registered account (phone + 4-digit PIN with lockout; SMS OTP later), role and tenant from the account record, `/api/state` scoped to the tenant, ownership checked on every command | **done** — built and tested in Sales (`docs/SECURITY.md`, 93 HTTP checks in CI, upgrade rehearsed on the previous schema), merged to `master` with the owner's approval |
 | 2 | **Sales production is on that version** — deploy, then `POST /api/admin/migrate` (additive + data upgrade), then sign in once per account to replace the temporary PIN | **deployed and migrated** (old OTP/role-pick actions answer 400, `/api/state` 401 without a session, migration idempotent); the owner still has to sign in to each seed account once |
-| 3 | **Stage 1 — preparation** (`OPS_INTEGRATION_ORDERS=false` on Sales): customers and products flow to OPS, availability flows back; **orders stay manual in Sales** | **not set yet** — the environment variables of §2 (both projects) + one redeploy each + the heartbeat variable/secrets of §4; keys are generated and stored outside the repositories |
-| 4 | **Products mapped and stocked** — every Sales product linked to its OPS SKU in برج التكامل → ربط الأصناف, with stock received in OPS | business task (the two catalogues are different lists; a person decides each link) |
+| 3 | **Stage 1 — preparation** (`OPS_INTEGRATION_ORDERS=false` on Sales): customers and products flow to OPS, availability flows back; **orders stay manual in Sales** | **live since 2026-10-04** — signed health 200 (wrong secret 401), first cycle delivered 11 customers + 28 products (all processed, 13 delivery sites), availability refreshed for 28 products, GitHub Actions heartbeat every 5 minutes green |
+| 4 | **Products mapped and stocked** — every Sales product linked to its OPS SKU in برج التكامل → ربط الأصناف, with stock received in OPS | **open** — 28 Sales products wait in the mapping queue (`PRODUCT_UNMAPPED`); business task: the two catalogues are different lists and a person decides each link |
 | 5 | **Stage 2 — operation** (`OPS_INTEGRATION_ORDERS=true`, `OPS_INTEGRATION_SINCE=<switch date>`): approved orders reserve stock in OPS and are fulfilled there | after gate 4 |
 
 Why the gates matter: before gate 1 an anonymous visitor could approve an order, which with the integration on reserves
