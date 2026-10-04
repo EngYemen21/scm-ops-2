@@ -18,6 +18,9 @@ Route::prefix('auth')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
 });
 
+// System-to-system gateway (signed by other systems, never by a person's session)
+Route::prefix('v1')->group(__DIR__.'/integration_v1.php');
+
 Route::middleware(['auth.api', 'idempotent'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/change-password', [AuthController::class, 'changePassword']);

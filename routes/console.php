@@ -1,5 +1,6 @@
 <?php
 
+use App\Integration\Services\IntegrationRunner;
 use App\Models\Warehouse;
 use App\Services\Inventory\InventoryService;
 use App\Services\Transport\GpsTrackingService;
@@ -22,6 +23,16 @@ Artisan::command('scm:gps-sync {--force}', function (GpsTrackingService $gps) {
     return ($r['ok'] ?? false) || ! ($r['ran'] ?? false) ? 0 : 1;
 })->purpose('Sync vehicle positions from the GPS provider');
 Schedule::command('scm:gps-sync')->everyMinute()->withoutOverlapping();
+
+// Integration layer: retry due inbox events and deliver due outbox events (docs/integration/ARCHITECTURE.md §4, §8).
+// Without a scheduler (Vercel) the same cycle runs from the signed POST /api/v1/ops/heartbeat.
+Artisan::command('scm:integration-run {--limit=100}', function (IntegrationRunner $runner) {
+    $r = $runner->run((int) $this->option('limit'), 'scheduler');
+    $this->line(json_encode($r, JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Run one integration cycle (inbox retries + outbox deliveries)');
+Schedule::command('scm:integration-run')->everyMinute()->withoutOverlapping();
 
 Artisan::command('scm:reconcile {warehouse? : warehouse code, e.g. RYD}', function (InventoryService $inventory) {
     $warehouseId = null;

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Integration\IntegrationBootstrap;
 use App\Models\AuditLog;
 use App\Models\RefreshToken;
 use Tests\ApiTestCase;
@@ -15,7 +16,9 @@ class AuthSessionTest extends ApiTestCase
         $this->assertSame(['accessToken', 'refreshToken', 'expiresIn', 'user'], array_keys($body));
         $this->assertSame('admin', $body['user']['username']);
         $this->assertContains('super', $body['user']['roles']);
-        $this->assertCount(count(config('scm.PERMISSIONS')), $body['user']['permissions']);
+        // every permission of the system, plus the integration layer's own (App\Integration\IntegrationBootstrap)
+        $this->assertCount(count(config('scm.PERMISSIONS')) + count(IntegrationBootstrap::PERMISSIONS), $body['user']['permissions']);
+        $this->assertContains('integration.manage', $body['user']['permissions']);
         $this->assertSame(config('scm.ROLE_NAV.super'), $body['user']['nav']);
     }
 

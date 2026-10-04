@@ -158,7 +158,8 @@ class IntegrationsTest extends ApiTestCase
         $page = $this->expectOk($this->getAs('sales', "/api/integrations/outbox?status=pending&type={$type}&pageSize=1"));
         $this->assertSame(['items', 'total', 'page', 'pageSize', 'pages'], array_keys($page));
         $this->assertSame([2, 2, 1], [$page['total'], $page['pages'], count($page['items'])]);
-        $this->assertSame(['id', 'type', 'payload', 'status', 'attempts', 'lastError', 'createdAt', 'sentAt'], array_keys($page['items'][0]));
+        // the event envelope of the integration layer was added after the original fields (additive change)
+        $this->assertSame(['id', 'type', 'payload', 'status', 'attempts', 'lastError', 'createdAt', 'sentAt', 'source', 'subject', 'sequence', 'correlationId', 'causationId', 'schemaVersion'], array_keys($page['items'][0]));
         $this->assertSame(['trip' => 'TRP-TEST-2'], $page['items'][0]['payload'], 'newest first');
         $this->assertSame(2, $this->expectOk($this->getAs('sales', '/api/integrations/outbox?q='.substr($type, 0, 12)))['total'], 'q is a contains-match on the type');
         $this->assertSame(0, $this->expectOk($this->getAs('sales', "/api/integrations/outbox?status=sent&type={$type}"))['total']);

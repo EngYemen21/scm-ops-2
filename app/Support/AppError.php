@@ -20,7 +20,9 @@ class AppError extends RuntimeException
         'NOT_FOUND' => 404,
         'CONFLICT' => 409,
         'BUSINESS_RULE' => 422,
+        'RATE_LIMITED' => 429,
         'SYSTEM' => 500,
+        'UNAVAILABLE' => 503,
     ];
 
     public function __construct(
@@ -78,5 +80,15 @@ class AppError extends RuntimeException
     public static function rule(string $code, string $ar, ?string $en = null, mixed $details = null): self
     {
         return new self('BUSINESS_RULE', $code, $ar, $en, $details);
+    }
+
+    public static function rateLimited(string $code, string $ar, ?string $en = null, mixed $details = null): self
+    {
+        return new self('RATE_LIMITED', $code, $ar, $en, $details);
+    }
+
+    public static function unavailable(string $code, string $ar, ?string $en = null): self
+    {
+        return new self('UNAVAILABLE', $code, $ar, $en);
     }
 }

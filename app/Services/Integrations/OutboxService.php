@@ -21,7 +21,8 @@ use Illuminate\Support\Facades\Log;
  */
 class OutboxService
 {
-    public const STATUSES = ['pending', 'sent', 'failed'];
+    /** `routed` = an integration-layer event, delivered per subscriber through int_deliveries (App\Integration). */
+    public const STATUSES = ['pending', 'sent', 'failed', 'routed'];
 
     /** Business events the B2B platform / ERP consume. Documentation only — every pending event is delivered. */
     public const B2B_EVENT_TYPES = ['ShipmentDispatched', 'DeliveryCompleted', 'DeliveryFailed', 'PartialShipment', 'InventoryReceived', 'OrderPacked', 'PO_SENT', 'SupplierReturnCreated'];

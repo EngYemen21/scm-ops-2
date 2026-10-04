@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\AuthenticateApi;
+use App\Integration\Http\AuthenticateSystem;
+use App\Integration\Http\FlushIntegrationEvents;
 use App\Http\Middleware\Idempotency;
 use App\Http\Middleware\NormalizeApiQuery;
 use App\Http\Middleware\RequestId;
@@ -27,11 +29,13 @@ $app = Application::configure(basePath: dirname(__DIR__))
             $middleware->trustProxies(at: '*'); // only the platform proxy can reach the function: https + client IP come from it
         }
         $middleware->prepend(RequestId::class);
+        $middleware->append(FlushIntegrationEvents::class); // terminable: delivers this request's integration events
         $middleware->api(prepend: [NormalizeApiQuery::class]);
         $middleware->alias([
             'auth.api' => AuthenticateApi::class,
             'perm' => RequirePermission::class,
             'idempotent' => Idempotency::class,
+            'int.system' => AuthenticateSystem::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

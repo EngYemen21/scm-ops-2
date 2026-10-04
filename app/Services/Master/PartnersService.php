@@ -279,6 +279,14 @@ class PartnersService
     {
         $c = Customer::where('id', $idOrCode)->orWhere('code', $idOrCode)->first()
             ?? throw AppError::notFound('CUSTOMER_NOT_FOUND', 'العميل غير موجود', 'Customer not found');
+        // system of record (docs/integration/ARCHITECTURE.md §3): a customer owned by another system keeps its commercial
+        // identity there; OPS may still edit what is operational (zone, contact, address, coordinates)
+        if ($c->source_system) {
+            $owned = array_values(array_intersect(array_keys($dto), ['nameAr', 'nameEn', 'city', 'active', 'terms', 'creditLimit', 'priceList']));
+            if ($owned) {
+                throw AppError::rule('CUSTOMER_OWNED_BY_SOURCE', 'بيانات هذا العميل التجارية تُدار من منصة المبيعات — عدّلها هناك', "Commercial data of this customer is owned by {$c->source_system}", ['fields' => $owned]);
+            }
+        }
         $terms = $dto['terms'] ?? $c->terms;
         $creditLimit = (float) ($dto['creditLimit'] ?? $c->credit_limit);
         if (isset($dto['terms']) || isset($dto['creditLimit'])) {
