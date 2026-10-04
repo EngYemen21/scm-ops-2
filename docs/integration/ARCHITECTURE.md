@@ -1,8 +1,8 @@
 # B2B Integration & Synchronization — Architecture
 
-Status: **phases 0–12 built and verified locally end-to-end; not enabled in production** (2026-10-04) — the Sales
-hardening (phase 0) is on its `integration-ops` branch awaiting the owner's approval of the production deploy; enabling
-then follows the gates in RUNBOOK §1. Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
+Status: **phases 0–12 built and verified locally end-to-end; the integration is not enabled in production**
+(2026-10-04). The Sales hardening (phase 0) is live: deployed and migrated on b2b-platform-ten.vercel.app. Enabling the
+integration follows the remaining gates in RUNBOOK §1 (stage 1 settings, then product mapping, then order hand-off). Operations: [RUNBOOK.md](RUNBOOK.md). Owner: B2B engineering.
 Systems: **B2B Sales** (`salem-cell/b2b-platform`, vanilla JS + Vercel functions + Neon Postgres, live at
 b2b-platform-ten.vercel.app) and **B2B OPS** (this repository, Laravel 13 + Vue 3, live at scm-ops-laravel.vercel.app).
 
@@ -278,7 +278,7 @@ to OPS — those are operational and now driven by OPS events.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Sales hardening: registered accounts (phone + 4-digit PIN, lockout, forced change of temporary PIN), role/tenant from the account record, scoped snapshot, object-level ownership checks, per-tenant wallets, price snapshot on order lines | done in Sales (`docs/SECURITY.md`, `scripts/test-security.mjs` — 93 checks, upgrade rehearsed on the previous schema). SMS OTP: later, replaces the PIN check only |
+| 0 | Sales hardening: registered accounts (phone + 4-digit PIN, lockout, forced change of temporary PIN), role/tenant from the account record, scoped snapshot, object-level ownership checks, per-tenant wallets, price snapshot on order lines | done in Sales (`docs/SECURITY.md`, `scripts/test-security.mjs` — 93 checks, upgrade rehearsed on the previous schema); **live since 2026-10-04** (migration summary: 11 clients, 21 orders, 8 sign-in accounts). SMS OTP: later, replaces the PIN check only |
 | 1 | Discovery (this document) | done |
 | 2 | Integration layer core in OPS: `int_*` tables, HMAC gateway `/api/v1`, inbox (dedupe/sequence), outbox deliveries (backoff, DLQ, breaker), external refs, exceptions, scheduler + heartbeat | done — `app/Integration`, `IntegrationCoreTest` |
 | 3 | Master data: customer + branch intake, product mapping queue + UI | done — `MasterDataSyncTest`, tower → mappings |
