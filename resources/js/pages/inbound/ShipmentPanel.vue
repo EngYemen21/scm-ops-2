@@ -110,7 +110,7 @@ const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURICompo
 
       <!-- next step -->
       <div class="next-step mt-3.5" :class="next.tone">
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0 flex-[1_1_280px]">
           <div class="text-[12.5px] font-extrabold">{{ next.title }}</div>
           <div class="mt-1 text-[10.5px] leading-[1.8] opacity-90">{{ next.text }}</div>
           <div v-if="!allowed" class="mt-1.5 text-[10px] font-extrabold text-bad">{{ t(`دورك لا يملك صلاحية هذا الإجراء (${next.perm}).`, `Your role lacks the permission for this step (${next.perm}).`) }}</div>

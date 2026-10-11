@@ -306,7 +306,9 @@
   .next-step.green { background: #e6f9ec; border-color: #bfe8cc; color: #1d7a3e; }
   .next-step.red { background: #fdecec; border-color: #f3c4c4; color: #b23b3b; }
   .next-step.neutral { background: #f1eff6; border-color: #e9e6f0; color: #55506a; }
-  .next-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  /* the explanation keeps a readable column; the actions move under it when the panel is narrow instead of squeezing it */
+  .next-step > :first-child { flex: 1 1 280px; }
+  .next-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex: 0 1 auto; margin-inline-start: auto; }
   .next-input { width: 230px; }
   .next-input .inp { background: #fff; }
 
