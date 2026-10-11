@@ -44,6 +44,9 @@ php artisan test tests/Feature/Sales               # one domain
 php artisan scm:reconcile [RYD]                    # inventory ledger = balances? (exit 1 on mismatch)
 php artisan scm:procurement-followup               # alert procurement once about late POs / expiring supplier documents (also runs hourly from the heartbeat)
 php artisan scm:sync-permissions                   # insert permissions a release added (config/scm.php) with their default role grants
+php artisan scm:finance-check                      # trial balance balanced + AR/AP/inventory sub-ledgers = GL (exit 1 on mismatch)
+php artisan scm:finance-open-inventory             # dry run: value pre-ledger stock at purchase price; --confirm posts the opening journal (CFO approval first)
+php artisan scm:finance-depreciate [YYYY-MM]       # straight-line depreciation of active assets up to the period (also scheduled monthly)
 php artisan migrate:fresh --seed                   # reset the dev database to the demo data
 vendor/bin/pint                                    # PHP code style
 node tools/check-vue.mjs resources/js/pages/sales  # static check of Vue files (imports, exports, templates)

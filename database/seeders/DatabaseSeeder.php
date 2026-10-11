@@ -34,6 +34,7 @@ class DatabaseSeeder extends Seeder
         $settings->ensureDefaults();
         IntegrationBootstrap::ensure(); // the snapshot replaced the access tables: integration permissions + service users
         PermissionSync::ensure(); // permissions added after the snapshot was taken (e.g. supplier invoices) with their default role grants
+        \App\Finance\FinanceBootstrap::ensure(); // chart of accounts + cost centers per warehouse + cash/bank rows (no balances)
         $this->call(DemoCoordinatesSeeder::class);
         $this->command?->info('[seed] imported '.array_sum($counts).' rows into '.count(array_filter($counts)).' tables');
         $this->command?->info('[seed] logins: admin, sales, wm, inv, proc, disp, worker, driver, gm, finance — password = SEED_PASSWORD');

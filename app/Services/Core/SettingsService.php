@@ -18,6 +18,8 @@ class SettingsService
         'procurement.allowSelfApproval' => ['value' => false, 'group' => 'procurement', 'description' => 'Allow the person who created a requisition / purchase order to approve it (segregation of duties off)'],
         'procurement.minQuotes' => ['value' => 3, 'group' => 'procurement', 'description' => 'Quotations required before an RFQ can be awarded; fewer needs a documented exception'],
         'procurement.invoiceTolerancePct' => ['value' => 2, 'group' => 'procurement', 'description' => 'Supplier invoice price / total may differ from the PO by this percentage before it is disputed'],
+        'finance.fleetExpensesIncludeVat' => ['value' => false, 'group' => 'finance', 'description' => 'Fuel / maintenance amounts include 15% VAT: split VAT input out of them (CFO decision)'],
+        'finance.customerTermsDays' => ['value' => 0, 'group' => 'finance', 'description' => 'Default credit days for customer invoices when the customer has none (0 = due on delivery)'],
         'procurement.supplierDocWarnDays' => ['value' => 30, 'group' => 'procurement', 'description' => 'Warn when a supplier document expires within N days'],
         'receiving.allowExcess' => ['value' => false, 'group' => 'receiving', 'description' => 'Allow receiving more than the open PO quantity'],
         'inventory.autoQuarantineDays' => ['value' => 7, 'group' => 'inventory', 'description' => 'Batches expiring within N days are auto-quarantined by the daily job'],

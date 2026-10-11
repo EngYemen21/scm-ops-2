@@ -2,6 +2,8 @@
 
 namespace App\Services\Procurement;
 
+use App\Finance\Services\LedgerService;
+use App\Finance\Services\PaymentsService;
 use App\Models\GrnLine;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
@@ -152,6 +154,7 @@ class SupplierInvoiceService
             }
             $from = $inv->status;
             $inv->update(['status' => 'approved', 'approved_by' => $user->username, 'approved_at' => now(), 'approval_note' => $note ?: null]);
+            $inv->update(['journal_id' => $this->postApproval($user, $inv)->id]); // finance: GRNI → AP, price variances, VAT input
             $this->audit->log($user, ['action' => 'INVOICE.APPROVE', 'entityType' => 'SupplierInvoice', 'entityId' => $inv->id, 'entityNumber' => $inv->number, 'oldValue' => $from, 'newValue' => ['status' => 'approved', 'note' => $note]]);
             $this->audit->status($user, 'SupplierInvoice', $inv->id, $inv->number, $from, 'approved', $note);
             $this->notify->activity($user, 'SupplierInvoice', $inv->id, $inv->number, "اعتُمدت فاتورة {$inv->number} للصرف".($from === 'disputed' ? " رغم الفروق — {$note}" : ''), "Invoice {$inv->number} approved for payment", ['finance']);
@@ -172,11 +175,14 @@ class SupplierInvoiceService
             if ($ref === '') {
                 throw AppError::validation('PAYMENT_REF_REQUIRED', 'مرجع السداد (رقم الحوالة) مطلوب', 'Payment reference is required');
             }
-            $paidAt = ! empty($dto['paidAt']) ? H::parseDate($dto['paidAt']) : now();
-            $inv->update(['status' => 'paid', 'paid_at' => $paidAt, 'paid_by' => $user->username, 'payment_ref' => $ref]);
-            $this->audit->log($user, ['action' => 'INVOICE.PAY', 'entityType' => 'SupplierInvoice', 'entityId' => $inv->id, 'entityNumber' => $inv->number, 'newValue' => ['paidAt' => $paidAt->toJSON(), 'reference' => $ref, 'total' => (float) $inv->total]]);
-            $this->audit->status($user, 'SupplierInvoice', $inv->id, $inv->number, 'approved', 'paid', $ref);
-            $this->notify->activity($user, 'SupplierInvoice', $inv->id, $inv->number, "سُدّدت فاتورة {$inv->number} — مرجع {$ref}", "Invoice {$inv->number} paid — ref {$ref}", ['proc']);
+            // finance: the payment voucher (bank → supplier), partial or full; the invoice turns `paid` when fully settled
+            $remaining = round((float) $inv->total - (float) $inv->paid_amount, 2);
+            $amount = isset($dto['amount']) && $dto['amount'] !== null && $dto['amount'] !== '' ? round((float) $dto['amount'], 2) : $remaining;
+            app(PaymentsService::class)->pay($user, ['supplier' => $inv->supplier_id, 'amount' => $amount, 'date' => $dto['paidAt'] ?? null, 'reference' => $ref,
+                'bankAccount' => $dto['bankAccount'] ?? null, 'method' => $dto['method'] ?? null, 'allocations' => [['invoice' => $inv->id, 'amount' => min($amount, $remaining)]]]);
+            $inv->refresh();
+            $this->audit->log($user, ['action' => 'INVOICE.PAY', 'entityType' => 'SupplierInvoice', 'entityId' => $inv->id, 'entityNumber' => $inv->number, 'newValue' => ['amount' => $amount, 'reference' => $ref, 'paidAmount' => $inv->paid_amount]]);
+            $this->notify->activity($user, 'SupplierInvoice', $inv->id, $inv->number, ($inv->status === 'paid' ? "سُدّدت فاتورة {$inv->number}" : "سداد جزئي لفاتورة {$inv->number} (".number_format($amount, 2).' ر.س)')." — مرجع {$ref}", "Invoice {$inv->number} payment — ref {$ref}", ['proc']);
 
             return $this->get($inv->id);
         });
@@ -193,6 +199,12 @@ class SupplierInvoiceService
                 throw AppError::rule('INVOICE_STATE', 'الفاتورة ملغاة مسبقًا', 'Invoice already cancelled');
             }
             $from = $inv->status;
+            if ((float) $inv->paid_amount > 0) {
+                throw AppError::rule('INVOICE_PAID', "الفاتورة {$inv->number} عليها سداد جزئي — ألغِ سند السداد أولًا", 'Invoice has payments');
+            }
+            if ($inv->journal_id) {
+                app(LedgerService::class)->reverse($user, $inv->journal_id, "إلغاء فاتورة المورد {$inv->number}: {$reason}");
+            }
             $inv->update(['status' => 'cancelled', 'notes' => trim(($inv->notes ? $inv->notes."\n" : '')."إلغاء: {$reason}")]);
             $this->audit->status($user, 'SupplierInvoice', $inv->id, $inv->number, $from, 'cancelled', $reason);
 
@@ -251,6 +263,38 @@ class SupplierInvoiceService
         $row['overdue'] = in_array($inv->status, self::OPEN, true) && $inv->due_date !== null && $inv->due_date->lt(H::dayStart());
 
         return $row;
+    }
+
+    /**
+     * The approval journal: goods at the PO price close the GRNI accrual, the price difference is a purchase price variance,
+     * shipping is freight-in, VAT input is recoverable, and the supplier is owed the invoice total.
+     */
+    private function postApproval(AuthUser $user, SupplierInvoice $inv): \App\Finance\Models\Journal
+    {
+        $inv->loadMissing(['lines', 'supplier', 'po']);
+        $grni = round($inv->lines->sum(fn ($l) => (int) $l->qty * (float) $l->po_price), 2);
+        $goods = round($inv->lines->sum(fn ($l) => (int) $l->qty * (float) $l->price), 2);
+        $variance = round($goods - $grni - (float) $inv->discount, 2); // price above PO (+) / below PO or discount (−)
+        $dims = ['referenceType' => 'SupplierInvoice', 'referenceId' => $inv->id, 'warehouseId' => $inv->po?->warehouse_id, 'costCenterId' => app(\App\Finance\Services\AccountMap::class)->forWarehouse($inv->po?->warehouse_id)?->id];
+        $lines = [];
+        if ($grni > 0) {
+            $lines[] = ['role' => 'grni', 'debit' => $grni, 'description' => "إقفال بضاعة مستلمة غير مفوترة — {$inv->po?->number}"] + $dims;
+        }
+        if (abs($variance) >= 0.01) {
+            $lines[] = ['role' => 'ppv', $variance > 0 ? 'debit' : 'credit' => abs($variance), 'description' => 'فرق سعر الفاتورة عن أمر الشراء'.((float) $inv->discount > 0 ? ' (بعد الخصم)' : '')] + $dims;
+        }
+        if ((float) $inv->shipping_cost > 0) {
+            $lines[] = ['role' => 'freight_in', 'debit' => (float) $inv->shipping_cost, 'description' => 'شحن وارد'] + $dims;
+        }
+        if ((float) $inv->vat_amount > 0) {
+            $lines[] = ['role' => 'vat_input', 'debit' => (float) $inv->vat_amount, 'description' => "ضريبة مدخلات {$inv->vat_pct}%"] + $dims;
+        }
+        $lines[] = ['role' => 'ap', 'credit' => (float) $inv->total, 'description' => "{$inv->number} · {$inv->supplier?->name_ar} · {$inv->supplier_invoice_no}", 'partnerType' => 'supplier', 'partnerId' => $inv->supplier_id] + $dims;
+
+        return app(LedgerService::class)->post($user, [
+            'eventKey' => "si:{$inv->id}", 'date' => $inv->invoice_date, 'source' => ['type' => 'SupplierInvoice', 'id' => $inv->id, 'number' => $inv->number],
+            'memo' => "فاتورة مورد {$inv->number} — {$inv->supplier?->name_ar} — {$inv->supplier_invoice_no}", 'lines' => $lines,
+        ]);
     }
 
     /** Payables snapshot for the dashboard. */

@@ -885,6 +885,10 @@
   "reports": {
    "ar": "التقارير",
    "en": "Reports"
+  },
+  "finance": {
+   "ar": "المالية",
+   "en": "Finance"
   }
  },
  "MOVEMENT_LABELS": {
@@ -2015,7 +2019,20 @@
   "user.manage",
   "settings.manage",
   "audit.view",
-  "report.export"
+  "report.export",
+  "page.finance",
+  "gl.view",
+  "gl.post",
+  "gl.approve",
+  "gl.close",
+  "coa.manage",
+  "ar.manage",
+  "ar.receive",
+  "ap.pay",
+  "bank.manage",
+  "expense.create",
+  "asset.manage",
+  "fin.report"
  ],
  "ROLE_PERMISSIONS": {
   "super": [
@@ -2094,7 +2111,20 @@
    "user.manage",
    "settings.manage",
    "audit.view",
-   "report.export"
+   "report.export",
+   "page.finance",
+   "gl.view",
+   "gl.post",
+   "gl.approve",
+   "gl.close",
+   "coa.manage",
+   "ar.manage",
+   "ar.receive",
+   "ap.pay",
+   "bank.manage",
+   "expense.create",
+   "asset.manage",
+   "fin.report"
   ],
   "sales": [
    "page.dash",
@@ -2191,7 +2221,8 @@
    "supplier.manage",
    "exception.manage",
    "inventory.view_cost",
-   "report.export"
+   "report.export",
+   "expense.create"
   ],
   "disp": [
    "page.dash",
@@ -2219,7 +2250,8 @@
    "exception.manage",
    "exception.create",
    "return.create",
-   "report.export"
+   "report.export",
+   "expense.create"
   ],
   "worker": [
    "page.wreceive",
@@ -2250,7 +2282,12 @@
    "po.approve",
    "inventory.view_cost",
    "audit.view",
-   "report.export"
+   "report.export",
+   "page.finance",
+   "gl.view",
+   "gl.approve",
+   "gl.close",
+   "fin.report"
   ],
   "finance": [
    "page.dash",
@@ -2259,7 +2296,20 @@
    "page.reports",
    "po.approve",
    "inventory.view_cost",
-   "report.export"
+   "report.export",
+   "page.finance",
+   "gl.view",
+   "gl.post",
+   "gl.approve",
+   "gl.close",
+   "coa.manage",
+   "ar.manage",
+   "ar.receive",
+   "ap.pay",
+   "bank.manage",
+   "expense.create",
+   "asset.manage",
+   "fin.report"
   ],
   "auditor": [
    "page.dash",
@@ -2274,7 +2324,10 @@
    "page.activity",
    "page.reports",
    "audit.view",
-   "inventory.view_cost"
+   "inventory.view_cost",
+   "page.finance",
+   "gl.view",
+   "fin.report"
   ]
  },
  "ROLE_NAV": {
@@ -2299,7 +2352,8 @@
    "counts",
    "reports",
    "activity",
-   "settings"
+   "settings",
+   "finance"
   ],
   "sales": [
    "dash",
@@ -2358,13 +2412,15 @@
    "procurement",
    "inv",
    "reports",
-   "activity"
+   "activity",
+   "finance"
   ],
   "finance": [
    "dash",
    "procurement",
    "inv",
-   "reports"
+   "reports",
+   "finance"
   ],
   "auditor": [
    "dash",
@@ -2377,7 +2433,8 @@
    "trips",
    "returns",
    "activity",
-   "reports"
+   "reports",
+   "finance"
   ]
  }
 }

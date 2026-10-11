@@ -109,6 +109,38 @@ Artisan::command('scm:sync-permissions', function () {
     return 0;
 })->purpose('Insert permissions missing from the database and grant them to their default roles');
 
+// Finance — cut-over and period routines (docs/finance/ARCHITECTURE.ar.md §2). Nothing posts without --confirm.
+Artisan::command('scm:finance-open-inventory {--confirm : post the opening journal and seed average costs} {--as-of= : journal date (default today)}', function (\App\Finance\Services\OpeningBalancesService $opening) {
+    $r = $opening->valueInventory(null, $this->option('as-of') ?: null, (bool) $this->option('confirm'));
+    $this->line(json_encode(['asOf' => $r['asOf'], 'products' => count(collect($r['rows'])->groupBy('productId')), 'total' => $r['total'], 'perWarehouse' => $r['perWarehouse'], 'skipped' => count($r['skipped']), 'posted' => $r['posted'], 'journal' => $r['journal'] ?? null], JSON_UNESCAPED_UNICODE));
+    foreach ($r['skipped'] as $s) {
+        $this->warn("skipped {$s['sku']} ({$s['qty']}): {$s['reason']}");
+    }
+    if (! $r['posted']) {
+        $this->info('dry run — add --confirm after the CFO approves the valuation basis');
+    }
+
+    return 0;
+})->purpose('Value pre-ledger stock at purchase price with one opening journal (dry run unless --confirm)');
+
+Artisan::command('scm:finance-depreciate {period? : YYYY-MM, default = last month}', function (\App\Finance\Services\FixedAssetsService $assets) {
+    $period = $this->argument('period') ?: now()->subMonth()->format('Y-m');
+    $actor = \App\Integration\IntegrationBootstrap::actor('scheduler', 'console:finance-depreciate');
+    $this->line(json_encode($assets->depreciate($actor, $period), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Post straight-line depreciation of every active asset up to the period');
+Schedule::command('scm:finance-depreciate')->monthlyOn(1, '02:00');
+
+Artisan::command('scm:finance-check', function (\App\Finance\Services\FinanceDashboardService $dash) {
+    $r = $dash->reconciliation();
+    $this->line(json_encode($r, JSON_UNESCAPED_UNICODE));
+    $ok = $r['trialBalanceBalanced'] && collect($r['checks'])->every(fn ($c) => $c['ok']);
+    $this->{$ok ? 'info' : 'error'}($ok ? 'finance OK: trial balance balanced, sub-ledgers = GL' : 'finance MISMATCH — see checks');
+
+    return $ok ? 0 : 1;
+})->purpose('Trial balance + sub-ledger (AR / AP / inventory) vs general ledger check (exit 1 on mismatch)');
+
 // Procurement follow-up: late purchase orders and expiring supplier documents → one notification each to procurement.
 Artisan::command('scm:procurement-followup', function (\App\Services\Procurement\ProcurementHousekeeping $hk) {
     $this->line(json_encode($hk->runNow(), JSON_UNESCAPED_UNICODE));

@@ -14,13 +14,13 @@ export const OUTBOX_LABELS = {
 export const OUTBOX_OPTIONS = [{ v: 'pending', l: OUTBOX_LABELS.pending }, { v: 'sent', l: OUTBOX_LABELS.sent }, { v: 'failed', l: OUTBOX_LABELS.failed }];
 
 export const SETTING_GROUP_LABELS = {
-  procurement: { ar: 'مصفوفة الاعتماد والمشتريات', en: 'Approval matrix & procurement' }, receiving: { ar: 'الاستلام', en: 'Receiving' }, inventory: { ar: 'المخزون والصلاحية', en: 'Inventory & expiry' },
+  procurement: { ar: 'مصفوفة الاعتماد والمشتريات', en: 'Approval matrix & procurement' }, finance: { ar: 'المالية والمحاسبة', en: 'Finance & accounting' }, receiving: { ar: 'الاستلام', en: 'Receiving' }, inventory: { ar: 'المخزون والصلاحية', en: 'Inventory & expiry' },
   sales: { ar: 'المبيعات', en: 'Sales' }, delivery: { ar: 'التوصيل', en: 'Delivery' }, exceptions: { ar: 'قواعد SLA', en: 'SLA rules' }, fleet: { ar: 'الأسطول', en: 'Fleet' }, loading: { ar: 'التحميل', en: 'Loading' }, general: { ar: 'عام', en: 'General' },
 };
 
 /** Permission groups of the matrix: [prefix, label]. */
 export const PERM_GROUPS = [
-  ['page', { ar: 'الصفحات', en: 'Pages' }], ['pr', { ar: 'طلبات الشراء', en: 'Purchase requests' }], ['rfq', { ar: 'RFQ', en: 'RFQ' }], ['supquote', { ar: 'عروض الموردين', en: 'Supplier quotes' }], ['po', { ar: 'أوامر الشراء', en: 'Purchase orders' }], ['supplier', { ar: 'الموردون', en: 'Suppliers' }],
+  ['page', { ar: 'الصفحات', en: 'Pages' }], ['gl', { ar: 'الأستاذ العام', en: 'General ledger' }], ['coa', { ar: 'دليل الحسابات', en: 'Chart of accounts' }], ['ar', { ar: 'ذمم العملاء', en: 'Receivables' }], ['ap', { ar: 'ذمم الموردين', en: 'Payables' }], ['bank', { ar: 'البنوك', en: 'Banks' }], ['expense', { ar: 'المصروفات', en: 'Expenses' }], ['asset', { ar: 'الأصول الثابتة', en: 'Fixed assets' }], ['fin', { ar: 'التقارير المالية', en: 'Financial reports' }], ['invoice', { ar: 'فواتير الموردين', en: 'Supplier invoices' }], ['pr', { ar: 'طلبات الشراء', en: 'Purchase requests' }], ['rfq', { ar: 'RFQ', en: 'RFQ' }], ['supquote', { ar: 'عروض الموردين', en: 'Supplier quotes' }], ['po', { ar: 'أوامر الشراء', en: 'Purchase orders' }], ['supplier', { ar: 'الموردون', en: 'Suppliers' }],
   ['shipment', { ar: 'الشحنات الواردة', en: 'Inbound' }], ['grn', { ar: 'GRN', en: 'GRN' }], ['putaway', { ar: 'Putaway', en: 'Putaway' }], ['inventory', { ar: 'المخزون', en: 'Inventory' }], ['sales', { ar: 'المبيعات', en: 'Sales' }], ['so', { ar: 'أوامر البيع', en: 'Sales orders' }], ['consol', { ar: 'التجميع', en: 'Consolidation' }], ['customer', { ar: 'العملاء', en: 'Customers' }],
   ['pick', { ar: 'التجهيز', en: 'Picking' }], ['pack', { ar: 'التعبئة', en: 'Packing' }], ['load', { ar: 'التحميل', en: 'Loading' }], ['trip', { ar: 'الرحلات', en: 'Trips' }], ['delivery', { ar: 'التوصيل', en: 'Delivery' }], ['return', { ar: 'المرتجعات', en: 'Returns' }],
   ['vehicle', { ar: 'المركبات', en: 'Vehicles' }], ['driver', { ar: 'السائقون', en: 'Drivers' }], ['maintenance', { ar: 'الصيانة', en: 'Maintenance' }], ['fuel', { ar: 'الوقود', en: 'Fuel' }], ['alert', { ar: 'التنبيهات', en: 'Alerts' }], ['opreq', { ar: 'طلبات تشغيلية', en: 'Ops requests' }],

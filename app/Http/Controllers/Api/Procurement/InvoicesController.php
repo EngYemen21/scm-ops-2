@@ -48,7 +48,7 @@ class InvoicesController extends ProcurementBaseController
 
     public function pay(Request $request, string $id): JsonResponse
     {
-        $data = $request->validate(['reference' => 'required|string|min:1|max:80', 'paidAt' => Rules::date()]);
+        $data = $request->validate(['reference' => 'required|string|min:1|max:80', 'paidAt' => Rules::date(), 'amount' => 'nullable|numeric|min:0.01', 'bankAccount' => 'nullable|string|max:40', 'method' => 'nullable|in:bank,cash,cheque,card,wallet']);
 
         return $this->created($this->invoices->pay(AuthUser::current(), $id, $data));
     }

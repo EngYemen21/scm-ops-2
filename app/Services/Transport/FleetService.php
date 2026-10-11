@@ -566,6 +566,7 @@ class FleetService
                 $vData['odometer'] = $mo->odometer;
             }
             $vehicle->update($vData);
+            app(\App\Finance\Services\FleetPosting::class)->maintenance($user, $mo->refresh()); // finance: maintenance expense at close (final cost)
             $stillOpen = MaintenanceOrder::where('vehicle_id', $mo->vehicle_id)->where('status', 'open')->count();
             $released = false;
             if ($vehicle->state === 'maintenance' && ! $stillOpen) {
@@ -633,6 +634,7 @@ class FleetService
                 'station' => $dto['station'] ?? null, 'full' => (bool) ($dto['full'] ?? true), 'km_per_l' => $kmPerL, 'cost_per_km' => $costPerKm, 'anomaly' => $anomaly, 'receipt' => $dto['receipt'] ?? null,
             ]);
             $v->update(['odometer' => $odometer]);
+            app(\App\Finance\Services\FleetPosting::class)->fuel($user, $rec, $dto['tripNumber'] ?? null); // finance: fuel expense on the vehicle's cost center
             $this->audit->log($user, ['action' => 'FUEL.CREATE', 'entityType' => 'FuelRecord', 'entityId' => $rec->id, 'entityNumber' => $number,
                 'newValue' => ['vehicle' => $v->code, 'liters' => $liters, 'cost' => $cost, 'odometer' => $odometer, 'kmPerL' => $kmPerL, 'anomaly' => $anomaly]]);
             if ($odometer !== $oldOdometer) {

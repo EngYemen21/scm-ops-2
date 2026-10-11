@@ -1,7 +1,7 @@
 // Route metadata: sidebar pages (`/<key>`, guarded by `page.<key>`) and entity deep links (`/po/:number` …).
 import { NAV_LABELS } from '../shared';
 
-export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver', 'itower'];
+export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'finance', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver', 'itower'];
 
 /** Pages guarded by something other than `page.<key>` (the integration tower uses the integration layer's permission). */
 const PAGE_PERMISSION = { itower: 'integration.view' };
@@ -18,6 +18,7 @@ export const PAGE_FILES = {
   trips: 'transport/TripsPage.vue', fleet: 'transport/FleetPage.vue', ttower: 'transport/TransportTowerPage.vue', driver: 'transport/DriverPage.vue', trip: 'transport/TripPage.vue',
   returns: 'returns/ReturnsPage.vue', rtn: 'returns/ReturnPage.vue', exc: 'dashboard/ExceptionPage.vue',
   itower: 'integration/IntegrationTowerPage.vue',
+  finance: 'finance/FinancePage.vue', jv: 'finance/JournalPage.vue',
 };
 
 export const NAV_ROUTES = NAV_KEYS.map((key) => ({ key, path: `/${key}`, title: NAV_LABELS[key] || { ar: key, en: key }, permission: PAGE_PERMISSION[key] || `page.${key}`, nav: true }));
@@ -34,6 +35,7 @@ export const ENTITY_ROUTES = [
   { key: 'trf', path: '/trf/:number', title: { ar: 'تحويل', en: 'Transfer' }, param: 'number' },
   { key: 'exc', path: '/exc/:number', title: { ar: 'استثناء', en: 'Exception' }, param: 'number' },
   { key: 'product', path: '/product/:sku', title: { ar: 'منتج', en: 'Product' }, param: 'sku' },
+  { key: 'jv', path: '/jv/:number', title: { ar: 'قيد محاسبي', en: 'Journal' }, param: 'number' },
 ];
 export const ALL_ROUTE_META = [...NAV_ROUTES, ...ENTITY_ROUTES];
 
@@ -52,9 +54,15 @@ export function entityPath(type, number) {
     trf: '/trf/', transfer: '/trf/', warehousetransfer: '/trf/',
     exc: '/exc/', exception: '/exc/', opsexception: '/exc/',
     product: '/product/', sku: '/product/',
+    jv: '/jv/', journal: '/jv/',
   };
   if (map[k]) return map[k] + encodeURIComponent(number);
   if (k === 'supplier') return `/procurement?tab=sup&supplier=${encodeURIComponent(number)}`;
+  if (k === 'customerinvoice' || k === 'ci') return `/finance?tab=invoices&invoice=${encodeURIComponent(number)}`;
+  if (k === 'payment' || k === 'receipt') return `/finance?tab=payments&payment=${encodeURIComponent(number)}`;
+  if (k === 'expense') return `/finance?tab=expenses&expense=${encodeURIComponent(number)}`;
+  if (k === 'fixedasset' || k === 'asset') return `/finance?tab=assets&asset=${encodeURIComponent(number)}`;
+  if (k === 'supplierinvoice') return `/procurement?tab=inv&invoice=${encodeURIComponent(number)}`;
   const page = { customer: '/sales', vehicle: '/fleet', driver: '/fleet', bin: '/whs', warehouse: '/whs', batch: '/batches', count: '/counts', pr: '/procurement', rfq: '/procurement', quotation: '/sales', qt: '/sales', oc: '/consol', consolidation: '/consol', maintenance: '/fleet', alert: '/ttower' };
   return page[k] ? `${page[k]}?q=${encodeURIComponent(number)}` : null;
 }

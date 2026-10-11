@@ -56,6 +56,9 @@ Vercel / Netlify cannot run it (they do not run PHP).
    Procurement follow-up alerts (late purchase orders, expiring supplier documents) ride on the integration heartbeat once an hour;
    without a heartbeat, cron `php artisan scm:procurement-followup` daily. New permissions a release introduces are inserted by
    `migrate` (`PermissionSync`) — `php artisan scm:sync-permissions` re-runs that step by hand.
+   Finance cut-over (docs/finance/ARCHITECTURE.ar.md §2): after the CFO approves the valuation basis run
+   `php artisan scm:finance-open-inventory` (dry run) then `--confirm`; enter real bank accounts (IBAN) and opening balances
+   as approved opening journals; `php artisan scm:finance-check` must exit 0 before the first period close.
 9. Back up the MySQL database daily; the application keeps no state on disk.
 
 Sign-in is rate limited (10 attempts per minute per username + IP, `LOGIN_ATTEMPTS_PER_MINUTE`); it needs a working

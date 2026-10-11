@@ -174,7 +174,7 @@ class FleetController extends TransportBaseController
     {
         $data = $request->validate([
             'vehicleCode' => ['required', 'string'], 'driverCode' => ['nullable', 'string'], 'date' => ['required', 'string', self::DATE], 'odometer' => ['required', 'integer', 'min:0'],
-            'liters' => ['required', 'numeric', 'gt:0'], 'cost' => ['required', 'numeric', 'gt:0'], 'station' => ['nullable', 'string'], 'full' => ['nullable', 'boolean'], 'receipt' => ['nullable', 'string'],
+            'liters' => ['required', 'numeric', 'gt:0'], 'cost' => ['required', 'numeric', 'gt:0'], 'station' => ['nullable', 'string'], 'full' => ['nullable', 'boolean'], 'receipt' => ['nullable', 'string'], 'tripNumber' => ['nullable', 'string'],
         ]);
         $data = $this->withDefaults($data, ['full' => true]);
         $data['full'] = filter_var($data['full'], FILTER_VALIDATE_BOOLEAN);

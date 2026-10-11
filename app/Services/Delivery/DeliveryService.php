@@ -2,6 +2,7 @@
 
 namespace App\Services\Delivery;
 
+use App\Finance\Services\CustomerInvoiceService;
 use App\Integration\Services\OrderEvents;
 use App\Models\DeliveryRecord;
 use App\Models\Driver;
@@ -243,8 +244,10 @@ class DeliveryService
             $foStatus = $failed ? 'failed' : $result;
             FulfillmentOrder::whereKey($fo->id)->update(['status' => $foStatus, 'delivered_at' => $now]);
             $lineDelivered = fn (FoLine $l) => $result === 'delivered' ? $l->qty : ($result === 'partial' ? (int) round(($l->qty / $total) * $delivered) : 0);
+            $deliveredByLine = [];
             foreach ($fo->lines as $l) {
                 $dq = $lineDelivered($l);
+                $deliveredByLine[$l->id] = $dq;
                 $l->update(['delivered_qty' => $dq, 'returned_qty' => $l->qty - $dq]);
                 if ($l->so_line_id) {
                     SalesOrderLine::whereKey($l->so_line_id)->update(['delivered_qty' => $dq, 'returned_qty' => $l->qty - $dq]);
@@ -253,6 +256,8 @@ class DeliveryService
             if ($fo->so_id) {
                 SalesOrder::whereKey($fo->so_id)->update(['status' => $foStatus]);
             }
+            // finance: control transferred → customer invoice (delivered qty × order price) + cost of goods sold, in this transaction
+            app(CustomerInvoiceService::class)->issueFromDelivery($user, $fo, $pod, $deliveredByLine);
             $this->audit->status($user, 'TripStop', $s->id, $stopRef, 'arrived', $stopStatus, $pod->number);
             $this->audit->status($user, 'FulfillmentOrder', $fo->id, $fo->number, 'onroute', $foStatus, $pod->number);
             $this->audit->log($user, ['action' => 'POD.CREATE', 'entityType' => 'ProofOfDelivery', 'entityId' => $pod->id, 'entityNumber' => $pod->number,

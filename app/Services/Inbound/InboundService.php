@@ -319,13 +319,15 @@ class InboundService
                     'accepted_qty' => $sl->accepted_qty + $accepted, 'damaged_qty' => $sl->damaged_qty + $damaged, 'rejected_qty' => $sl->rejected_qty + $rejected,
                     'batch_no' => $batchNo ?: $sl->batch_no, 'expiry_date' => $expiry, 'mfg_date' => $mfg,
                 ]);
+                $unitCost = null; // finance: receipts are valued at the purchase-order price (moving average + GRNI accrual)
                 if ($sl->po_line_id && ($poLine = PoLine::whereKey($sl->po_line_id)->lockForUpdate()->first())) {
                     $poLine->update(['received_qty' => $poLine->received_qty + $accepted, 'damaged_qty' => $poLine->damaged_qty + $damaged, 'rejected_qty' => $poLine->rejected_qty + $rejected]);
+                    $unitCost = (float) $poLine->price;
                 }
                 $nameAr = $sl->product->name_ar;
                 $nameEn = $sl->product->name_en;
                 if ($accepted > 0) {
-                    $this->inventory->post($user, $txId, ['type' => 'grn', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $accepted,
+                    $this->inventory->post($user, $txId, ['type' => 'grn', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $accepted, 'unitCost' => $unitCost,
                         'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $stgIn->id], 'reference' => $reference, 'note' => 'استلام مقبول → Inbound Staging']);
                     $sug = $sl->suggested_bin_id
                         ? ['binId' => $sl->suggested_bin_id, 'ar' => $sl->suggestion_ar ?: 'موقع مقترح', 'en' => $sl->suggestion_en ?: 'Suggested bin']
@@ -339,7 +341,7 @@ class InboundService
                     $putawayTasks++;
                 }
                 if ($damaged > 0) {
-                    $this->inventory->post($user, $txId, ['type' => 'dmg', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $damaged,
+                    $this->inventory->post($user, $txId, ['type' => 'dmg', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $damaged, 'unitCost' => $unitCost,
                         'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $dmgBin->id], 'reference' => $reference, 'note' => 'تالف عند الاستلام — منطقة التالف، لا يدخل المتاح']);
                     $this->exceptions->raise($user, $excBase + ['kind' => 'damage', 'textAr' => "{$nameAr}: {$damaged} تالفة عند الاستلام — موثقة، لم تدخل المخزون المتاح", 'textEn' => "{$nameEn}: {$damaged} damaged at receiving"]);
                     $exceptionsRaised++;

@@ -2,6 +2,8 @@
 
 namespace App\Services\Returns;
 
+use App\Finance\Services\CostingService;
+use App\Finance\Services\CustomerInvoiceService;
 use App\Integration\Services\OrderEvents;
 use App\Models\Batch;
 use App\Models\Bin;
@@ -150,12 +152,20 @@ class ReturnsService
         return $this->transition($user, $id, 'received', function (ReturnOrder $r) use ($user) {
             $ret = $this->inventory->specialBin($r->warehouse_id, 'RET-01');
             $txId = $this->inventory->newTxId();
+            // finance: goods that never left the truck (POD return) come back out of "goods in transit" at their load cost;
+            // a post-delivery customer return reverses the cost of sales and gets a credit note; other returns re-enter at the average cost
+            $origin = $r->fo_id && in_array($r->reason_code, CustomerInvoiceService::POD_RETURN_REASONS, true) ? 'pod_return' : ($r->fo_id && $r->type === 'cust' ? 'customer_return' : null);
+            $costing = app(CostingService::class);
             foreach ($r->lines as $l) {
                 $this->inventory->post($user, $txId, ['type' => 'ret', 'productId' => $l->product_id, 'batchId' => $l->batch_id, 'qty' => $l->qty,
+                    'costOrigin' => $origin, 'unitCost' => $origin ? $costing->loadCost($r->fo_id, $l->product_id) : null,
                     'to' => ['warehouseId' => $r->warehouse_id, 'binId' => $ret->id], 'reference' => ['type' => 'ReturnOrder', 'id' => $r->id, 'number' => $r->number],
                     'note' => 'استلام مرتجع → منطقة الفحص RET-01']);
             }
             ReturnReceiving::create(['return_id' => $r->id, 'received_by_id' => $user->id, 'received_by' => $user->username, 'received_at' => now(), 'bin_code' => 'RET-01']);
+            if ($origin === 'customer_return') {
+                app(CustomerInvoiceService::class)->creditFromReturn($user, $r);
+            }
 
             return ['received_at' => now()];
         });
@@ -220,6 +230,7 @@ class ReturnsService
                 }
                 $mv = $this->inventory->post($user, $txId, ['type' => $type, 'productId' => $l->product_id, 'batchId' => $l->batch_id, 'qty' => $l->qty,
                     'from' => ['warehouseId' => $r->warehouse_id, 'binId' => $ret->id], 'to' => $to, 'quarantine' => $quarantine,
+                    'partner' => $r->supplier_id ? ['type' => 'supplier', 'id' => $r->supplier_id] : null,
                     'reference' => ['type' => 'ReturnOrder', 'id' => $r->id, 'number' => $r->number], 'note' => $note]);
                 $l->update($lineUpdate);
                 ReturnDecision::create(['return_id' => $r->id, 'decision' => $decision, 'qty' => $l->qty, 'target_bin_id' => $to['binId'] ?? null, 'movement_id' => $mv->id,

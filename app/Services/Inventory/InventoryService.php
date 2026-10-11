@@ -2,6 +2,7 @@
 
 namespace App\Services\Inventory;
 
+use App\Finance\Services\CostingService;
 use App\Models\Batch;
 use App\Models\Bin;
 use App\Models\InventoryAllocation;
@@ -170,12 +171,16 @@ class InventoryService
         }
         $batch = $batchId ? Batch::find($batchId) : null;
 
-        return InventoryMovement::create($meta + [
+        $mv = InventoryMovement::create($meta + [
             'number' => $this->numbering->next('TX'), 'type' => $m['type'], 'product_id' => $m['productId'], 'batch_id' => $batchId,
             'batch_no' => $batch?->batch_no, 'qty' => $qty, 'before_qty' => $before, 'after_qty' => $after,
             'reference_type' => $m['reference']['type'], 'reference_id' => $m['reference']['id'] ?? null, 'reference_number' => $m['reference']['number'],
             'note' => $m['note'] ?? null, 'user_id' => $user?->id, 'username' => $user?->username ?? 'system', 'transaction_id' => $txId,
         ]);
+        // finance: cost the movement (moving average) and post its journal in this same transaction — see App\Finance\Services\CostingService
+        app(CostingService::class)->onMovement($user, $mv, $m);
+
+        return $mv;
     }
 
     // ───────────── flag-only changes (no quantity moves) ─────────────
