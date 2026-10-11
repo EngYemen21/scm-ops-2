@@ -3,7 +3,7 @@
 // For every .vue / .js file under the given paths it verifies:
 //   1. the SFC parses and its <script setup> + <template> compile;      2. the generated JS is syntactically valid;
 //   3. every relative / '@/…' import resolves to a file;                 4. every NAMED import exists in the target module;
-//   5. every PascalCase component used in a template is imported.
+//   5. every PascalCase component used in a template is imported;       6. no setup binding shadows a prop name.
 // Exit code 1 when anything is wrong.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -106,6 +106,18 @@ for (const t of targets) {
         imported = checkImports(file, (descriptor.scriptSetup || descriptor.script).content);
         syntaxCheck(file, compiled.content);
         Object.keys(compiled.bindings || {}).forEach((b) => imported.add(b));
+        // 6. a top-level setup binding must not reuse a prop name: in the template the local wins and the prop is silently
+        //    ignored (a drawer `:open="open"` stayed open forever because `const open = useList(...)` shadowed the prop).
+        if (descriptor.scriptSetup) {
+          const code = descriptor.scriptSetup.content;
+          const propsSrc = code.match(/defineProps\s*\(\s*\{([\s\S]*?)\}\s*\)/);
+          if (propsSrc) {
+            const propNames = [...propsSrc[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*:/gm)].map((m) => m[1]);
+            for (const name of propNames) {
+              if (new RegExp(`^(const|let|var|function)\\s+${name}\\b`, 'm').test(code)) report(file, `setup binding \`${name}\` shadows the prop of the same name — the template will never see the prop`);
+            }
+          }
+        }
       } catch (e) { report(file, 'script: ' + e.message.split('\n')[0]); }
     }
     if (descriptor.template) {

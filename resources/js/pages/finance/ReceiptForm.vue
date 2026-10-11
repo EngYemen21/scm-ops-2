@@ -28,8 +28,8 @@ watch(() => props.open, (o) => {
 });
 watch(() => f.value.bankAccount, (code) => { const b = banks.value.find((x) => x.code === code); if (b && f.value.method === (b.kind === 'cash' ? 'bank' : 'cash')) f.value.method = b.kind === 'cash' ? 'cash' : 'bank'; });
 
-const open = useList('/finance/invoices', () => ({ customer: f.value.customer, status: 'issued,partially_paid', kind: 'invoice', pageSize: 200, sort: 'dueDate', order: 'asc' }), { enabled: () => !!f.value.customer });
-const invoices = computed(() => open.data.value?.items || []);
+const openInvoices = useList('/finance/invoices', () => ({ customer: f.value.customer, status: 'issued,partially_paid', kind: 'invoice', pageSize: 200, sort: 'dueDate', order: 'asc' }), { enabled: () => !!f.value.customer });
+const invoices = computed(() => openInvoices.data.value?.items || []);
 const allocated = computed(() => Object.values(alloc.value).reduce((a, v) => a + (Number(v) || 0), 0));
 const ok = computed(() => !!f.value.customer && Number(f.value.amount) > 0 && allocated.value <= Number(f.value.amount) + 0.005 && invoices.value.every((i) => (Number(alloc.value[i.number]) || 0) <= Number(i.balance) + 0.005));
 /** Spread the amount over the open invoices, oldest due first. */

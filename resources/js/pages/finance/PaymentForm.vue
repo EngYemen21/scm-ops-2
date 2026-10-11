@@ -18,8 +18,8 @@ const { options: bankOpts } = useBankOptions(when);
 const f = ref({ supplier: '', date: todayIso(), method: 'bank', bankAccount: 'BANK', reference: '', notes: '' });
 const alloc = ref({});
 watch(() => props.open, (o) => { if (!o) return; const i = props.initial || {}; f.value = { supplier: i.supplier || '', date: todayIso(), method: 'bank', bankAccount: 'BANK', reference: '', notes: '' }; alloc.value = {}; act.clearError(); });
-const open = useList('/procurement/invoices', () => ({ supplier: f.value.supplier, status: 'approved', pageSize: 200, sort: 'dueDate', order: 'asc' }), { enabled: () => !!f.value.supplier });
-const invoices = computed(() => (open.data.value?.items || []).map((i) => ({ ...i, balance: Math.round((Number(i.total) - Number(i.paidAmount || 0)) * 100) / 100 })));
+const openInvoices = useList('/procurement/invoices', () => ({ supplier: f.value.supplier, status: 'approved', pageSize: 200, sort: 'dueDate', order: 'asc' }), { enabled: () => !!f.value.supplier });
+const invoices = computed(() => (openInvoices.data.value?.items || []).map((i) => ({ ...i, balance: Math.round((Number(i.total) - Number(i.paidAmount || 0)) * 100) / 100 })));
 const amount = computed(() => Object.values(alloc.value).reduce((a, v) => a + (Number(v) || 0), 0));
 const ok = computed(() => !!f.value.supplier && amount.value > 0 && f.value.reference.trim().length > 0 && invoices.value.every((i) => (Number(alloc.value[i.number]) || 0) <= i.balance + 0.005));
 function payAll() { const a = {}; for (const i of invoices.value) if (i.balance > 0) a[i.number] = i.balance; alloc.value = a; }
