@@ -53,8 +53,8 @@ const columns = [
         <div class="tile purple"><div class="tile-v">{{ fmtMoney(inv.total) }}</div><div class="tile-l">{{ t('الإجمالي ر.س', 'Total SAR') }}</div></div>
       </div>
       <div class="kv-grid">
-        <div class="kv"><div class="kv-k">{{ t('تاريخ الفاتورة', 'Invoice date') }}</div><div class="kv-v ltr num text-start">{{ fmtDateOnly(inv.invoiceDate) }}</div></div>
-        <div class="kv"><div class="kv-k">{{ t('الاستحقاق', 'Due') }}</div><div class="kv-v ltr num text-start">{{ fmtDateOnly(inv.dueDate) }} <Chip v-if="inv.overdue" small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'متأخرة', en: 'Overdue' }" /></div></div>
+        <div class="kv"><div class="kv-k">{{ t('تاريخ الفاتورة', 'Invoice date') }}</div><div class="kv-v ltr num">{{ fmtDateOnly(inv.invoiceDate) }}</div></div>
+        <div class="kv"><div class="kv-k">{{ t('الاستحقاق', 'Due') }}</div><div class="kv-v ltr num">{{ fmtDateOnly(inv.dueDate) }} <Chip v-if="inv.overdue" small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'متأخرة', en: 'Overdue' }" /></div></div>
         <div class="kv"><div class="kv-k">{{ t('سجّلها', 'Registered by') }}</div><div class="kv-v">{{ inv.registeredBy }} <span class="muted ltr num text-[9px]">{{ fmtDate(inv.createdAt) }}</span></div></div>
         <div class="kv"><div class="kv-k">{{ t('اعتماد الصرف', 'Approval') }}</div><div class="kv-v">{{ inv.approvedBy || '—' }} <span v-if="inv.approvedAt" class="muted ltr num text-[9px]">{{ fmtDate(inv.approvedAt) }}</span></div></div>
         <div v-if="inv.approvedNote" class="kv col-span-full"><div class="kv-k">{{ t('قرار الاعتماد', 'Approval decision') }}</div><div class="kv-v !font-normal">{{ inv.approvedNote }}</div></div>

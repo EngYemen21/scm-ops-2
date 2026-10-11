@@ -92,9 +92,9 @@ const columns = [
             <template v-if="noSource">—</template>
           </div>
         </div>
-        <div class="kv"><div class="kv-k">{{ t('أُرسل', 'Sent') }}</div><div class="kv-v ltr num text-start">{{ fmtDate(po.sentAt) }}</div></div>
-        <div class="kv"><div class="kv-k">{{ t('تأكيد المورد', 'Confirmed') }}</div><div class="kv-v ltr num text-start">{{ fmtDate(po.confirmedAt) }}</div></div>
-        <div v-if="hasCharges" class="kv"><div class="kv-k">{{ t('خصم / شحن', 'Discount / shipping') }}</div><div class="kv-v ltr num text-start">− {{ fmtMoney(po.discount) }} / + {{ fmtMoney(po.shippingCost) }}</div></div>
+        <div class="kv"><div class="kv-k">{{ t('أُرسل', 'Sent') }}</div><div class="kv-v ltr num">{{ fmtDate(po.sentAt) }}</div></div>
+        <div class="kv"><div class="kv-k">{{ t('تأكيد المورد', 'Confirmed') }}</div><div class="kv-v ltr num">{{ fmtDate(po.confirmedAt) }}</div></div>
+        <div v-if="hasCharges" class="kv"><div class="kv-k">{{ t('خصم / شحن', 'Discount / shipping') }}</div><div class="kv-v ltr num">− {{ fmtMoney(po.discount) }} / + {{ fmtMoney(po.shippingCost) }}</div></div>
         <div v-if="po.followedUpAt" class="kv col-span-full"><div class="kv-k">{{ t('آخر متابعة', 'Last follow-up') }}</div><div class="kv-v !font-normal">{{ po.followUpNote }} <span class="muted num ltr text-[9px]">{{ fmtDate(po.followedUpAt) }} · {{ po.followedUpBy }}</span></div></div>
         <div v-if="po.notes" class="kv col-span-full"><div class="kv-k">{{ t('ملاحظات', 'Notes') }}</div><div class="kv-v whitespace-pre-wrap !font-normal">{{ po.notes }}</div></div>
       </div>

@@ -59,7 +59,7 @@ const columns = [
         <div class="kv"><div class="kv-k">{{ t('الإجمالي', 'Total') }}</div><div class="kv-v num">{{ fmtMoney(j.totalDebit) }} = {{ fmtMoney(j.totalCredit) }}</div></div>
         <div v-if="j.reversalOf" class="kv"><div class="kv-k">{{ t('يعكس القيد', 'Reverses') }}</div><div class="kv-v num cursor-pointer !text-violet" @click="router.push(`/jv/${j.reversalOf.number}`)">{{ j.reversalOf.number }}</div></div>
         <div v-if="j.reversedBy" class="kv"><div class="kv-k">{{ t('عُكس بالقيد', 'Reversed by') }}</div><div class="kv-v num cursor-pointer !text-violet" @click="router.push(`/jv/${j.reversedBy.number}`)">{{ j.reversedBy.number }}</div></div>
-        <div v-if="j.postedAt" class="kv"><div class="kv-k">{{ t('رُحّل', 'Posted') }}</div><div class="kv-v ltr num text-start">{{ fmtDate(j.postedAt) }}</div></div>
+        <div v-if="j.postedAt" class="kv"><div class="kv-k">{{ t('رُحّل', 'Posted') }}</div><div class="kv-v ltr num">{{ fmtDate(j.postedAt) }}</div></div>
       </div>
       <div class="overflow-hidden rounded-xl border border-line-2">
         <DataTable :columns="columns" :rows="j.lines" :row-key="(l) => l.lineNo" :min-width="620">

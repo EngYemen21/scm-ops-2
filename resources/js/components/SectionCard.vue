@@ -18,10 +18,9 @@ defineProps({
   <div class="card" :class="{ sm: small, selected }">
     <div v-if="title || sub || $slots.title || $slots.actions" class="card-head">
       <div class="card-title">
-        <slot name="title">{{ isBi(title) ? bi(title) : title }}</slot>
+        <slot name="title">{{ isBi(title) ? bi(title) : title }}</slot><span v-if="count != null" class="card-count num ms-2">{{ count }}</span>
         <div v-if="sub" class="card-sub">{{ isBi(sub) ? bi(sub) : sub }}</div>
       </div>
-      <span v-if="count != null" class="card-count num">{{ count }}</span>
       <slot name="actions" />
     </div>
     <div :class="[{ 'card-body': padded }, bodyClass]"><slot /></div>

@@ -252,6 +252,10 @@
   .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 18px; }
   .kv-grid .kv { flex-direction: column; gap: 3px; border: none; padding: 0; }
   .kv-grid .kv-k { width: auto; }
+  /* LTR values (dates, codes, amounts) keep the page's reading alignment: under their label in Arabic, not pushed to the far left of a wide cell */
+  [dir='rtl'] .kv-v.ltr { text-align: right; }
+  [dir='ltr'] .kv-v.ltr { text-align: left; }
+  [dir='rtl'] .tile-v { text-align: right; }
   .hint { background: #fff; border: 1px dashed #A8E4EF; border-radius: 13px; padding: 11px 15px; font-size: 10px; line-height: 1.9; color: #0d5866; margin-top: 11px; }
   .hint.teal { background: #E4F8FB; border: 1px solid #B5E7F0; border-radius: 10px; }
   .hint.amber { background: #FBF0DD; border: 1px solid #F0DEB8; color: #8a5f10; border-radius: 10px; }

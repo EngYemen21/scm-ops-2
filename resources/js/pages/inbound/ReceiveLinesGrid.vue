@@ -102,13 +102,18 @@ const QTY = 'inp sm num !h-9 w-full !text-[11.5px] !font-bold';
         </div>
       </div>
 
-      <!-- read-only -->
+      <!-- read-only: nothing received yet → only what the ASN / PO already knows -->
+      <div v-else-if="!(l.acceptedQty || l.damagedQty || l.rejectedQty)" class="row wrap px-3.5 py-2.5 !gap-x-5 !gap-y-1 text-[10px] text-muted">
+        <span class="font-bold text-faint">{{ t('لم يُستلم شيء من هذا السطر بعد', 'Nothing received on this line yet') }}</span>
+        <span v-if="l.batchNo">{{ t('الدفعة المعلنة', 'Declared batch') }}: <span class="num text-violet">{{ l.batchNo }}</span></span>
+        <span v-if="l.expiryDate">{{ t('الانتهاء', 'Expiry') }}: <span class="num">{{ fmtDateOnly(l.expiryDate) }}</span></span>
+      </div>
       <div v-else class="kv-grid px-3.5 py-2.5">
         <div class="kv"><div class="kv-k">{{ t('مستلم سليم', 'Accepted') }}</div><div class="kv-v num text-ok">{{ fmtNum(l.acceptedQty) }}</div></div>
         <div class="kv"><div class="kv-k">{{ t('تالف', 'Damaged') }}</div><div class="kv-v num" :class="l.damagedQty ? 'text-bad' : 'text-faint'">{{ fmtNum(l.damagedQty) }}</div></div>
         <div class="kv"><div class="kv-k">{{ t('مرفوض QC', 'Rejected') }}</div><div class="kv-v num" :class="l.rejectedQty ? 'text-warn' : 'text-faint'">{{ fmtNum(l.rejectedQty) }}</div></div>
         <div class="kv"><div class="kv-k">{{ t('الدفعة', 'Batch') }}</div><div class="kv-v num text-violet">{{ l.batchNo || '—' }}</div></div>
-        <div class="kv"><div class="kv-k">{{ t('الإنتاج / الانتهاء', 'Mfg / expiry') }}</div><div class="kv-v num ltr text-start text-muted">{{ fmtDateOnly(l.mfgDate) }} / {{ fmtDateOnly(l.expiryDate) }}</div></div>
+        <div class="kv"><div class="kv-k">{{ t('الإنتاج / الانتهاء', 'Mfg / expiry') }}</div><div class="kv-v num ltr text-muted">{{ fmtDateOnly(l.mfgDate) }} / {{ fmtDateOnly(l.expiryDate) }}</div></div>
       </div>
     </div>
   </div>
