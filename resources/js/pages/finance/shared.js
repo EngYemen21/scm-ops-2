@@ -10,7 +10,7 @@
 //   Expense   { id, number, expenseDate, account, amount, vatPct, vatAmount, total, settlement: bank|supplier|accrued, costCenter?, vehicle?, trip?, description, status }
 //   Asset     { id, code, nameAr, nameEn, category, vehicle?, acquiredOn, cost, salvageValue, usefulLifeMonths, accumulatedDepreciation, netBookValue, status }
 import { computed } from 'vue';
-import { useGet, useList } from '@/api/client';
+import { useGet } from '@/api/client';
 import { lang } from '@/i18n';
 
 export const JOURNAL_STATUS_LABELS = {
@@ -54,29 +54,38 @@ export function sourceLink(type, number) {
 }
 
 // ---------------------------------------------------------------- option composables
+/**
+ * ONE request (`/finance/lookups`) shared by every form and report selector through vue-query's cache (5 minutes),
+ * fetched only while `enabled` is true (a drawer that is open, a tab that shows selectors) — the finance page itself
+ * fires two requests on open (board, reconciliation), not eight. Serverless cold starts made the old fan-out slow.
+ */
+export function useFinanceLookups(enabled = () => true) {
+  const q = useGet('/finance/lookups', undefined, { enabled, staleTime: 300_000 });
+  return { query: q, data: computed(() => q.data.value || { accounts: [], costCenters: [], banks: [], customers: [], suppliers: [] }) };
+}
 /** Postable accounts as select options `code · name`, plus the raw list. */
-export function useAccountOptions(filter = null) {
-  const q = useGet('/finance/accounts', { balances: '0' });
-  const accounts = computed(() => (q.data.value?.items || []).filter((a) => a.isPostable && a.active && (!filter || filter(a))));
+export function useAccountOptions(filter = null, enabled = () => true) {
+  const { data, query } = useFinanceLookups(enabled);
+  const accounts = computed(() => data.value.accounts.filter((a) => !filter || filter(a)));
   const options = computed(() => accounts.value.map((a) => ({ v: a.code, l: `${a.code} · ${pname(a)}` })));
-  return { options, accounts, query: q };
+  return { options, accounts, query };
 }
-export function useCostCenterOptions() {
-  const q = useGet('/finance/cost-centers');
-  return computed(() => (q.data.value?.items || []).filter((c) => c.active).map((c) => ({ v: c.code, l: `${c.code} · ${pname(c)}` })));
+export function useCostCenterOptions(enabled = () => true) {
+  const { data } = useFinanceLookups(enabled);
+  return computed(() => data.value.costCenters.map((c) => ({ v: c.code, l: `${c.code} · ${pname(c)}` })));
 }
-export function useBankOptions() {
-  const q = useGet('/finance/banks');
-  const banks = computed(() => (q.data.value?.items || []).filter((b) => b.active));
+export function useBankOptions(enabled = () => true) {
+  const { data } = useFinanceLookups(enabled);
+  const banks = computed(() => data.value.banks);
   return { options: computed(() => banks.value.map((b) => ({ v: b.code, l: `${pname(b)}${b.iban ? ' · ' + b.iban.slice(-4) : ''}` }))), banks };
 }
-export function useCustomerOptions() {
-  const list = useList('/customers', { pageSize: 500, active: 'true' });
-  const customers = computed(() => list.data.value?.items || []);
+export function useCustomerOptions(enabled = () => true) {
+  const { data } = useFinanceLookups(enabled);
+  const customers = computed(() => data.value.customers);
   return { options: computed(() => customers.value.map((c) => ({ v: c.code, l: `${pname(c)} · ${c.code}` }))), customers };
 }
-export function useSupplierOptions() {
-  const list = useList('/suppliers', { pageSize: 500 });
-  const suppliers = computed(() => list.data.value?.items || []);
+export function useSupplierOptions(enabled = () => true) {
+  const { data } = useFinanceLookups(enabled);
+  const suppliers = computed(() => data.value.suppliers);
   return { options: computed(() => suppliers.value.map((s) => ({ v: s.code, l: `${pname(s)} · ${s.code}` }))), suppliers };
 }

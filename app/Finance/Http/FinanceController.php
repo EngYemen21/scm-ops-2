@@ -33,6 +33,18 @@ class FinanceController extends Controller
         return $this->dashboard->reconciliation();
     }
 
+    /** Everything a finance form or report selector needs, in ONE request (postable accounts, cost centers, banks, partners). */
+    public function lookups(): array
+    {
+        return [
+            'accounts' => Account::where('is_postable', true)->where('active', true)->orderBy('code')->get(['id', 'code', 'name_ar', 'name_en', 'type', 'subtype', 'role'])->map->toArray()->all(),
+            'costCenters' => \App\Finance\Models\CostCenter::where('active', true)->orderBy('kind')->orderBy('code')->get(['id', 'code', 'name_ar', 'name_en', 'kind'])->map->toArray()->all(),
+            'banks' => \App\Finance\Models\BankAccount::where('active', true)->orderBy('code')->get(['id', 'code', 'name_ar', 'name_en', 'kind', 'iban'])->map->toArray()->all(),
+            'customers' => \App\Models\Customer::where('active', true)->orderBy('name_ar')->get(['id', 'code', 'name_ar', 'name_en'])->map->toArray()->all(),
+            'suppliers' => \App\Models\Supplier::where('active', true)->orderBy('name_ar')->get(['id', 'code', 'name_ar', 'name_en'])->map->toArray()->all(),
+        ];
+    }
+
     // ── chart of accounts
     public function accounts(Request $request): array
     {

@@ -12,10 +12,11 @@ import { SELECT_PLACEHOLDER, todayIso, useAccountOptions, useCostCenterOptions, 
 const props = defineProps({ open: { type: Boolean, default: false } });
 const emit = defineEmits(['close', 'done']);
 const act = useAction({ invalidate: ['finance'] });
-const { options: accountOpts, accounts } = useAccountOptions();
-const ccOpts = useCostCenterOptions();
-const { options: customerOpts, customers } = useCustomerOptions();
-const { options: supplierOpts, suppliers } = useSupplierOptions();
+const when = () => props.open;
+const { options: accountOpts, accounts } = useAccountOptions(null, when);
+const ccOpts = useCostCenterOptions(when);
+const { options: customerOpts, customers } = useCustomerOptions(when);
+const { options: supplierOpts, suppliers } = useSupplierOptions(when);
 
 const blankLine = () => ({ account: '', debit: null, credit: null, description: '', costCenter: '', partnerType: '', partner: '' });
 const f = ref({ date: todayIso(), memo: '' });

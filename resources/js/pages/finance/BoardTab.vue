@@ -9,7 +9,7 @@ import { PERIOD_LABELS } from './shared';
 
 const props = defineProps({ board: { type: Object, default: null }, loading: { type: Boolean, default: false } });
 const emit = defineEmits(['go']);
-const recQ = useGet('/finance/reconciliation', undefined, { refetchInterval: 300_000 });
+const recQ = useGet('/finance/reconciliation', undefined, { refetchInterval: 300_000, enabled: () => !!props.board });
 const rec = computed(() => recQ.data.value);
 const sar = t('ر.س', 'SAR');
 const b = computed(() => props.board);

@@ -14,6 +14,7 @@ Route::prefix('finance')->group(function () {
     Route::middleware('perm:gl.view')->group(function () {
         Route::get('board', [FinanceController::class, 'board']);
         Route::get('reconciliation', [FinanceController::class, 'reconciliation']);
+        Route::get('lookups', [FinanceController::class, 'lookups']);
         Route::get('accounts', [FinanceController::class, 'accounts']);
         Route::get('cost-centers', [FinanceController::class, 'costCenters']);
         Route::get('banks', [FinanceController::class, 'banks']);

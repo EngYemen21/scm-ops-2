@@ -12,8 +12,9 @@ import { METHOD_OPTIONS, SELECT_PLACEHOLDER, todayIso, useBankOptions, useCustom
 const props = defineProps({ open: { type: Boolean, default: false }, initial: { type: Object, default: null } });
 const emit = defineEmits(['close', 'done']);
 const act = useAction({ invalidate: ['finance'] });
-const { options: customerOpts } = useCustomerOptions();
-const { options: bankOpts, banks } = useBankOptions();
+const when = () => props.open;
+const { options: customerOpts } = useCustomerOptions(when);
+const { options: bankOpts, banks } = useBankOptions(when);
 
 const f = ref({ customer: '', amount: null, date: todayIso(), method: 'bank', bankAccount: 'BANK', reference: '', notes: '' });
 /** invoice number → allocated amount */

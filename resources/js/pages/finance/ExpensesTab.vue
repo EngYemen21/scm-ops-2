@@ -24,10 +24,11 @@ const act = useAction({ invalidate: ['finance', 'transport'] });
 const form = ref(false);
 const voiding = ref(null);
 
-const { options: accountOpts } = useAccountOptions((a) => a.type === 'expense');
-const ccOpts = useCostCenterOptions();
-const { options: bankOpts } = useBankOptions();
-const { options: supplierOpts } = useSupplierOptions();
+const when = () => form.value;
+const { options: accountOpts } = useAccountOptions((a) => a.type === 'expense', when);
+const ccOpts = useCostCenterOptions(when);
+const { options: bankOpts } = useBankOptions(when);
+const { options: supplierOpts } = useSupplierOptions(when);
 const vehicles = useList('/transport/vehicles', { pageSize: 300 }, { enabled: () => form.value });
 const vehicleOpts = computed(() => (vehicles.data.value?.items || []).map((v) => ({ v: v.code, l: `${v.code} · ${v.plateAr}` })));
 const blank = () => ({ date: todayIso(), account: '', amount: null, vatPct: 0, settlement: 'bank', bankAccount: 'BANK', supplier: '', costCenter: '', vehicle: '', trip: '', description: '', reference: '' });

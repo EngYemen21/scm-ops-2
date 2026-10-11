@@ -12,8 +12,9 @@ import { METHOD_OPTIONS, SELECT_PLACEHOLDER, todayIso, useBankOptions, useSuppli
 const props = defineProps({ open: { type: Boolean, default: false }, initial: { type: Object, default: null } });
 const emit = defineEmits(['close', 'done']);
 const act = useAction({ invalidate: ['finance', 'procurement'] });
-const { options: supplierOpts } = useSupplierOptions();
-const { options: bankOpts } = useBankOptions();
+const when = () => props.open;
+const { options: supplierOpts } = useSupplierOptions(when);
+const { options: bankOpts } = useBankOptions(when);
 const f = ref({ supplier: '', date: todayIso(), method: 'bank', bankAccount: 'BANK', reference: '', notes: '' });
 const alloc = ref({});
 watch(() => props.open, (o) => { if (!o) return; const i = props.initial || {}; f.value = { supplier: i.supplier || '', date: todayIso(), method: 'bank', bankAccount: 'BANK', reference: '', notes: '' }; alloc.value = {}; act.clearError(); });

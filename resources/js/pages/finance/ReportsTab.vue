@@ -27,10 +27,11 @@ const by = ref('product');
 const period = ref(new Date().toISOString().slice(0, 7));
 const costCenter = ref('');
 watch(report, (r) => router.replace({ query: { ...route.query, report: r } }));
-const { options: accountOpts } = useAccountOptions();
-const ccOpts = useCostCenterOptions();
-const { options: customerOpts } = useCustomerOptions();
-const { options: supplierOpts } = useSupplierOptions();
+const when = () => ['ledger', 'income-statement', 'statement-customer', 'statement-supplier'].includes(report.value);
+const { options: accountOpts } = useAccountOptions(null, when);
+const ccOpts = useCostCenterOptions(when);
+const { options: customerOpts } = useCustomerOptions(when);
+const { options: supplierOpts } = useSupplierOptions(when);
 
 const path = computed(() => {
   const r = report.value;
