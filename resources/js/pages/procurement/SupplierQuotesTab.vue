@@ -48,7 +48,7 @@ const columns = [
   <ErrorBanner :error="list.error.value" :closable="false" />
   <div class="card">
     <DataTable :columns="columns" :paged="list.data.value" :loading="list.isLoading.value" :row-key="(r) => r.id" :min-width="1000" :empty-text="{ ar: 'لا عروض مسجلة.', en: 'No quotations recorded.' }" @page="page = $event">
-      <template #cell-number="{ row }"><div><div class="cell-id">{{ row.number }}</div><div class="num ltr text-start text-[8px] text-faint">{{ row.supplierRef }}</div></div></template>
+      <template #cell-number="{ row }"><div><div class="cell-id">{{ row.number }}</div><div class="num ltr text-[8px] text-faint">{{ row.supplierRef }}</div></div></template>
       <template #cell-att="{ row }">
         <span v-if="row.attachmentName" class="row cursor-pointer !gap-1.5" @click.stop="preview(row)">
           <span class="num rounded-[5px] bg-bad px-1.5 py-0.5 text-[8px] text-white">{{ row.attachmentType }}</span>

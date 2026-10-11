@@ -65,7 +65,7 @@ async function submit() {
       <NumberInput v-model="f.discount" :label="{ ar: 'خصم على الأمر ر.س', en: 'Order discount SAR' }" :min="0" :error="chargesError" />
       <NumberInput v-model="f.shippingCost" :label="{ ar: 'تكلفة الشحن ر.س', en: 'Shipping SAR' }" :min="0" />
       <NumberInput v-model="f.vatPct" :label="{ ar: 'ضريبة القيمة المضافة %', en: 'VAT %' }" :min="0" :max="100" />
-      <div class="field"><div class="field-l">{{ t('الإجمالي شامل الضريبة', 'Gross total incl. VAT') }}</div><div class="num ltr text-start text-[13px] font-extrabold">{{ fmtMoney(gross) }} <span class="font-sans text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span></div></div>
+      <div class="field"><div class="field-l">{{ t('الإجمالي شامل الضريبة', 'Gross total incl. VAT') }}</div><div class="num ltr text-[13px] font-extrabold">{{ fmtMoney(gross) }} <span class="font-sans text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span></div></div>
       <ScoreOverrideField v-if="lowScore" v-model:checked="f.overrideSupplierScore" v-model:reason="f.overrideReason" :label="t('استثناء تقييم المورد (يتطلب صلاحية اعتماد أوامر الشراء)', 'Override supplier score (requires po.approve)')" :reason-label="{ ar: 'سبب الاستثناء', en: 'Override reason' }" />
       <ScoreOverrideField v-if="docsBlocked" v-model:checked="f.overrideDocuments" v-model:reason="f.documentsReason" :label="t('مستند إلزامي للمورد منتهٍ — استثناء موثق (يتطلب صلاحية اعتماد أوامر الشراء)', 'A mandatory supplier document expired — documented override (requires po.approve)')" :reason-label="{ ar: 'سبب الاستثناء (مثال: السجل قيد التجديد)', en: 'Override reason (e.g. CR renewal in progress)' }" />
     </div>

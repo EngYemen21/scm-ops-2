@@ -49,14 +49,14 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
         <div />
       </div>
       <div v-for="(l, i) in modelValue" :key="l.sku" class="le-row grid items-center gap-1.5 border-t border-line-2 px-2.5 py-[7px]" :class="gridCols">
-        <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name || l.sku }}</div><div class="num ltr text-start text-[8.5px] text-faint">{{ l.sku }}</div></div>
+        <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name || l.sku }}</div><div class="num ltr text-[8.5px] text-faint">{{ l.sku }}</div></div>
         <div class="min-w-0">
           <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :placeholder="{ ar: 'كمية', en: 'qty' }" @update:model-value="(v) => patch(i, { qty: v })" />
           <button v-if="packHint(l)" type="button" class="num mt-0.5 block text-[8.5px] leading-tight" :class="packHint(l).partial ? 'text-warn' : 'text-faint'" :title="t('اضغط لإضافة عبوة كاملة', 'Click to add one full pack')" @click="addPack(i, l)">{{ packHint(l).text }}</button>
         </div>
         <template v-if="withPrice">
           <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price ?? null" :min="0" :placeholder="{ ar: 'سعر', en: 'price' }" @update:model-value="(v) => patch(i, { price: v })" />
-          <div class="num ltr text-start text-[11px]" :data-label="t('الإجمالي', 'Total')">{{ fmtMoney(lineTotal(l)) }}</div>
+          <div class="num ltr text-[11px]" :data-label="t('الإجمالي', 'Total')">{{ fmtMoney(lineTotal(l)) }}</div>
         </template>
         <button type="button" class="x-btn !h-6 !w-6" aria-label="remove" @click="remove(i)">✕</button>
       </div>

@@ -71,7 +71,7 @@ async function submit() {
         <div>{{ t('المنتج', 'Product') }}</div><div>{{ t('متاح للفوترة', 'Billable') }}</div><div>{{ t('كمية الفاتورة', 'Invoiced qty') }}</div><div>{{ t('سعر الوحدة', 'Unit price') }}</div>
       </div>
       <div v-for="l in lines" :key="l.id" class="grid grid-cols-[minmax(120px,1.5fr)_70px_80px_90px] items-center gap-1.5 border-t border-line-2 px-2.5 py-[7px]">
-        <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ pname(l.product) }}</div><div class="num ltr text-start text-[8.5px] text-faint">{{ l.product.sku }} · {{ t('سعر الأمر', 'PO price') }} {{ fmtMoney(l.price) }}</div></div>
+        <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ pname(l.product) }}</div><div class="num ltr text-[8.5px] text-faint">{{ l.product.sku }} · {{ t('سعر الأمر', 'PO price') }} {{ fmtMoney(l.price) }}</div></div>
         <div class="num text-[11px]" :title="t('المقبول في إشعارات الاستلام − المفوتَر سابقًا', 'accepted on GRNs − already invoiced')">{{ fmtNum(billable(l)) }}<div v-if="l.invoicedQty" class="text-[8px] text-faint">{{ t('فُوتر', 'invoiced') }} {{ fmtNum(l.invoicedQty) }}</div></div>
         <NumberInput small :model-value="rows[l.lineNo]?.qty" :min="0" @update:model-value="(v) => setRow(l.lineNo, { qty: v })" />
         <NumberInput small :model-value="rows[l.lineNo]?.price" :min="0" @update:model-value="(v) => setRow(l.lineNo, { price: v })" />

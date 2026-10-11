@@ -58,7 +58,7 @@ const columns = [
       <template #cell-name="{ row }">
         <div class="cursor-pointer" @click.stop="setSel(row.code)">
           <div class="text-[11.5px] font-extrabold text-violet">{{ sname(row) }} <Chip v-if="row.isNew" small fg="#0d7f93" bg="#d9f4f9" :label="{ ar: 'جديد', en: 'New' }" /></div>
-          <div class="num ltr text-start text-[8px] text-faint">{{ row.code }}</div>
+          <div class="num ltr text-[8px] text-faint">{{ row.code }}</div>
         </div>
       </template>
       <template #cell-score="{ row }">

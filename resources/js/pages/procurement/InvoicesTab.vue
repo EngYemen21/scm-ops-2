@@ -64,7 +64,7 @@ const columns = [
       <template #cell-number="{ row }">
         <div>
           <div class="cell-id cursor-pointer" @click.stop="setSel(row.number)">{{ row.number }}</div>
-          <div class="num ltr text-start text-[8px] text-faint">{{ row.supplierInvoiceNo }} · {{ fmtNum(row._count?.lines || 0) }} {{ t('بند', 'lines') }}</div>
+          <div class="num ltr text-[8px] text-faint">{{ row.supplierInvoiceNo }} · {{ fmtNum(row._count?.lines || 0) }} {{ t('بند', 'lines') }}</div>
         </div>
       </template>
       <template #cell-dueDate="{ row }">
