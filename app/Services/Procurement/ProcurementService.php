@@ -2,6 +2,7 @@
 
 namespace App\Services\Procurement;
 
+use App\Models\GrnLine;
 use App\Models\InboundShipment;
 use App\Models\InventoryBalance;
 use App\Models\InventoryMovement;
@@ -14,6 +15,7 @@ use App\Models\Supplier;
 use App\Services\Procurement\ProcurementHelpers as H;
 use App\Support\AppError;
 use App\Support\AuthUser;
+use Carbon\Carbon;
 use Throwable;
 
 /** Replenishment suggestions (suggest only — never auto-creates a PO), procurement dashboard, supplier performance. */
@@ -197,7 +199,25 @@ class ProcurementService
             $bySteps[$st->role_key]['total'] = H::round2($bySteps[$st->role_key]['total'] + (float) $po->total);
         }
 
+        // follow-up board numbers: open commitments, late deliveries, what was received this month, cycle time
+        $openPos = PurchaseOrder::whereIn('status', ['approved', 'sent', 'confirmed', 'partial'])->get(['id', 'total', 'gross_total', 'due_date', 'status']);
+        $late = $openPos->filter(fn ($p) => in_array($p->status, PoService::OPEN_FOR_DELIVERY, true) && $p->due_date && $p->due_date->lt(H::dayStart()));
+        $monthStart = H::dayStart()->startOfMonth();
+        $receivedValue = (float) GrnLine::query()->join('po_lines', 'po_lines.id', '=', 'grn_lines.po_line_id')
+            ->join('goods_receipts', 'goods_receipts.id', '=', 'grn_lines.grn_id')->where('goods_receipts.posted_at', '>=', $monthStart)
+            ->selectRaw('coalesce(sum(grn_lines.accepted_qty * po_lines.price), 0) as v')->value('v');
+        $cycle = PurchaseRequisition::whereNotNull('po_id')->whereNotNull('submitted_at')->where('submitted_at', '>=', H::dayStart()->subDays(90))
+            ->join('purchase_orders', 'purchase_orders.id', '=', 'purchase_requisitions.po_id')->whereNotNull('purchase_orders.sent_at')
+            ->get(['purchase_requisitions.submitted_at', 'purchase_orders.sent_at']);
+        $cycleDays = $cycle->count() ? H::round2($cycle->sum(fn ($r) => (Carbon::parse($r->sent_at)->getTimestampMs() - Carbon::parse($r->submitted_at)->getTimestampMs()) / 86400000) / $cycle->count()) : null;
+        $payables = app(SupplierInvoiceService::class)->summary();
+
         return [
+            'openPoValue' => ['count' => $openPos->count(), 'total' => H::round2($openPos->sum(fn ($p) => (float) $p->total)), 'gross' => H::round2($openPos->sum(fn ($p) => (float) $p->gross_total))],
+            'latePos' => ['count' => $late->count(), 'total' => H::round2($late->sum(fn ($p) => (float) $p->total))],
+            'receivedThisMonth' => ['total' => H::round2($receivedValue), 'from' => $monthStart->toJSON()],
+            'cycleDays' => ['avg' => $cycleDays, 'sample' => $cycle->count(), 'window' => 90],
+            'payables' => $payables,
             'pendingPrApprovals' => PurchaseRequisition::whereIn('status', ['submitted', 'review'])->count(),
             'openRfqs' => Rfq::whereIn('status', ['open', 'quoted', 'compared'])->count(),
             'poPendingApproval' => ['count' => $pendingPos->count(), 'total' => H::round2($pendingPos->sum(fn ($p) => (float) $p->total)), 'bySteps' => array_values($bySteps)],

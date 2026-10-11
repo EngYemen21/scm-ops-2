@@ -22,7 +22,7 @@ const rfqs = useList('/procurement/rfq', { status: 'open,quoted,compared', pageS
 const rfqOptions = computed(() => (rfqs.data.value?.items || []).map((r) => ({ v: r.number, l: `${r.number} · ${r.lines.map((l) => pname(l.product)).join('، ').slice(0, 40)}` })));
 const DELIVERY_TERMS = [['DDP', 'DDP'], ['EXW', 'EXW']];
 
-const blank = () => ({ supplierCode: '', supplierRef: '', date: todayIso(), validUntil: plusDays(30), rfqNumber: '', paymentTerms: 'آجل 30 يوم', deliveryTerms: 'DDP', minOrder: 0, leadDays: 5, attachmentName: '', notes: '' });
+const blank = () => ({ supplierCode: '', supplierRef: '', date: todayIso(), validUntil: plusDays(30), rfqNumber: '', paymentTerms: 'آجل 30 يوم', deliveryTerms: 'DDP', minOrder: 0, leadDays: 5, shippingCost: 0, warrantyMonths: null, attachmentName: '', notes: '' });
 const f = ref(blank());
 const lines = ref([]);
 watch(() => props.open, (open) => {
@@ -55,7 +55,7 @@ const ok = computed(() => !!f.value.supplierCode && f.value.supplierRef.trim().l
 
 async function submit() {
   const v = f.value;
-  const body = { supplierCode: v.supplierCode, rfqNumber: v.rfqNumber || undefined, supplierRef: v.supplierRef, date: v.date || undefined, validUntil: v.validUntil, paymentTerms: v.paymentTerms || undefined, deliveryTerms: v.deliveryTerms || undefined, minOrder: Number(v.minOrder) || 0, leadDays: Number(v.leadDays) || 0, attachmentName: v.attachmentName.trim(), notes: v.notes || undefined, lines: lines.value.map((l) => ({ sku: l.sku, qty: l.qty != null ? Number(l.qty) : undefined, price: Number(l.price), vatPct: 15 })) };
+  const body = { supplierCode: v.supplierCode, rfqNumber: v.rfqNumber || undefined, supplierRef: v.supplierRef, date: v.date || undefined, validUntil: v.validUntil, paymentTerms: v.paymentTerms || undefined, deliveryTerms: v.deliveryTerms || undefined, minOrder: Number(v.minOrder) || 0, leadDays: Number(v.leadDays) || 0, shippingCost: Number(v.shippingCost) || 0, warrantyMonths: v.warrantyMonths != null && v.warrantyMonths !== '' ? Number(v.warrantyMonths) : undefined, attachmentName: v.attachmentName.trim(), notes: v.notes || undefined, lines: lines.value.map((l) => ({ sku: l.sku, qty: l.qty != null ? Number(l.qty) : undefined, price: Number(l.price), vatPct: 15 })) };
   const r = await act.run(() => api.postIdempotent('/procurement/quotations', body), { success: (q) => t(`سُجل عرض السعر ${q.number}${q.rfq ? ' — أُضيف لمقارنة ' + q.rfq.number : ''}`, `Quotation ${q.number} recorded`), invalidate: ['procurement'] });
   if (r) { emit('done', r); emit('close'); }
 }
@@ -74,6 +74,8 @@ async function submit() {
       <SelectInput v-model="f.paymentTerms" :label="{ ar: 'شروط الدفع', en: 'Payment terms' }" :options="TERMS_OPTIONS" />
       <SelectInput v-model="f.deliveryTerms" :label="{ ar: 'شروط التوريد', en: 'Delivery terms' }" :options="DELIVERY_TERMS" />
       <NumberInput v-model="f.minOrder" :label="{ ar: 'الحد الأدنى للطلب', en: 'Minimum order' }" :min="0" />
+      <NumberInput v-model="f.shippingCost" :label="{ ar: 'تكلفة الشحن ر.س (تدخل في المقارنة)', en: 'Shipping SAR (counted in the comparison)' }" :min="0" />
+      <NumberInput v-model="f.warrantyMonths" :label="{ ar: 'الضمان (أشهر)', en: 'Warranty (months)' }" :min="0" :max="120" />
       <TextInput v-model="f.attachmentName" :label="{ ar: 'المرفق (PDF / JPG / PNG)', en: 'Attachment (PDF / JPG / PNG)' }" required dir="ltr" placeholder="quote-2026-001.pdf"
                  :error="f.attachmentName && !attOk ? t('المرفق يجب أن يكون PDF أو JPG أو PNG', 'Attachment must be PDF, JPG or PNG') : null" :hint="{ ar: 'اكتب اسم الملف بامتداده — الرفع الفعلي Integration Pending', en: 'File name with extension — upload is Integration Pending' }" />
       <TextArea v-model="f.notes" :label="{ ar: 'ملاحظات', en: 'Notes' }" :rows="2" :full="false" />

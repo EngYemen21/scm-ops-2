@@ -42,6 +42,8 @@ quick start from scratch on every push and pull request.
 php artisan test                                   # whole suite (database scm_ops_test, rebuilt + seeded per run)
 php artisan test tests/Feature/Sales               # one domain
 php artisan scm:reconcile [RYD]                    # inventory ledger = balances? (exit 1 on mismatch)
+php artisan scm:procurement-followup               # alert procurement once about late POs / expiring supplier documents (also runs hourly from the heartbeat)
+php artisan scm:sync-permissions                   # insert permissions a release added (config/scm.php) with their default role grants
 php artisan migrate:fresh --seed                   # reset the dev database to the demo data
 vendor/bin/pint                                    # PHP code style
 node tools/check-vue.mjs resources/js/pages/sales  # static check of Vue files (imports, exports, templates)

@@ -49,7 +49,8 @@ class RfqController extends ProcurementBaseController
     {
         $data = $request->validate([
             'quotation' => 'required|string|min:1', 'warehouseCode' => 'nullable|string', 'dueDate' => Rules::date(), 'paymentTerms' => 'nullable|string', 'notes' => 'nullable|string',
-        ] + Rules::scoreOverride());
+            'awardReason' => 'nullable|string|max:500', 'quotesException' => 'nullable|string|max:500',
+        ] + Rules::scoreOverride() + Rules::documentsOverride());
 
         return $this->created($this->rfq->award(AuthUser::current(), $id, $data));
     }
@@ -78,6 +79,7 @@ class RfqController extends ProcurementBaseController
         $data = $request->validate([
             'supplierCode' => 'required|string|min:1', 'rfqNumber' => 'nullable|string', 'supplierRef' => 'required|string|min:1', 'date' => Rules::date(), 'validUntil' => Rules::date(true),
             'paymentTerms' => 'nullable|string', 'deliveryTerms' => 'nullable|string', 'minOrder' => 'nullable|integer|min:0', 'leadDays' => 'required|integer|min:0',
+            'shippingCost' => 'nullable|numeric|min:0', 'warrantyMonths' => 'nullable|integer|min:0|max:120',
             'attachmentName' => ['required', 'string', 'regex:/\.(pdf|jpe?g|png)$/i'], 'notes' => 'nullable|string',
             'lines' => 'required|array|min:1', 'lines.*.sku' => 'required|string', 'lines.*.qty' => 'nullable|integer|min:0', 'lines.*.price' => 'required|numeric|gt:0',
             'lines.*.vatPct' => 'nullable|numeric', 'lines.*.leadDays' => 'nullable|integer',

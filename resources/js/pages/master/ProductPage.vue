@@ -83,6 +83,7 @@ const submitReason = (reason) => api.postIdempotent(`/products/${p.value.id}/${r
           <KV :k="{ ar: 'الحجم م³', en: 'Volume m³' }" :v="p.volumeM3 != null ? fmtNum(p.volumeM3, 4) : '—'" ltr class="[&_.kv-v]:font-num" />
           <KV :k="{ ar: 'الوزن كجم', en: 'Weight kg' }" :v="fmtNum(p.weightKg, 2)" ltr class="[&_.kv-v]:font-num" />
           <KV :k="{ ar: 'وحدات الطبلية', en: 'Units / pallet' }" :v="p.unitsPerPallet != null ? fmtNum(p.unitsPerPallet) : '—'" ltr class="[&_.kv-v]:font-num" />
+          <KV :k="{ ar: 'عبوة الشراء', en: 'Purchase pack' }" :v="Number(p.packQty) > 1 ? `${fmtNum(p.packQty)} × ${p.baseUom?.code || ''}${p.packUom ? ` (${p.packUom.code})` : ''}` : t('وحدة مفردة', 'Single unit')" ltr class="[&_.kv-v]:font-num" />
           <KV :k="{ ar: 'سعر الشراء', en: 'Purchase price' }" :v="p.purchasePrice != null ? `${fmtMoney(p.purchasePrice)} ${t('ر.س', 'SAR')}` : '—'" ltr class="[&_.kv-v]:font-num" />
           <KV :k="{ ar: 'العمر الافتراضي', en: 'Shelf life' }" :v="p.shelfLifeDays != null ? `${fmtNum(p.shelfLifeDays)} ${t('يوم', 'days')}` : '—'" />
           <KV :k="{ ar: 'تتبع الصلاحية', en: 'Tracks expiry' }" :v="p.tracksExpiry ? t('نعم — صرف FEFO', 'Yes — FEFO picking') : t('لا', 'No')" />

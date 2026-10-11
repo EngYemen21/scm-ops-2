@@ -70,9 +70,10 @@ class PurchaseOrderRulesTest extends ApiTestCase
         $body = $this->expectRejected($this->postAs('finance', $url), 'PO_APPROVAL_ROLE', [422]);
         $this->assertSame('BUSINESS_RULE', $body['category']);
         $this->expectRejected($this->postAs('gm', $url), 'PO_APPROVAL_ROLE', [422]);
-        $s1 = $this->expectOk($this->postAs('proc', $url, ['note' => 'ok']));
+        $this->expectRejected($this->postAs('proc', $url, ['note' => 'ok']), 'PO_SELF_APPROVAL', [422]); // the creator never approves their own PO
+        $s1 = $this->expectOk($this->postAs('admin', $url, ['note' => 'ok']));
         $this->assertSame(['pending', 1], [$s1['status'], $s1['approvalStep']]);
-        $this->assertSame(['approved', 'proc', 'ok'], [$s1['approvals'][0]['decision'], $s1['approvals'][0]['approver'], $s1['approvals'][0]['note']]);
+        $this->assertSame(['approved', 'admin', 'ok'], [$s1['approvals'][0]['decision'], $s1['approvals'][0]['approver'], $s1['approvals'][0]['note']]);
         $this->assertNotNull($s1['approvals'][0]['decidedAt']);
 
         $this->expectRejected($this->postAs('proc', $url), 'PO_APPROVAL_ROLE', [422]); // step 2 belongs to finance
@@ -160,7 +161,7 @@ class PurchaseOrderRulesTest extends ApiTestCase
         $this->expectRejected($this->postAs('proc', $send), 'PO_TRANSITION', [422]); // not approved yet
         $this->expectRejected($this->postAs('finance', $send), 'FORBIDDEN', [403]);
         $this->assertSame(0, InboundShipment::where('po_id', $po['id'])->count());
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$po['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$po['number']}/approve"));
 
         $first = $this->expectOk($this->postAs('proc', $send));
         $this->assertTrue($first['created']);
@@ -201,7 +202,7 @@ class PurchaseOrderRulesTest extends ApiTestCase
         $this->expectRejected($this->postAs('finance', $cancel, ['reason' => 'تغيير الخطة']), 'FORBIDDEN', [403]);
         $this->assertSame('pending', PurchaseOrder::find($po['id'])->status);
 
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$po['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$po['number']}/approve"));
         $cancelled = $this->expectOk($this->postAs('proc', $cancel, ['reason' => 'تغيير الخطة']));
         $this->assertSame('cancelled', $cancelled['status']);
         $this->assertNotNull($cancelled['closedAt']);
@@ -212,11 +213,11 @@ class PurchaseOrderRulesTest extends ApiTestCase
 
         // approved (not sent yet) can still be cancelled; sent cannot
         $approved = $this->makePo($supplier->code, $product->sku, 5, 200);
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$approved['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$approved['number']}/approve"));
         $this->assertSame('cancelled', $this->expectOk($this->postAs('proc', "/api/procurement/po/{$approved['number']}/cancel", ['reason' => 'ألغى المورد الصنف']))['status']);
 
         $sent = $this->makePo($supplier->code, $product->sku, 5, 200);
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$sent['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$sent['number']}/approve"));
         $this->expectOk($this->postAs('proc', "/api/procurement/po/{$sent['number']}/send"));
         $this->expectRejected($this->postAs('proc', "/api/procurement/po/{$sent['number']}/cancel", ['reason' => 'تغيير الخطة']), 'PO_CANCEL_AFTER_SEND', [422]);
         $this->assertSame('sent', PurchaseOrder::find($sent['id'])->status);

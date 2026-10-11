@@ -6,7 +6,7 @@ import { api, useAction } from '@/api/client';
 import { Btn, Chip, NumberInput, SelectInput, TextArea, TextInput } from '@/components';
 import { bi, fmtDate, lang, t } from '@/i18n';
 import ApprovalTiersEditor from './ApprovalTiersEditor.vue';
-import { APPROVAL_TIERS_KEY, isTierList, settingKind, settingText, validateTiers } from './settings';
+import { TIER_KEYS, isTierList, settingKind, settingText, validateTiers } from './settings';
 
 const props = defineProps({
   /** Setting key, e.g. `inventory.expiringSoonDays`. */
@@ -24,7 +24,7 @@ const invalid = ref(null);
 watch(original, (v) => { draft.value = v; invalid.value = null; });
 const dirty = computed(() => draft.value !== original.value);
 
-const isTiers = computed(() => props.k === APPROVAL_TIERS_KEY && isTierList(props.row.value));
+const isTiers = computed(() => TIER_KEYS.includes(props.k) && isTierList(props.row.value));
 const tiers = computed(() => { try { const v = JSON.parse(draft.value); return Array.isArray(v) ? v : []; } catch { return []; } });
 const setTiers = (v) => { draft.value = JSON.stringify(v, null, 2); invalid.value = null; };
 const jsonRows = computed(() => Math.min(10, Math.max(3, draft.value.split('\n').length)));

@@ -26,6 +26,8 @@ class SupplierQuotation extends BaseModel
             'lead_days' => 'integer',
             'recommended' => 'boolean',
             'score' => 'float',
+            'shipping_cost' => 'decimal:2',
+            'warranty_months' => 'integer',
         ];
     }
 

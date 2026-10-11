@@ -61,8 +61,11 @@ final class ProcurementHelpers
     {
         $s = Supplier::where('code', $code)->orWhere('id', $code)->first()
             ?? throw AppError::notFound('SUPPLIER_NOT_FOUND', "المورد {$code} غير موجود", "Supplier {$code} not found");
-        if ($mustBeActive && ! $s->active) {
-            throw AppError::rule('SUPPLIER_INACTIVE', "المورد {$s->name_ar} غير نشط", "Supplier {$s->name_en} is inactive");
+        if ($mustBeActive && (! $s->active || $s->status === 'suspended')) {
+            throw AppError::rule('SUPPLIER_INACTIVE', "المورد {$s->name_ar} موقوف — لا يُصدر له أمر شراء", "Supplier {$s->name_en} is suspended");
+        }
+        if ($mustBeActive && $s->status === 'review') {
+            throw AppError::rule('SUPPLIER_UNDER_REVIEW', "المورد {$s->name_ar} تحت المراجعة — لا يُصدر له أمر شراء حتى اكتمال التأهيل", "Supplier {$s->name_en} is under review");
         }
 
         return $s;

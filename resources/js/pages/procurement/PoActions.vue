@@ -22,7 +22,7 @@ const emit = defineEmits(['changed']);
 const auth = useAuth();
 const router = useRouter();
 const act = useAction({ invalidate: ['procurement', 'inbound', 'dashboard'] });
-/** null | 'reject' | 'cancel' */
+/** null | 'reject' | 'cancel' | 'followUp' */
 const reasonFor = ref(null);
 
 const S = computed(() => props.po.status);
@@ -51,8 +51,14 @@ const send = () => run('send', undefined, (d) => (d?.shipment
 const supplierConfirmed = () => run('confirm', {}, t(`أكّد المورد ${props.po.number}`, `${props.po.number} confirmed by supplier`));
 function withReason(reason) {
   const n = props.po.number;
+  if (reasonFor.value === 'followUp') return run('follow-up', { note: reason }, t(`سُجلت متابعة ${n}`, `Follow-up on ${n} recorded`));
   return reasonFor.value === 'reject' ? run('reject', { reason }, t(`رُفض ${n}`, `${n} rejected`)) : run('cancel', { reason }, t(`أُلغي ${n}`, `${n} cancelled`));
 }
+const PROMPT = {
+  reject: { title: (n) => ({ ar: `رفض ${n}`, en: `Reject ${n}` }), sub: { ar: 'الرفض يُلغي أمر الشراء ويُسجَّل السبب في سلسلة الاعتماد', en: 'Rejection cancels the PO; the reason is recorded on the approval chain' }, ok: { ar: 'رفض', en: 'Reject' }, label: { ar: 'السبب', en: 'Reason' } },
+  cancel: { title: (n) => ({ ar: `إلغاء أمر الشراء ${n}`, en: `Cancel ${n}` }), sub: { ar: 'لا يمكن الإلغاء بعد الإرسال للمورد', en: 'Cannot cancel after sending to the supplier' }, ok: { ar: 'إلغاء أمر الشراء', en: 'Cancel PO' }, label: { ar: 'السبب', en: 'Reason' } },
+  followUp: { title: (n) => ({ ar: `متابعة توريد ${n}`, en: `Follow up ${n}` }), sub: { ar: 'ماذا قال المورد ومتى يصل؟ تُسجَّل الملاحظة على الأمر وفي سجل النشاط', en: 'What did the supplier say and when will it arrive? Recorded on the order and in the activity log' }, ok: { ar: 'تسجيل المتابعة', en: 'Record follow-up' }, label: { ar: 'ملاحظة المتابعة', en: 'Follow-up note' } },
+};
 function closeReason() { reasonFor.value = null; act.clearError(); }
 </script>
 
@@ -65,15 +71,13 @@ function closeReason() { reasonFor.value = null; act.clearError(); }
     </template>
     <Btn v-if="S === 'approved' && auth.can('po.send')" tone="blue" :size="size" :loading="act.pending.value" :label="{ ar: 'إرسال للمورد', en: 'Send to supplier' }" @click="send" />
     <Btn v-if="S === 'sent' && auth.can('po.send')" tone="purple" :size="size" :loading="act.pending.value" :label="{ ar: 'تأكيد المورد', en: 'Supplier confirmed' }" @click="supplierConfirmed" />
+    <Btn v-if="['approved', 'sent', 'confirmed', 'partial'].includes(S) && auth.can('po.send')" :tone="po.late ? 'danger' : 'soft'" :size="size" :label="po.late ? { ar: 'متأخر — متابعة', en: 'Late — follow up' } : { ar: 'متابعة', en: 'Follow up' }" @click="reasonFor = 'followUp'" />
     <Btn v-if="['draft', 'pending', 'approved'].includes(S) && auth.can('po.cancel')" tone="dangerOutline" :size="size" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="reasonFor = 'cancel'" />
     <Btn v-if="['sent', 'confirmed', 'partial'].includes(S) && shipment" tone="softBlue" :size="size" :label="{ ar: `الشحنة ${shipment.number}`, en: `Shipment ${shipment.number}` }" @click="router.push(`/shipments/${encodeURIComponent(shipment.number)}`)" />
 
     <!-- Teleported: this component also lives inside clickable table rows; the drawer must not inherit their click / hover. -->
     <Teleport v-if="reasonFor !== null" to="body">
-      <ReasonDrawer open
-                    :title="reasonFor === 'reject' ? { ar: `رفض ${po.number}`, en: `Reject ${po.number}` } : { ar: `إلغاء أمر الشراء ${po.number}`, en: `Cancel ${po.number}` }"
-                    :sub="reasonFor === 'reject' ? { ar: 'الرفض يُلغي أمر الشراء ويُسجَّل السبب في سلسلة الاعتماد', en: 'Rejection cancels the PO; the reason is recorded on the approval chain' } : { ar: 'لا يمكن الإلغاء بعد الإرسال للمورد', en: 'Cannot cancel after sending to the supplier' }"
-                    :ok-label="reasonFor === 'reject' ? { ar: 'رفض', en: 'Reject' } : { ar: 'إلغاء أمر الشراء', en: 'Cancel PO' }"
+      <ReasonDrawer open :title="PROMPT[reasonFor].title(po.number)" :sub="PROMPT[reasonFor].sub" :ok-label="PROMPT[reasonFor].ok" :label="PROMPT[reasonFor].label"
                     :pending="act.pending.value" :error="act.error.value" @submit="withReason" @close="closeReason" @clear-error="act.clearError()" />
     </Teleport>
   </div>

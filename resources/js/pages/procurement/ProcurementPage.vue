@@ -1,13 +1,14 @@
 <script setup>
 // Procurement — tabs: purchase orders · requisitions · RFQ comparison · supplier quotations · suppliers · suggestions.
-// Deep links: `?tab=po|pr|rfq|sq|sup|sugg`, `?tab=rfq&rfq=RFQ-…`, `?tab=sup&supplier=SUP-…`, `?q=…` (supplier search).
+// Deep links: `?tab=po|pr|rfq|sq|sup|sugg|inv`, `?tab=inv&invoice=INV-…`, `?tab=rfq&rfq=RFQ-…`, `?tab=sup&supplier=SUP-…`, `?q=…` (supplier search).
 // The create forms live here so every tab (and the supplier drawer) can open them with initial values.
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, KpiCard, KpiGrid, PageHead, Tabs } from '@/components';
-import { fmtMoney, t } from '@/i18n';
+import { fmtMoney, fmtNum, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
+import InvoicesTab from './InvoicesTab.vue';
 import PoForm from './PoForm.vue';
 import PoTab from './PoTab.vue';
 import PrForm from './PrForm.vue';
@@ -25,11 +26,12 @@ const auth = useAuth();
 const route = useRoute();
 const router = useRouter();
 
-const TAB_KEYS = ['po', 'pr', 'rfq', 'sq', 'sup', 'sugg'];
+const TAB_KEYS = ['po', 'pr', 'rfq', 'sq', 'sup', 'sugg', 'inv'];
 const tab = computed(() => { const k = qs(route.query.tab); return TAB_KEYS.includes(k) ? k : 'po'; });
 const setTab = (k) => router.replace({ query: { ...route.query, tab: k, page: undefined } });
 
-/** { pendingPrApprovals, openRfqs, poPendingApproval{ count, total, bySteps[] }, expectedInboundsThisWeek{ count, items[] }, posSentAwaitingConfirmation, urgentSuggestions } */
+/** { openPoValue{ count, total, gross }, latePos{ count, total }, receivedThisMonth{ total }, cycleDays{ avg, sample }, payables{ disputed, awaitingApproval, openTotal, overdue{ count, total }, dueThisWeek{ count, total } },
+ *    pendingPrApprovals, openRfqs, poPendingApproval{ count, total, bySteps[] }, expectedInboundsThisWeek{ count, items[] }, posSentAwaitingConfirmation, urgentSuggestions } */
 const dashQ = useGet('/procurement/dashboard', undefined, { refetchInterval: 60_000 });
 const dash = computed(() => dashQ.data.value);
 
@@ -48,7 +50,20 @@ const tabs = computed(() => [
   { k: 'sq', label: { ar: 'عروض الموردين', en: 'Supplier quotations' } },
   { k: 'sup', label: { ar: 'الموردون', en: 'Suppliers' } },
   { k: 'sugg', label: { ar: 'اقتراحات الشراء', en: 'Suggestions' }, badge: dash.value?.urgentSuggestions },
+  { k: 'inv', label: { ar: 'فواتير الموردين', en: 'Supplier invoices' }, badge: (dash.value?.payables?.disputed || 0) + (dash.value?.payables?.awaitingApproval || 0) },
 ]);
+/** Follow-up board: open commitments, late deliveries, what arrived this month, PR→PO cycle time, payables. */
+const followUp = computed(() => {
+  const d = dash.value;
+  if (!d) return null;
+  return [
+    { v: fmtMoney(d.openPoValue?.total), l: { ar: `قيمة أوامر مفتوحة (${fmtNum(d.openPoValue?.count || 0)})`, en: `Open PO value (${fmtNum(d.openPoValue?.count || 0)})` }, c: '#654e92', tab: 'po' },
+    { v: d.latePos?.count || 0, l: { ar: 'أوامر متأخرة التوريد', en: 'Late deliveries' }, sub: d.latePos?.count ? `${fmtMoney(d.latePos.total)} ${t('ر.س', 'SAR')}` : null, c: d.latePos?.count ? '#b23b3b' : '#1d7a3e', tab: 'po' },
+    { v: fmtMoney(d.receivedThisMonth?.total), l: { ar: 'مستلم هذا الشهر ر.س', en: 'Received this month SAR' }, c: '#1d7a3e' },
+    { v: d.cycleDays?.avg != null ? `${fmtNum(d.cycleDays.avg, 1)} ${t('يوم', 'd')}` : '—', l: { ar: `دورة PR→PO (${fmtNum(d.cycleDays?.sample || 0)} طلب / 90 يومًا)`, en: `PR→PO cycle (${fmtNum(d.cycleDays?.sample || 0)} in 90 days)` }, c: '#0d7f93' },
+    { v: fmtMoney(d.payables?.openTotal), l: { ar: `مستحقات موردين مفتوحة (${fmtNum(d.payables?.overdue?.count || 0)} متأخرة)`, en: `Open payables (${fmtNum(d.payables?.overdue?.count || 0)} overdue)` }, c: d.payables?.overdue?.count ? '#b23b3b' : '#3C79F5', tab: 'inv' },
+  ];
+});
 </script>
 
 <template>
@@ -69,6 +84,10 @@ const tabs = computed(() => [
     <KpiCard compact clickable :value="dash?.urgentSuggestions" :label="{ ar: 'اقتراحات عاجلة (نافد)', en: 'Urgent suggestions' }" color="#b23b3b" :active="tab === 'sugg'" :loading="!dash" @click="setTab('sugg')" />
   </KpiGrid>
 
+  <KpiGrid compact>
+    <KpiCard v-for="(k, i) in followUp || []" :key="i" compact :clickable="!!k.tab" :value="k.v" :label="k.l" :sub="k.sub" :color="k.c" @click="k.tab && setTab(k.tab)" />
+  </KpiGrid>
+
   <Tabs :model-value="tab" :tabs="tabs" @update:model-value="setTab" />
   <div class="mt-3">
     <PoTab v-if="tab === 'po'" @new="openForm('po')" />
@@ -77,6 +96,7 @@ const tabs = computed(() => [
     <SupplierQuotesTab v-else-if="tab === 'sq'" @new="openForm('sq')" />
     <SuppliersTab v-else-if="tab === 'sup'" @new-po="openForm('po', { supplierCode: $event.code })" @edit="editSupplier" @quote="openForm('sq', { supplierCode: $event.code })" />
     <SuggestionsTab v-else-if="tab === 'sugg'" />
+    <InvoicesTab v-else-if="tab === 'inv'" />
   </div>
 
   <PoForm :open="form?.kind === 'po'" :initial="form?.init" @close="closeForm" @done="setTab('po')" />

@@ -13,11 +13,13 @@
 //   Rfq        { id, number, status, closeDate, invitedRule, terms?, notes?, pr?, warehouse?, lines[{ lineNo, qty, product }], _count?{suppliers,quotations} }
 //   Quotation  { id, number, supplierRef?, status, date, validUntil?, paymentTerms?, deliveryTerms?, minOrder, leadDays, attachmentName?,
 //                attachmentType?, supplier, rfq?, lines[{ price, qty?, vatPct?, leadDays?, product }] }
-//   Comparison { rfq, need[], invited[], quotes[ComparisonRow], rec, weights? }
-//   ComparisonRow { quotationId, number, supplierRef?, status, supplier, price, unitPrice, lead, pay?, deliveryTerms?, min, score,
-//                validUntil?, complete, expired, moqExceedsNeed, weighted, rec, reasons[], reasonsEn[] }
+//   Comparison { rfq, need[], invited[], quotes[ComparisonRow], rec, weights?, policy{ minQuotes, received } }
+//   ComparisonRow { quotationId, number, supplierRef?, status, supplier, price (landed = goods + shipping), goods, shipping, warrantyMonths?, unitPrice, lead,
+//                pay?, deliveryTerms?, min, score, validUntil?, complete, expired, moqExceedsNeed, weighted, rec, reasons[], reasonsEn[] }
+//   Invoice    { id, number, supplierInvoiceNo, status: 'matched'|'disputed'|'approved'|'paid'|'cancelled', invoiceDate, dueDate?, subtotal, discount, shippingCost,
+//                vatPct, vatAmount, total, variances?[], overdue, supplier, po, lines?[{ lineNo, qty, price, poPrice, receivedQty, previouslyInvoicedQty, match, product }] }
 //   Suggestion { sku, nameAr, nameEn, storageClass, warehouse, avail, reserved, adc, lead, safety, incoming, sug, urgent, supplier?, price, why[], whyE[] }
-//   LineDraft  { sku, name?, qty: number|null, price?: number|null, tracksExpiry? }   (line editor rows)
+//   LineDraft  { sku, name?, qty: number|null, price?: number|null, tracksExpiry?, packQty?, packUom? }   (line editor rows; qty is always in the base unit)
 import { computed } from 'vue';
 import { useList } from '@/api/client';
 import { fmtNum, lang } from '@/i18n';
@@ -33,7 +35,7 @@ export const SQ_LABELS = {
   received: { ar: 'مستلم', en: 'Received', fg: '#0d7f93', bg: '#d9f4f9' }, awarded: { ar: 'تمت الترسية ✓', en: 'Awarded ✓', fg: '#1d7a3e', bg: '#e6f9ec' }, lost: { ar: 'لم يُرسَ', en: 'Lost', fg: '#7d7990', bg: '#F1EFF6' }, expired: { ar: 'منتهي', en: 'Expired', fg: '#a8a4b8', bg: '#F1EFF6' },
 };
 export const PRIORITY_LABELS = {
-  urgent: { ar: 'عاجلة', en: 'Urgent', fg: '#fff', bg: '#b23b3b' }, normal: { ar: 'عادية', en: 'Normal', fg: '#55506a', bg: '#F1EFF6' }, low: { ar: 'منخفضة', en: 'Low', fg: '#a8a4b8', bg: '#F1EFF6' },
+  urgent: { ar: 'عاجلة', en: 'Urgent', fg: '#fff', bg: '#b23b3b' }, emergency: { ar: 'طارئة', en: 'Emergency', fg: '#fff', bg: '#7a1f1f' }, normal: { ar: 'عادية', en: 'Normal', fg: '#55506a', bg: '#F1EFF6' }, low: { ar: 'منخفضة', en: 'Low', fg: '#a8a4b8', bg: '#F1EFF6' },
 };
 export const PR_STATUS_LABELS = {
   draft: { ar: 'مسودة', en: 'Draft', fg: '#55506a', bg: '#F1EFF6' }, submitted: { ar: 'بانتظار المراجعة', en: 'Submitted', fg: '#b26a16', bg: '#fbf0dd' }, review: { ar: 'قيد المراجعة', en: 'Under review', fg: '#0d7f93', bg: '#d9f4f9' },
@@ -50,7 +52,28 @@ export const SUPPLIER_CATEGORY_OPTIONS = Object.entries(SUPPLIER_CATEGORIES).map
 export const TERMS_OPTIONS = [['آجل 30 يوم', { ar: 'آجل 30 يوم', en: 'Net 30' }], ['آجل 15 يوم', { ar: 'آجل 15 يوم', en: 'Net 15' }], ['عند الاستلام', { ar: 'عند الاستلام', en: 'COD' }], ['مقدم 100%', { ar: 'مقدم 100%', en: '100% advance' }]];
 export const INVITE_RULES = [['cat', { ar: 'موردو الفئة', en: 'Category suppliers' }], ['top3', { ar: 'أفضل 3 تقييمًا', en: 'Top 3 by score' }], ['pref', { ar: 'المورد المفضل + بديلان', en: 'Preferred + 2 alternates' }]];
 export const INVITE_RULES_WITH_MANUAL = [...INVITE_RULES, ['manual', { ar: 'اختيار يدوي', en: 'Manual' }]];
-export const PRIORITY_OPTIONS = [['normal', { ar: 'عادية', en: 'Normal' }], ['urgent', { ar: 'عاجلة', en: 'Urgent' }], ['low', { ar: 'منخفضة', en: 'Low' }]];
+export const PRIORITY_OPTIONS = [['normal', { ar: 'عادية', en: 'Normal' }], ['urgent', { ar: 'عاجلة', en: 'Urgent' }], ['emergency', { ar: 'طارئة', en: 'Emergency' }], ['low', { ar: 'منخفضة', en: 'Low' }]];
+/** Supplier invoice states (three-way match → approval → payment). */
+export const INVOICE_LABELS = {
+  matched: { ar: 'مطابقة — بانتظار الاعتماد', en: 'Matched — awaiting approval', fg: '#b26a16', bg: '#fbf0dd' }, disputed: { ar: 'مختلف عليها', en: 'Disputed', fg: '#b23b3b', bg: '#fdecec' },
+  approved: { ar: 'معتمدة للصرف', en: 'Approved for payment', fg: '#3C79F5', bg: '#e8effe' }, paid: { ar: 'مسدَّدة ✓', en: 'Paid ✓', fg: '#1d7a3e', bg: '#e6f9ec' }, cancelled: { ar: 'ملغاة', en: 'Cancelled', fg: '#7d7990', bg: '#F1EFF6' },
+};
+export const MATCH_LABELS = {
+  ok: { ar: 'مطابق ✓', en: 'OK ✓', fg: '#1d7a3e', bg: '#e6f9ec' }, qty: { ar: 'فرق كمية', en: 'Qty variance', fg: '#b23b3b', bg: '#fdecec' }, price: { ar: 'فرق سعر', en: 'Price variance', fg: '#b26a16', bg: '#fbf0dd' }, both: { ar: 'كمية وسعر', en: 'Qty & price', fg: '#b23b3b', bg: '#fdecec' },
+};
+/** Supplier qualification status: review = usable in master data but no new POs; suspended ⇔ inactive. */
+export const SUPPLIER_STATUS_LABELS = {
+  active: { ar: 'نشط', en: 'Active', fg: '#1d7a3e', bg: '#e6f9ec' }, review: { ar: 'تحت المراجعة', en: 'Under review', fg: '#b26a16', bg: '#fbf0dd' }, suspended: { ar: 'موقوف', en: 'Suspended', fg: '#b23b3b', bg: '#fdecec' },
+};
+export const SUPPLIER_STATUS_OPTIONS = Object.entries(SUPPLIER_STATUS_LABELS).map(([v, l]) => ({ v, l: { ar: l.ar, en: l.en } }));
+export const DOC_TYPE_LABELS = {
+  cr: { ar: 'السجل التجاري', en: 'Commercial registration' }, vat: { ar: 'شهادة التسجيل الضريبي', en: 'VAT certificate' }, license: { ar: 'رخصة / تصريح', en: 'Licence / permit' },
+  iso: { ar: 'شهادة جودة (ISO…)', en: 'Quality certificate (ISO…)' }, insurance: { ar: 'تأمين', en: 'Insurance' }, other: { ar: 'أخرى', en: 'Other' },
+};
+export const DOC_TYPE_OPTIONS = Object.entries(DOC_TYPE_LABELS).map(([v, l]) => ({ v, l }));
+export const DOC_STATE_LABELS = {
+  valid: { ar: 'ساري', en: 'Valid', fg: '#1d7a3e', bg: '#e6f9ec' }, expiring: { ar: 'يقترب انتهاؤه', en: 'Expiring soon', fg: '#b26a16', bg: '#fbf0dd' }, expired: { ar: 'منتهٍ', en: 'Expired', fg: '#b23b3b', bg: '#fdecec' },
+};
 export const SELECT_PLACEHOLDER = { ar: '— اختر —', en: '— select —' };
 export const DASH_PLACEHOLDER = { ar: '—', en: '—' };
 

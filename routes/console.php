@@ -102,6 +102,21 @@ Artisan::command('scm:integration-adopt-products {system=sales} {--stock=0 : tri
     return 0;
 })->purpose('Pilot bootstrap: create the other system\'s unmapped products in OPS (estimated attributes) and link them');
 
+// Access tables ← config/scm.php: inserts permissions a release introduced (with their default role grants); never removes.
+Artisan::command('scm:sync-permissions', function () {
+    $this->line(json_encode(\App\Support\PermissionSync::ensure(), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Insert permissions missing from the database and grant them to their default roles');
+
+// Procurement follow-up: late purchase orders and expiring supplier documents → one notification each to procurement.
+Artisan::command('scm:procurement-followup', function (\App\Services\Procurement\ProcurementHousekeeping $hk) {
+    $this->line(json_encode($hk->runNow(), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Alert procurement about late POs and expiring supplier documents');
+Schedule::command('scm:procurement-followup')->dailyAt('07:00');
+
 Artisan::command('scm:reconcile {warehouse? : warehouse code, e.g. RYD}', function (InventoryService $inventory) {
     $warehouseId = null;
     if ($code = $this->argument('warehouse')) {

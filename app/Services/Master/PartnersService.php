@@ -97,6 +97,8 @@ class PartnersService
             'openPosCount' => PurchaseOrder::where('supplier_id', $s->id)->whereNotIn('status', self::CLOSED_PO)->count(),
             'recentPos' => $recentPos,
             'blocksPo' => $s->score < 65,
+            'expiredDocuments' => $s->documents()->where('mandatory', true)->whereNotNull('expires_at')->where('expires_at', '<', now()->startOfDay())->count(),
+            'documentsCount' => $s->documents()->count(),
         ];
     }
 
@@ -120,6 +122,8 @@ class PartnersService
                 'lead_days' => $dto['leadDays'] ?? 5, 'score' => $score, 'otif' => 0, 'fill_rate' => 0, 'orders_count' => 0, 'is_new' => true,
                 'cr' => $cr, 'vat' => $vat, 'contact' => $dto['contact'], 'email' => ($dto['email'] ?? null) ?: null, 'terms' => ($dto['terms'] ?? null) ?: null,
                 'iban' => self::iban($dto['iban'] ?? null), 'min_order' => $dto['minOrder'] ?? null, 'notes' => ($dto['notes'] ?? null) ?: null,
+                'status' => ($dto['status'] ?? null) ?: 'active', 'bank_name' => ($dto['bankName'] ?? null) ?: null, 'bank_account_name' => ($dto['bankAccountName'] ?? null) ?: null,
+                'address' => ($dto['address'] ?? null) ?: null, 'credit_limit' => $dto['creditLimit'] ?? null,
             ]);
             $this->audit->log($actor, ['action' => 'SUPPLIER.CREATE', 'entityType' => 'Supplier', 'entityId' => $r->id, 'entityNumber' => $code,
                 'newValue' => ['cr' => $cr, 'vat' => $vat, 'score' => $score, 'isNew' => true] + $dto]);
@@ -139,7 +143,7 @@ class PartnersService
             ?? throw AppError::notFound('SUPPLIER_NOT_FOUND', 'المورد غير موجود', 'Supplier not found');
         $this->validateSupplierIds($dto['cr'] ?? null, $dto['vat'] ?? null);
         $data = [];
-        foreach (['nameAr', 'contact', 'terms', 'notes', 'leadDays', 'minOrder', 'active'] as $k) {
+        foreach (['nameAr', 'contact', 'terms', 'notes', 'leadDays', 'minOrder', 'active', 'status', 'bankName', 'bankAccountName', 'address', 'creditLimit'] as $k) {
             if (array_key_exists($k, $dto)) {
                 $data[$k] = $dto[$k];
             }
@@ -174,6 +178,12 @@ class PartnersService
             if ($dupe) {
                 throw AppError::rule('SUPPLIER_DUPLICATE', "السجل التجاري / الرقم الضريبي مسجل للمورد {$dupe->name_ar} ({$dupe->code})", "CR/VAT already registered for supplier {$dupe->code}");
             }
+        }
+        // status and the active flag describe the same thing from two sides: suspended ⇔ inactive
+        if (array_key_exists('status', $data) && ! array_key_exists('active', $data)) {
+            $data['active'] = $data['status'] !== 'suspended';
+        } elseif (array_key_exists('active', $data) && ! array_key_exists('status', $data)) {
+            $data['status'] = $data['active'] ? ($s->status === 'review' ? 'review' : 'active') : 'suspended';
         }
         $d = Shape::diff($s, $data);
         if (! $d['changed']) {

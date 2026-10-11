@@ -6,7 +6,7 @@ import { api, useAction } from '@/api/client';
 import { NumberInput, SelectInput, TextArea, TextInput } from '@/components';
 import { t } from '@/i18n';
 import ActionDrawer from './ActionDrawer.vue';
-import { DASH_PLACEHOLDER, SUPPLIER_CATEGORIES, SUPPLIER_CATEGORY_OPTIONS, TERMS_OPTIONS } from './shared';
+import { DASH_PLACEHOLDER, SUPPLIER_CATEGORIES, SUPPLIER_CATEGORY_OPTIONS, SUPPLIER_STATUS_OPTIONS, TERMS_OPTIONS } from './shared';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -16,7 +16,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'done']);
 
 const act = useAction();
-const blank = () => ({ nameAr: '', nameEn: '', category: '', cr: '', vat: '', contact: '', email: '', leadDays: 5, terms: 'آجل 30 يوم', iban: '', minOrder: 0, notes: '' });
+const blank = () => ({ nameAr: '', nameEn: '', category: '', cr: '', vat: '', contact: '', email: '', leadDays: 5, terms: 'آجل 30 يوم', iban: '', minOrder: 0, notes: '', status: 'active', bankName: '', bankAccountName: '', address: '', creditLimit: null });
 const f = ref(blank());
 watch([() => props.open, () => props.supplier], () => {
   if (!props.open) return;
@@ -25,6 +25,7 @@ watch([() => props.open, () => props.supplier], () => {
     nameAr: s.nameAr, nameEn: s.nameEn || '',
     category: Object.keys(SUPPLIER_CATEGORIES).find((k) => SUPPLIER_CATEGORIES[k][0] === s.category || SUPPLIER_CATEGORIES[k][1] === s.categoryEn) || '',
     cr: s.cr || '', vat: s.vat || '', contact: s.contact || '', email: s.email || '', leadDays: s.leadDays, terms: s.terms || '', iban: s.iban || '', minOrder: s.minOrder != null ? Number(s.minOrder) : 0, notes: s.notes || '',
+    status: s.status || (s.active ? 'active' : 'suspended'), bankName: s.bankName || '', bankAccountName: s.bankAccountName || '', address: s.address || '', creditLimit: s.creditLimit != null ? Number(s.creditLimit) : null,
   } : blank();
   act.clearError();
 }, { immediate: true });
@@ -37,7 +38,8 @@ const ok = computed(() => f.value.nameAr.trim().length > 0 && crOk.value && vatO
 async function submit() {
   const v = f.value;
   const s = props.supplier;
-  const body = { nameAr: v.nameAr, nameEn: v.nameEn || undefined, category: v.category || undefined, cr: digits(v.cr), vat: digits(v.vat), contact: v.contact, email: v.email || undefined, leadDays: Number(v.leadDays) || 0, terms: v.terms || undefined, iban: v.iban || undefined, minOrder: Number(v.minOrder) || 0, notes: v.notes || undefined };
+  const body = { nameAr: v.nameAr, nameEn: v.nameEn || undefined, category: v.category || undefined, cr: digits(v.cr), vat: digits(v.vat), contact: v.contact, email: v.email || undefined, leadDays: Number(v.leadDays) || 0, terms: v.terms || undefined, iban: v.iban || undefined, minOrder: Number(v.minOrder) || 0, notes: v.notes || undefined,
+    status: v.status || undefined, bankName: v.bankName || undefined, bankAccountName: v.bankAccountName || undefined, address: v.address || undefined, creditLimit: v.creditLimit != null && v.creditLimit !== '' ? Number(v.creditLimit) : undefined };
   const r = await act.run(() => (s ? api.patch(`/suppliers/${s.id}`, body) : api.postIdempotent('/suppliers', body)), {
     success: (x) => (s ? t(`حُدّث المورد ${x.nameAr}`, `Supplier ${x.nameEn} updated`) : t(`أُضيف المورد ${x.nameAr} (${x.code})`, `Supplier ${x.nameEn} added (${x.code})`)),
     invalidate: ['suppliers', 'procurement'],
@@ -61,6 +63,11 @@ async function submit() {
       <SelectInput v-model="f.terms" :label="{ ar: 'شروط الدفع', en: 'Payment terms' }" :options="TERMS_OPTIONS" :placeholder="DASH_PLACEHOLDER" />
       <TextInput v-model="f.iban" label="IBAN" dir="ltr" mono />
       <NumberInput v-model="f.minOrder" :label="{ ar: 'حد أدنى للطلب ر.س', en: 'Minimum order SAR' }" :min="0" />
+      <SelectInput v-model="f.status" :label="{ ar: 'حالة التأهيل', en: 'Qualification status' }" :options="SUPPLIER_STATUS_OPTIONS" :hint="{ ar: 'تحت المراجعة = لا أوامر شراء جديدة حتى اكتمال التأهيل', en: 'Under review = no new POs until qualification completes' }" />
+      <NumberInput v-model="f.creditLimit" :label="{ ar: 'حد الائتمان ر.س', en: 'Credit limit SAR' }" :min="0" />
+      <TextInput v-model="f.bankName" :label="{ ar: 'البنك', en: 'Bank' }" />
+      <TextInput v-model="f.bankAccountName" :label="{ ar: 'اسم صاحب الحساب', en: 'Account holder name' }" />
+      <TextInput v-model="f.address" :label="{ ar: 'العنوان', en: 'Address' }" full />
       <TextArea v-model="f.notes" :label="{ ar: 'ملاحظات', en: 'Notes' }" :rows="2" :full="false" />
     </div>
   </ActionDrawer>

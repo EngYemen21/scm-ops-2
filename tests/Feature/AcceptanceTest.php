@@ -72,7 +72,7 @@ class AcceptanceTest extends ApiTestCase
         $this->assertNotEmpty($cmp['rec']);
         $chosen = collect($cmp['quotes'])->first(fn ($q) => $q['supplier']['code'] === self::$s['supplier']);
         $this->assertNotNull($chosen);
-        $award = $this->expectOk($this->postAs('proc', "/api/procurement/rfq/{$rfqNo}/award", ['quotation' => $chosen['number'], 'warehouseCode' => 'RYD', 'dueDate' => '2026-09-25']));
+        $award = $this->expectOk($this->postAs('proc', "/api/procurement/rfq/{$rfqNo}/award", ['quotation' => $chosen['number'], 'warehouseCode' => 'RYD', 'dueDate' => '2026-09-25', 'quotesException' => 'عرضان فقط في سيناريو القبول']));
         $poNo = self::$s['po'] = $award['po']['number'] ?? $award['number'] ?? $award['poNumber'];
         $this->assertMatchesRegularExpression('/^PO-/', $poNo);
         $po = $this->expectOk($this->getAs('proc', "/api/procurement/po/{$poNo}"));
@@ -83,7 +83,7 @@ class AcceptanceTest extends ApiTestCase
         if ($po['status'] === 'draft') {
             $this->expectOk($this->postAs('proc', "/api/procurement/po/{$poNo}/submit"));
         }
-        foreach (['proc', 'finance', 'gm'] as $role) {
+        foreach (['admin', 'finance', 'gm'] as $role) { // proc created the PO, so step 1 goes to another holder (super)
             if ($this->expectOk($this->getAs('proc', "/api/procurement/po/{$poNo}"))['status'] !== 'pending') {
                 break;
             }

@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 
 class ProductsController extends MasterController
 {
-    private const INTS = ['unitsPerPallet', 'reorderMin', 'reorderMax', 'shelfLifeDays'];
+    private const INTS = ['unitsPerPallet', 'reorderMin', 'reorderMax', 'shelfLifeDays', 'packQty'];
 
     private const FLOATS = ['weightKg', 'purchasePrice', 'lengthCm', 'widthCm', 'heightCm'];
 
@@ -99,6 +99,7 @@ class ProductsController extends MasterController
             'unitsPerPallet' => 'nullable|integer|min:1', 'purchasePrice' => 'nullable|numeric|min:0', 'tracksExpiry' => 'sometimes|boolean', 'reorderMin' => 'nullable|integer|min:0',
             'reorderMax' => 'nullable|integer|min:0', 'shelfLifeDays' => 'nullable|integer|min:1', 'homeWarehouseCode' => 'nullable|string', 'barcode' => 'nullable|string',
             'preferredSupplierCode' => 'nullable|string', 'reason' => 'nullable|string',
+            'packQty' => 'nullable|integer|min:1|max:100000', 'packUomCode' => 'nullable|string',
         ];
     }
 }

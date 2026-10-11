@@ -25,7 +25,7 @@ const initial = computed(() => {
     nameAr: p.nameAr, nameEn: p.nameEn, barcode: p.primaryBarcode || '', categoryCode: p.category?.code || '', brand: p.brand || '', uomCode: p.baseUom?.code || '',
     lengthCm: p.lengthCm ?? null, widthCm: p.widthCm ?? null, heightCm: p.heightCm ?? null, weightKg: p.weightKg ?? null, storageClass: p.storageClass, shelfLifeDays: p.shelfLifeDays ?? null,
     reorderMin: p.reorderMin ?? 0, reorderMax: p.reorderMax ?? null, unitsPerPallet: p.unitsPerPallet ?? null, purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
-    homeWarehouseCode: p.homeWarehouse?.code || '', preferredSupplierCode: p.suppliers?.find((s) => s.preferred)?.supplier.code || '', reason: '',
+    homeWarehouseCode: p.homeWarehouse?.code || '', preferredSupplierCode: p.suppliers?.find((s) => s.preferred)?.supplier.code || '', packQty: p.packQty ?? 1, packUomCode: p.packUom?.code || '', reason: '',
   };
 });
 
@@ -39,6 +39,7 @@ const fields = computed(() => [
   { k: 'reorderMin', label: { ar: 'حد إعادة الطلب', en: 'Reorder point' }, type: 'num', min: 0 }, { k: 'reorderMax', label: { ar: 'الحد الأقصى', en: 'Reorder max' }, type: 'num', min: 0 },
   { k: 'purchasePrice', label: { ar: 'سعر الشراء ر.س', en: 'Purchase price SAR' }, type: 'num', min: 0 }, { k: 'homeWarehouseCode', label: { ar: 'المستودع الرئيسي', en: 'Home warehouse' }, type: 'select', opts: lookupWhOpts(lk.value) },
   { k: 'preferredSupplierCode', label: { ar: 'المورد المفضل', en: 'Preferred supplier' }, type: 'select', opts: supOpts(lk.value) },
+  { k: 'packQty', label: { ar: 'عبوة الشراء (وحدات أساسية)', en: 'Purchase pack (base units)' }, type: 'num', min: 1 }, { k: 'packUomCode', label: { ar: 'وحدة عبوة الشراء', en: 'Pack UoM' }, type: 'select', opts: uomOpts(lk.value) },
   { k: 'reason', label: { ar: 'سبب التعديل', en: 'Edit reason' }, type: 'area', required: true, ph: { ar: 'يُسجل مع كل حقل متغير في Audit Trail', en: 'Recorded with every changed field in the audit trail' } },
 ]);
 

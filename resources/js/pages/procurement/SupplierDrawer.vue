@@ -8,7 +8,8 @@ import { Btn, Chip, Drawer, ErrorBanner, Tabs } from '@/components';
 import { fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { PO_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
-import { SQ_LABELS, pname, scoreColor } from './shared';
+import SupplierDocumentsTab from './SupplierDocumentsTab.vue';
+import { SQ_LABELS, SUPPLIER_STATUS_LABELS, pname, scoreColor } from './shared';
 
 const props = defineProps({
   /** Supplier code; null = closed. */
@@ -33,7 +34,7 @@ const tab = ref('over');
 watch(() => props.code, () => { tab.value = 'over'; });
 const TABS = [
   { k: 'over', label: { ar: 'نظرة عامة', en: 'Overview' } }, { k: 'po', label: { ar: 'أوامر الشراء', en: 'Purchase orders' } }, { k: 'sq', label: { ar: 'عروض الأسعار', en: 'Quotations' } },
-  { k: 'prod', label: { ar: 'المنتجات', en: 'Products' } }, { k: 'perf', label: { ar: 'الأداء', en: 'Performance' } },
+  { k: 'prod', label: { ar: 'المنتجات', en: 'Products' } }, { k: 'perf', label: { ar: 'الأداء', en: 'Performance' } }, { k: 'docs', label: { ar: 'المستندات', en: 'Documents' } },
 ];
 
 const score = computed(() => perf.value?.score ?? s.value?.score ?? 0);
@@ -48,7 +49,8 @@ const overview = computed(() => {
   if (!x) return [];
   return [
     [t('السجل التجاري', 'CR'), x.cr], [t('الرقم الضريبي', 'VAT'), x.vat], [t('جهة الاتصال', 'Contact'), x.contact], [t('البريد', 'Email'), x.email], [t('شروط الدفع', 'Terms'), x.terms], ['IBAN', x.iban],
-    [t('حد أدنى للطلب', 'Min order'), x.minOrder != null ? fmtMoney(x.minOrder) : null], [t('الحالة', 'Status'), x.active ? t('نشط', 'Active') : t('معلّق', 'Suspended')],
+    [t('حد أدنى للطلب', 'Min order'), x.minOrder != null ? fmtMoney(x.minOrder) : null], [t('حد الائتمان', 'Credit limit'), x.creditLimit != null ? fmtMoney(x.creditLimit) : null],
+    [t('البنك', 'Bank'), x.bankName], [t('اسم صاحب الحساب', 'Account holder'), x.bankAccountName], [t('العنوان', 'Address'), x.address],
     [t('مورد جديد', 'New supplier'), x.isNew ? t('نعم — قيد التقييم', 'Yes — under evaluation') : t('لا', 'No')],
   ];
 });
@@ -64,7 +66,7 @@ const basisText = computed(() => {
 <template>
   <Drawer :open="!!code" :width="560" :sub="s ? `${s.code} · ${(lang === 'ar' ? s.category : s.categoryEn) || '—'} · Supplier 360°` : null" @close="emit('close')">
     <template #title>
-      <span v-if="s">{{ pname(s) }} <Chip v-if="!s.active" small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'معلّق', en: 'Suspended' }" /></span>
+      <span v-if="s">{{ pname(s) }} <Chip :map="SUPPLIER_STATUS_LABELS" :k="s.status || (s.active ? 'active' : 'suspended')" small /></span>
       <template v-else>{{ t('المورد', 'Supplier') }}</template>
     </template>
     <template #headExtra>
@@ -88,7 +90,11 @@ const basisText = computed(() => {
         <div v-for="[k, v] in overview" :key="k" class="kv"><div class="kv-k">{{ k }}</div><div class="kv-v num-mixed" dir="auto">{{ v || '—' }}</div></div>
         <div v-if="s.notes" class="kv col-span-full"><div class="kv-k">{{ t('ملاحظات', 'Notes') }}</div><div class="kv-v !font-normal">{{ s.notes }}</div></div>
         <div v-if="s.blocksPo" class="banner amber col-span-full mt-2">{{ t('التقييم دون الحد الأدنى (65) — إنشاء أمر شراء يتطلب استثناءً من مدير المشتريات', 'Score below minimum (65) — creating a PO requires a procurement-manager override') }}</div>
+        <div v-if="s.expiredDocuments" class="banner red col-span-full mt-2 cursor-pointer" @click="tab = 'docs'">{{ t(`${s.expiredDocuments} مستند إلزامي منتهٍ — أوامر الشراء الجديدة موقوفة حتى التجديد`, `${s.expiredDocuments} mandatory document(s) expired — new POs blocked until renewal`) }}</div>
+        <div v-else-if="s.status === 'review'" class="banner amber col-span-full mt-2">{{ t('المورد تحت المراجعة — لا تُصدر له أوامر شراء جديدة حتى اكتمال التأهيل (المستندات + التقييم)', 'Supplier under review — no new POs until qualification completes (documents + evaluation)') }}</div>
       </div>
+
+      <SupplierDocumentsTab v-else-if="tab === 'docs'" :code="s.code" />
 
       <div v-else-if="tab === 'po'" class="col !gap-1.5">
         <div v-if="!s.recentPos?.length" class="empty">{{ t('لا سجلات', 'No records') }}</div>

@@ -34,7 +34,7 @@ class SuppliersController extends MasterController
             'nameAr' => 'required|string|min:1', 'cr' => ['required', ...self::CR], 'vat' => ['required', ...self::VAT], 'contact' => 'required|string|min:1',
         ] + self::optionalRules(), self::messages());
 
-        return $this->service->createSupplier(AuthUser::current(), self::typed($data, ints: ['leadDays'], floats: ['minOrder']));
+        return $this->service->createSupplier(AuthUser::current(), self::typed($data, ints: ['leadDays'], floats: ['minOrder', 'creditLimit']));
     }
 
     public function update(Request $request, string $id): array
@@ -44,7 +44,7 @@ class SuppliersController extends MasterController
             'active' => 'sometimes|boolean',
         ] + self::optionalRules(), self::messages());
 
-        return $this->service->updateSupplier(AuthUser::current(), $id, self::withoutNulls(self::typed($data, ints: ['leadDays'], floats: ['minOrder'], bools: ['active']), ['leadDays', 'minOrder']));
+        return $this->service->updateSupplier(AuthUser::current(), $id, self::withoutNulls(self::typed($data, ints: ['leadDays'], floats: ['minOrder', 'creditLimit'], bools: ['active']), ['leadDays', 'minOrder']));
     }
 
     private static function optionalRules(): array
@@ -52,6 +52,8 @@ class SuppliersController extends MasterController
         return [
             'nameEn' => 'nullable|string', 'category' => 'nullable|string', 'email' => 'nullable|email', 'leadDays' => 'nullable|integer|min:0', 'terms' => 'nullable|string',
             'iban' => 'nullable|string', 'minOrder' => 'nullable|numeric|min:0', 'notes' => 'nullable|string',
+            'status' => 'nullable|in:active,review,suspended', 'bankName' => 'nullable|string|max:120', 'bankAccountName' => 'nullable|string|max:160', 'address' => 'nullable|string|max:500',
+            'creditLimit' => 'nullable|numeric|min:0',
         ];
     }
 

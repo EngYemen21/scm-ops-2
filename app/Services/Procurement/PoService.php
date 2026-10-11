@@ -2,12 +2,14 @@
 
 namespace App\Services\Procurement;
 
+use App\Models\GrnLine;
 use App\Models\InboundShipment;
 use App\Models\PoApproval;
 use App\Models\PoLine;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequisition;
 use App\Models\ShipmentLine;
+use App\Models\SupplierInvoiceLine;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
@@ -29,6 +31,9 @@ class PoService
     private const PRODUCT_SEL = 'id,sku,name_ar,name_en,storage_class,tracks_expiry';
 
     private const AFTER_SEND = ['sent', 'confirmed', 'partial', 'received', 'closed'];
+
+    /** Statuses in which goods are still expected — a due date in the past makes the PO late. */
+    public const OPEN_FOR_DELIVERY = ['sent', 'confirmed', 'partial'];
 
     public function __construct(
         private readonly NumberingService $numbering,
@@ -83,6 +88,28 @@ class PoService
             if ($total <= 0) {
                 throw AppError::rule('PO_EMPTY', 'قيمة أمر الشراء يجب أن تكون أكبر من صفر', 'PO total must be positive');
             }
+            // order-level charges: total (net goods) − discount + shipping, then VAT → gross. Approval tiers stay on the net goods value.
+            $discount = H::round2((float) ($dto['discount'] ?? 0));
+            $shipping = H::round2((float) ($dto['shippingCost'] ?? 0));
+            $vatPct = isset($dto['vatPct']) && $dto['vatPct'] !== null && $dto['vatPct'] !== '' ? (float) $dto['vatPct'] : (float) ($this->settings->get('sales.vatPct') ?? 15);
+            if ($discount < 0 || $shipping < 0 || $discount > $total) {
+                throw AppError::validation('PO_CHARGES', 'الخصم والشحن لا يكونان سالبين والخصم لا يتجاوز قيمة الأصناف', 'Discount and shipping must be non-negative and the discount may not exceed the goods value');
+            }
+            $gross = H::round2(($total - $discount + $shipping) * (1 + $vatPct / 100));
+
+            // Supplier qualification gate: an expired mandatory document blocks new POs unless a po.approve holder documents the exception.
+            $expired = $supplier->documents()->where('mandatory', true)->whereNotNull('expires_at')->where('expires_at', '<', H::dayStart())->get();
+            $docsOverride = null;
+            if ($expired->isNotEmpty()) {
+                $names = $expired->map(fn ($d) => $d->type.($d->expires_at ? ' ('.$d->expires_at->toDateString().')' : ''))->implode('، ');
+                if (empty($dto['overrideDocuments'])) {
+                    throw AppError::rule('SUPPLIER_DOCS_EXPIRED', "المورد {$supplier->name_ar} له مستند إلزامي منتهٍ: {$names} — لا يصدر أمر شراء قبل التجديد إلا باستثناء موثّق", "Supplier {$supplier->name_en} has an expired mandatory document ({$names})", ['documents' => $expired->map->toArray()->all()]);
+                }
+                if (! $user->can('po.approve') || mb_strlen(trim((string) ($dto['documentsReason'] ?? ''))) < 5) {
+                    throw AppError::forbidden('SUPPLIER_DOCS_OVERRIDE_DENIED', 'استثناء المستندات المنتهية يتطلب صلاحية اعتماد أوامر الشراء وسببًا مكتوبًا', 'Overriding expired documents requires po.approve and a written reason');
+                }
+                $docsOverride = ['documents' => $names, 'reason' => trim((string) $dto['documentsReason'])];
+            }
 
             // Supplier score gate: below the minimum → reject unless an explicit override by a user who can approve POs.
             $minScore = (float) ($this->settings->get('procurement.minSupplierScore') ?? 65);
@@ -107,6 +134,7 @@ class PoService
                 'due_date' => H::parseDate($dto['dueDate']), 'payment_terms' => ($dto['paymentTerms'] ?? null) ?: ($supplier->terms ?: null),
                 'reference' => ($dto['reference'] ?? null) ?: null, 'notes' => ($dto['notes'] ?? null) ?: null, 'approval_step' => 0,
                 'open_qty' => array_sum(array_column($lines, 'qty')), 'created_by_id' => $user->id, 'created_by' => $user->username,
+                'discount' => $discount, 'shipping_cost' => $shipping, 'vat_pct' => $vatPct, 'gross_total' => $gross,
             ]);
             foreach ($lines as $l) {
                 PoLine::create($l + ['po_id' => $po->id]);
@@ -115,7 +143,7 @@ class PoService
                 PoApproval::create(['po_id' => $po->id, 'step' => $c['step'], 'role_key' => $c['roleKey'], 'label_ar' => $c['labelAr'], 'label_en' => $c['labelEn']]);
             }
             $source = $opts['source'] ?? 'manual';
-            $newValue = ['supplier' => $supplier->code, 'warehouse' => $wh->code, 'total' => $total, 'lines' => count($lines), 'chain' => array_column($chain, 'roleKey'), 'source' => $source];
+            $newValue = ['supplier' => $supplier->code, 'warehouse' => $wh->code, 'total' => $total, 'discount' => $discount, 'shipping' => $shipping, 'vatPct' => $vatPct, 'gross' => $gross, 'lines' => count($lines), 'chain' => array_column($chain, 'roleKey'), 'source' => $source];
             if (! empty($opts['rfqId'])) {
                 $newValue['rfqId'] = $opts['rfqId'];
             }
@@ -123,6 +151,10 @@ class PoService
             if ($override) {
                 $this->audit->log($user, ['action' => 'PO.SUPPLIER_SCORE_OVERRIDE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $number, 'field' => 'supplierScore',
                     'oldValue' => "{$score} < {$min}", 'newValue' => ['supplier' => $supplier->code, 'reason' => $override['reason'], 'by' => $user->username]]);
+            }
+            if ($docsOverride) {
+                $this->audit->log($user, ['action' => 'PO.SUPPLIER_DOCS_OVERRIDE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $number, 'field' => 'supplierDocuments',
+                    'oldValue' => $docsOverride['documents'], 'newValue' => ['supplier' => $supplier->code, 'reason' => $docsOverride['reason'], 'by' => $user->username]]);
             }
             $this->audit->status($user, 'PurchaseOrder', $po->id, $number, null, $status);
             $steps = count($chain);
@@ -164,6 +196,10 @@ class PoService
             if (! H::hasRole($user, $step->role_key)) {
                 $roles = implode('، ', $user->roles);
                 throw AppError::rule('PO_APPROVAL_ROLE', "الخطوة {$step->step} من {$po->number} تتطلب دور «{$step->label_ar}» — دورك ({$roles}) غير مخوّل لهذه الخطوة", "Step {$step->step} of {$po->number} requires role {$step->role_key}", ['step' => $step->step, 'requiredRole' => $step->role_key]);
+            }
+            // Segregation of duties: whoever created the PO does not approve it (policy switch: procurement.allowSelfApproval)
+            if ($po->created_by_id === $user->id && ! (bool) $this->settings->get('procurement.allowSelfApproval')) {
+                throw AppError::rule('PO_SELF_APPROVAL', "لا يعتمد منشئ أمر الشراء {$po->number} أمره — فصل المسؤوليات؛ يعتمده شخص آخر بدور «{$step->label_ar}»", "The creator of {$po->number} cannot approve it (segregation of duties)");
             }
             $step->update(['decision' => 'approved', 'approver_id' => $user->id, 'approver' => $user->username, 'note' => $note ?: null, 'decided_at' => now()]);
             $this->audit->log($user, ['action' => 'PO.APPROVE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $po->number, 'field' => "step{$step->step}", 'oldValue' => 'pending',
@@ -262,6 +298,35 @@ class PoService
         });
     }
 
+    /** Delivery follow-up on an open PO: last contact with the supplier / delay reason, visible on the follow-up board. */
+    public function followUp(AuthUser $user, string $id, string $note): PurchaseOrder
+    {
+        return $this->locked($id, function (PurchaseOrder $po) use ($user, $note) {
+            if (! in_array($po->status, [...self::OPEN_FOR_DELIVERY, 'approved'], true)) {
+                throw AppError::rule('PO_NOT_OPEN', "أمر الشراء {$po->number} ليس قيد التوريد (الحالة: {$po->status})", "PO {$po->number} is not awaiting delivery");
+            }
+            $po->update(['follow_up_note' => $note, 'followed_up_at' => now(), 'followed_up_by' => $user->username]);
+            $this->audit->log($user, ['action' => 'PO.FOLLOW_UP', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $po->number, 'newValue' => ['note' => $note]]);
+            $this->notify->activity($user, 'PurchaseOrder', $po->id, $po->number, "متابعة توريد {$po->number}: {$note}", "Follow-up on {$po->number}: {$note}");
+
+            return $this->load($po->id);
+        });
+    }
+
+    /** Late = still awaiting goods after the required delivery date. */
+    public static function isLate(PurchaseOrder $po): bool
+    {
+        return in_array($po->status, self::OPEN_FOR_DELIVERY, true) && $po->due_date !== null && $po->due_date->lt(H::dayStart());
+    }
+
+    /** Received share of the ordered quantity (accepted + damaged + rejected count as received for progress). */
+    public static function receivedPct(PurchaseOrder $po): int
+    {
+        $ordered = (int) $po->lines->sum('qty');
+
+        return $ordered > 0 ? (int) round(($ordered - (int) $po->open_qty) / $ordered * 100) : 0;
+    }
+
     /** Cancel is allowed only before the PO is sent to the supplier. */
     public function cancel(AuthUser $user, string $id, string $reason): PurchaseOrder
     {
@@ -286,7 +351,7 @@ class PoService
         $query = PurchaseOrder::query()->with([
             'supplier:id,code,name_ar,name_en,score', 'warehouse:id,code,name_ar,name_en',
             'approvals' => fn ($q) => $q->orderBy('step'), 'shipments:id,po_id,number,status,eta',
-        ])->withCount(['lines', 'grns']);
+        ])->with('lines:id,po_id,qty')->withCount(['lines', 'grns']);
         if (! empty($filters['status'])) {
             $query->whereIn('status', H::csv($filters['status']));
         }
@@ -298,6 +363,9 @@ class PoService
         }
         if (! empty($filters['step'])) {
             $query->where('status', 'pending')->whereHas('approvals', fn ($a) => $a->where('role_key', $filters['step'])->where('decision', 'pending'));
+        }
+        if (! empty($filters['late'])) {
+            $query->whereIn('status', self::OPEN_FOR_DELIVERY)->where('due_date', '<', H::dayStart());
         }
         if ($page->q) {
             $like = "%{$page->q}%";
@@ -317,6 +385,9 @@ class PoService
             $row['_count'] = ['lines' => (int) $po->lines_count, 'grns' => (int) $po->grns_count];
             unset($row['linesCount'], $row['grnsCount']);
             $row['currentStep'] = $po->approvals->first(fn ($a) => $a->decision === 'pending')?->toArray();
+            $row['late'] = self::isLate($po);
+            $row['receivedPct'] = self::receivedPct($po);
+            unset($row['lines']);
 
             return $row;
         });
@@ -343,8 +414,19 @@ class PoService
             unset($row['grns'][$i]['linesCount']);
         }
         $prs = PurchaseRequisition::where('po_id', $po->id)->get(['id', 'number', 'status']);
+        // per line: what the GRNs accepted and what supplier invoices already cover — the invoice form bills the difference
+        $lineIds = $po->lines->pluck('id');
+        $accepted = GrnLine::whereIn('po_line_id', $lineIds)->selectRaw('po_line_id, coalesce(sum(accepted_qty), 0) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
+        $invoiced = SupplierInvoiceLine::whereIn('po_line_id', $lineIds)->whereHas('invoice', fn ($q) => $q->where('status', '!=', 'cancelled'))
+            ->selectRaw('po_line_id, coalesce(sum(qty), 0) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
+        foreach ($row['lines'] as $i => $l) {
+            $row['lines'][$i]['acceptedQty'] = (int) ($accepted[$l['id']] ?? 0);
+            $row['lines'][$i]['invoicedQty'] = (int) ($invoiced[$l['id']] ?? 0);
+        }
 
         return $row + [
+            'late' => self::isLate($po), 'receivedPct' => self::receivedPct($po),
+            'invoices' => $po->invoices()->orderBy('created_at')->get(['id', 'number', 'supplier_invoice_no', 'status', 'total', 'due_date'])->map->toArray()->all(),
             'currentStep' => $po->approvals->first(fn ($a) => $a->decision === 'pending')?->toArray(),
             'sources' => ['rfq' => $po->rfq?->toArray(), 'prs' => $prs->map->toArray()->all()],
             'trace' => $po->shipments->map(fn ($s) => ['shipment' => $s->number, 'status' => $s->status, 'eta' => $s->eta?->toJSON(), 'grns' => $s->grns->pluck('number')->all()])->all(),

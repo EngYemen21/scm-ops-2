@@ -4,7 +4,7 @@
 import { computed } from 'vue';
 import { NumberInput } from '@/components';
 import { isMobile } from '@/composables/viewport';
-import { fmtMoney, t } from '@/i18n';
+import { fmtMoney, fmtNum, t } from '@/i18n';
 import ProductPicker from './ProductPicker.vue';
 import { pname } from './shared';
 
@@ -23,8 +23,17 @@ const patch = (i, p) => emit('update:modelValue', props.modelValue.map((l, j) =>
 const remove = (i) => emit('update:modelValue', props.modelValue.filter((_, j) => j !== i));
 function add(p) {
   if (props.modelValue.some((l) => l.sku === p.sku)) return;
-  emit('update:modelValue', [...props.modelValue, { sku: p.sku, name: pname(p), qty: null, price: p.purchasePrice != null ? Number(p.purchasePrice) : null, tracksExpiry: p.tracksExpiry }]);
+  emit('update:modelValue', [...props.modelValue, { sku: p.sku, name: pname(p), qty: null, price: p.purchasePrice != null ? Number(p.purchasePrice) : null, tracksExpiry: p.tracksExpiry, packQty: Number(p.packQty) > 1 ? Number(p.packQty) : null, packUom: p.packUom?.code || null }]);
 }
+/** Purchase pack helper: quantities stay in the base unit; the hint shows the pack count (and flags a partial pack). */
+function packHint(l) {
+  if (!l.packQty) return null;
+  const q = Number(l.qty) || 0;
+  const packs = q / l.packQty;
+  const whole = Number.isInteger(packs);
+  return { text: `${fmtNum(packs, whole ? 0 : 1)} ${l.packUom || t('عبوة', 'pack')} × ${fmtNum(l.packQty)}`, partial: q > 0 && !whole };
+}
+const addPack = (i, l) => patch(i, { qty: (Number(l.qty) || 0) + l.packQty });
 /** On a phone the column header row is hidden, so every field carries its own caption. */
 const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
 </script>
@@ -41,7 +50,10 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
       </div>
       <div v-for="(l, i) in modelValue" :key="l.sku" class="le-row grid items-center gap-1.5 border-t border-line-2 px-2.5 py-[7px]" :class="gridCols">
         <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name || l.sku }}</div><div class="num ltr text-start text-[8.5px] text-faint">{{ l.sku }}</div></div>
-        <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :placeholder="{ ar: 'كمية', en: 'qty' }" @update:model-value="(v) => patch(i, { qty: v })" />
+        <div class="min-w-0">
+          <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :placeholder="{ ar: 'كمية', en: 'qty' }" @update:model-value="(v) => patch(i, { qty: v })" />
+          <button v-if="packHint(l)" type="button" class="num mt-0.5 block text-[8.5px] leading-tight" :class="packHint(l).partial ? 'text-warn' : 'text-faint'" :title="t('اضغط لإضافة عبوة كاملة', 'Click to add one full pack')" @click="addPack(i, l)">{{ packHint(l).text }}</button>
+        </div>
         <template v-if="withPrice">
           <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price ?? null" :min="0" :placeholder="{ ar: 'سعر', en: 'price' }" @update:model-value="(v) => patch(i, { price: v })" />
           <div class="num ltr text-start text-[11px]" :data-label="t('الإجمالي', 'Total')">{{ fmtMoney(lineTotal(l)) }}</div>

@@ -54,6 +54,8 @@ export const settingText = (v, kind) => (kind === 'json' ? JSON.stringify(v, nul
 
 // ---------------------------------------------------------------- PO approval tiers (`procurement.approvalTiers`)
 export const APPROVAL_TIERS_KEY = 'procurement.approvalTiers';
+/** Settings edited with the structured tiers editor: PO chain by goods value, PR chain by estimated value. */
+export const TIER_KEYS = [APPROVAL_TIERS_KEY, 'procurement.prApprovalTiers'];
 /** Tier = { max: number | null (no limit), roles: string[] (approval steps, in order) }. */
 export const isTierList = (v) => Array.isArray(v) && v.every((x) => x && typeof x === 'object' && !Array.isArray(x) && 'roles' in x);
 

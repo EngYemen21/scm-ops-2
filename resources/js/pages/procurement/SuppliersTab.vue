@@ -11,7 +11,7 @@ import { useAuth } from '@/stores/auth';
 import { confirm } from '@/stores/ui';
 import FilterBar from './FilterBar.vue';
 import SupplierDrawer from './SupplierDrawer.vue';
-import { qs, scoreColor, sname } from './shared';
+import { SUPPLIER_STATUS_LABELS, qs, scoreColor, sname } from './shared';
 
 const emit = defineEmits(['newPo', 'edit', 'quote']);
 const auth = useAuth();
@@ -65,7 +65,7 @@ const columns = [
         <div class="row">
           <div class="progress flex-1"><div :style="{ width: `${row.score}%`, background: scoreColor(row.score) }" /></div>
           <span class="num text-[12px]" :style="{ color: scoreColor(row.score) }">{{ fmtNum(row.score) }}</span>
-          <Chip v-if="!row.active" small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'معلّق', en: 'Suspended' }" />
+          <Chip v-if="!row.active || row.status === 'review'" :map="SUPPLIER_STATUS_LABELS" :k="row.active ? row.status : 'suspended'" small />
           <Btn v-if="auth.can('po.create') && row.active" size="sm" tone="dark" class="!h-7 !text-[9px]" :label="{ ar: 'أمر شراء', en: 'New PO' }" @click.stop="emit('newPo', row)" />
           <template v-if="auth.can('supplier.manage')">
             <Btn v-if="row.active" size="sm" tone="dangerOutline" class="!h-7 !text-[9px]" :label="{ ar: 'تعليق', en: 'Suspend' }" @click.stop="suspend(row)" />

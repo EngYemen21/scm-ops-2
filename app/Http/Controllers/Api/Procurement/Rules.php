@@ -37,4 +37,10 @@ final class Rules
     {
         return ['overrideSupplierScore' => 'nullable|boolean', 'overrideReason' => 'nullable|string'];
     }
+
+    /** A PO for a supplier whose mandatory document expired needs an explicit, written exception. */
+    public static function documentsOverride(): array
+    {
+        return ['overrideDocuments' => 'nullable|boolean', 'documentsReason' => 'nullable|string'];
+    }
 }

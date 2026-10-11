@@ -109,7 +109,8 @@ class ProcurementReadsTest extends ApiTestCase
         $this->expectRejected($this->postAs('proc', "/api/procurement/po/{$po['number']}/submit"), 'PO_TRANSITION', [422]);
 
         // once the PO is approved its quantity shows as incoming
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$po['number']}/approve"));
+        $this->expectRejected($this->postAs('proc', "/api/procurement/po/{$po['number']}/approve"), 'PO_SELF_APPROVAL', [422]);
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$po['number']}/approve"));
         $now = $this->expectOk($this->getAs('proc', "/api/procurement/suggestions?sku={$product->sku}"))['items'][0];
         $this->assertSame(50, $now['incoming']);
         $this->assertContains('قيد التوريد 50 ضمن أوامر شراء مفتوحة', $now['why']);
@@ -134,15 +135,17 @@ class ProcurementReadsTest extends ApiTestCase
         $supplier = $this->makeSupplier(91);
         $product = $this->makeProduct(100);
         $before = $this->expectOk($this->getAs('gm', '/api/procurement/dashboard'));
-        $this->assertSame(['pendingPrApprovals', 'openRfqs', 'poPendingApproval', 'expectedInboundsThisWeek', 'posSentAwaitingConfirmation', 'urgentSuggestions', 'generatedAt'], array_keys($before));
+        $this->assertSame(['openPoValue', 'latePos', 'receivedThisMonth', 'cycleDays', 'payables', 'pendingPrApprovals', 'openRfqs', 'poPendingApproval', 'expectedInboundsThisWeek', 'posSentAwaitingConfirmation', 'urgentSuggestions', 'generatedAt'], array_keys($before));
+        $this->assertSame(['count', 'total', 'gross'], array_keys($before['openPoValue']));
+        $this->assertSame(['disputed', 'awaitingApproval', 'openTotal', 'overdue', 'dueThisWeek'], array_keys($before['payables']));
 
         $pr = $this->expectOk($this->postAs('wm', '/api/procurement/pr', ['warehouseCode' => 'RYD', 'justification' => 'لوحة المشتريات', 'lines' => [['sku' => $product->sku, 'qty' => 1]]]));
         $this->expectOk($this->postAs('wm', "/api/procurement/pr/{$pr['number']}/submit"));
         $this->expectOk($this->postAs('proc', '/api/procurement/rfq', ['lines' => [['sku' => $product->sku, 'qty' => 1]], 'invitedRule' => 'manual', 'supplierCodes' => [$supplier->code], 'closeDate' => self::future(2)]));
         $waiting = $this->makePo($supplier->code, $product->sku, 100, 100); // 10,000 → proc, finance
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$waiting['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$waiting['number']}/approve"));
         $sent = $this->makePo($supplier->code, $product->sku, 10, 100, ['dueDate' => self::future(2)]);
-        $this->expectOk($this->postAs('proc', "/api/procurement/po/{$sent['number']}/approve"));
+        $this->expectOk($this->postAs('admin', "/api/procurement/po/{$sent['number']}/approve"));
         $shipment = $this->expectOk($this->postAs('proc', "/api/procurement/po/{$sent['number']}/send"))['shipment'];
 
         $after = $this->expectOk($this->getAs('gm', '/api/procurement/dashboard'));
@@ -175,7 +178,7 @@ class ProcurementReadsTest extends ApiTestCase
         $receipts = [];
         foreach ([[10, 10], [20, 15]] as [$ordered, $accepted]) {
             $po = $this->makePo($supplier->code, $product->sku, $ordered, 100);
-            $this->expectOk($this->postAs('proc', "/api/procurement/po/{$po['number']}/approve"));
+            $this->expectOk($this->postAs('admin', "/api/procurement/po/{$po['number']}/approve"));
             $shipment = $this->expectOk($this->postAs('proc', "/api/procurement/po/{$po['number']}/send"))['shipment'];
             $grn = GoodsReceipt::create(['number' => self::code('GRNT'), 'shipment_id' => $shipment['id'], 'po_id' => $po['id'], 'supplier_id' => $supplier->id, 'warehouse_id' => $po['warehouseId'], 'posted_by' => 'test', 'posted_at' => now()]);
             GrnLine::create(['grn_id' => $grn->id, 'line_no' => 1, 'po_line_id' => $po['lines'][0]['id'], 'product_id' => $product->id, 'received_qty' => $accepted, 'accepted_qty' => $accepted]);

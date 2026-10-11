@@ -33,6 +33,8 @@ class IntegrationRunner
             $out['deliveries'] = $this->dispatcher->processDue($limit); // includes the events the steps above produced
             $out['systems'] = $this->triggerSystemCycles(); // one scheduler drives every connected system
             $out['reconciliation'] = app(ReconciliationService::class)->runIfDue();
+            // follow-up alerts that need no person (late POs, expiring supplier documents) ride on the same heartbeat, once an hour
+            $out['housekeeping'] = app(\App\Services\Procurement\ProcurementHousekeeping::class)->run();
             $out['ms'] = (int) round((microtime(true) - $t0) * 1000);
             $out['at'] = now()->toIso8601ZuluString('millisecond');
             Cache::put(self::LAST_KEY, $out, now()->addDays(7));

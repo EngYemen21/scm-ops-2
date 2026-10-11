@@ -1,15 +1,19 @@
 <script setup>
 // PO detail — deep link /po/:number: header tiles, status stepper, meta, lines, shipments → GRNs trace, approval chain, actions.
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, PageHead, SectionCard, Stepper } from '@/components';
 import { fmtDate, fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { PO_LABELS, SHIPMENT_LABELS } from '@/shared';
+import { useAuth } from '@/stores/auth';
 import { appLink, showLabel } from '@/stores/ui';
 import ApprovalsTimeline from './ApprovalsTimeline.vue';
+import InvoiceForm from './InvoiceForm.vue';
 import PoActions from './PoActions.vue';
-import { pname, sname } from './shared';
+import { INVOICE_LABELS, pname, sname } from './shared';
+
+const auth = useAuth();
 
 const route = useRoute();
 const router = useRouter();
@@ -35,6 +39,10 @@ const sub = computed(() => {
   return p ? `${sname(p.supplier)} · ${p.warehouse.code} ${pname(p.warehouse)} · ${t('أُنشئ', 'Created')} ${fmtDate(p.createdAt)}${p.createdBy ? ` · ${p.createdBy}` : ''}` : null;
 });
 const noSource = computed(() => !po.value?.sources?.rfq && !po.value?.sources?.prs?.length);
+/** Invoices are registered once goods can have arrived (sent onwards). */
+const canInvoice = computed(() => !!po.value && ['sent', 'confirmed', 'partial', 'received', 'closed'].includes(po.value.status) && auth.can('invoice.register'));
+const invoiceOpen = ref(false);
+const hasCharges = computed(() => Number(po.value?.discount) > 0 || Number(po.value?.shippingCost) > 0);
 const openQty = (l) => Math.max(0, l.qty - l.receivedQty - l.damagedQty - l.rejectedQty);
 
 const columns = [
@@ -54,6 +62,7 @@ const columns = [
   <PageHead :sub="sub">
     <Btn tone="outline" :label="{ ar: '← أوامر الشراء', en: '← Purchase orders' }" @click="router.push('/procurement?tab=po')" />
     <PoActions v-if="po" :po="po" size="md" @changed="poQ.refetch()" />
+    <Btn v-if="canInvoice" tone="purple" :label="{ ar: '+ فاتورة مورد', en: '+ Supplier invoice' }" @click="invoiceOpen = true" />
     <Btn v-if="po" tone="soft" :label="{ ar: 'رمز QR', en: 'QR code' }" @click="showLabel({ type: 'qr', text: appLink(`/po/${encodeURIComponent(po.number)}`), title: po.number, sub: { ar: 'أمر شراء', en: 'Purchase order' } })" />
   </PageHead>
   <ErrorBanner :error="poQ.error.value" :closable="false" />
@@ -62,12 +71,13 @@ const columns = [
   <template v-if="po">
     <SectionCard class="mb-3.5">
       <div class="row wrap !gap-3 pt-3.5">
-        <div><div class="num-mixed text-[15px] font-extrabold">{{ po.number }}</div><div class="mt-1"><Chip :map="PO_LABELS" :k="po.status" /></div></div>
+        <div><div class="num-mixed text-[15px] font-extrabold">{{ po.number }}</div><div class="row mt-1 !gap-1"><Chip :map="PO_LABELS" :k="po.status" /><Chip v-if="po.late" fg="#b23b3b" bg="#fdecec" :label="{ ar: 'متأخر التوريد', en: 'Late delivery' }" /></div></div>
         <span class="grow" />
-        <div class="tile"><div class="tile-v">{{ fmtMoney(po.total) }} <span class="font-sans text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span></div><div class="tile-l">{{ t('الإجمالي', 'Total') }}</div></div>
+        <div class="tile"><div class="tile-v">{{ fmtMoney(po.total) }} <span class="font-sans text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span></div><div class="tile-l">{{ t('قيمة الأصناف', 'Goods') }}</div></div>
+        <div class="tile purple"><div class="tile-v">{{ fmtMoney(po.grossTotal) }} <span class="font-sans text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span></div><div class="tile-l">{{ t('الإجمالي شامل الضريبة', 'Gross incl. VAT') }} {{ fmtNum(po.vatPct) }}%</div></div>
         <div class="tile"><div class="tile-v">{{ fmtDateOnly(po.dueDate) }}</div><div class="tile-l">{{ t('تاريخ التوريد', 'Due date') }}</div></div>
         <div class="tile"><div class="tile-v">{{ fmtNum(po.lines?.length || 0) }}</div><div class="tile-l">{{ t('أصناف', 'Lines') }}</div></div>
-        <div class="tile amber"><div class="tile-v">{{ fmtNum(po.openQty ?? 0) }}</div><div class="tile-l">{{ t('كمية مفتوحة', 'Open qty') }}</div></div>
+        <div class="tile amber"><div class="tile-v">{{ fmtNum(po.openQty ?? 0) }}</div><div class="tile-l">{{ t('كمية مفتوحة', 'Open qty') }} · {{ fmtNum(po.receivedPct || 0) }}% {{ t('مستلم', 'received') }}</div></div>
       </div>
       <div class="mt-4"><Stepper :steps="STEP_LABELS" :current="current" :failed="failed" /></div>
       <div class="kv-grid mt-4">
@@ -84,6 +94,8 @@ const columns = [
         </div>
         <div class="kv"><div class="kv-k">{{ t('أُرسل', 'Sent') }}</div><div class="kv-v ltr num text-start">{{ fmtDate(po.sentAt) }}</div></div>
         <div class="kv"><div class="kv-k">{{ t('تأكيد المورد', 'Confirmed') }}</div><div class="kv-v ltr num text-start">{{ fmtDate(po.confirmedAt) }}</div></div>
+        <div v-if="hasCharges" class="kv"><div class="kv-k">{{ t('خصم / شحن', 'Discount / shipping') }}</div><div class="kv-v ltr num text-start">− {{ fmtMoney(po.discount) }} / + {{ fmtMoney(po.shippingCost) }}</div></div>
+        <div v-if="po.followedUpAt" class="kv col-span-full"><div class="kv-k">{{ t('آخر متابعة', 'Last follow-up') }}</div><div class="kv-v !font-normal">{{ po.followUpNote }} <span class="muted num ltr text-[9px]">{{ fmtDate(po.followedUpAt) }} · {{ po.followedUpBy }}</span></div></div>
         <div v-if="po.notes" class="kv col-span-full"><div class="kv-k">{{ t('ملاحظات', 'Notes') }}</div><div class="kv-v whitespace-pre-wrap !font-normal">{{ po.notes }}</div></div>
       </div>
     </SectionCard>
@@ -135,5 +147,17 @@ const columns = [
         <ApprovalsTimeline :approvals="po.approvals" :created-by="po.createdBy" :created-at="po.createdAt" />
       </SectionCard>
     </div>
+
+    <SectionCard :title="{ ar: 'فواتير المورد', en: 'Supplier invoices' }" :sub="{ ar: 'مطابقة ثلاثية: الفاتورة ↔ أمر الشراء ↔ إشعارات الاستلام', en: 'Three-way match: invoice ↔ PO ↔ GRNs' }" :count="po.invoices?.length" class="mt-3.5">
+      <div v-if="!po.invoices?.length" class="empty">{{ canInvoice ? t('لا فواتير بعد — سجّل فاتورة المورد بعد الاستلام', 'No invoices yet — register the supplier invoice after receiving') : t('لا فواتير بعد', 'No invoices yet') }}</div>
+      <div class="col !gap-1.5">
+        <div v-for="i in po.invoices || []" :key="i.number" class="row cursor-pointer !gap-2.5 rounded-[11px] border border-line-2 px-[13px] py-[9px]" @click="router.push(`/procurement?tab=inv&invoice=${encodeURIComponent(i.number)}`)">
+          <span class="num ltr min-w-[120px] text-[10.5px] text-violet">{{ i.number }}</span><span class="num ltr text-[10px] text-muted">{{ i.supplierInvoiceNo }}</span><span class="grow" />
+          <span class="num ltr text-[11px]">{{ fmtMoney(i.total) }}</span><span class="cell-date ltr">{{ fmtDateOnly(i.dueDate) }}</span><Chip :map="INVOICE_LABELS" :k="i.status" small />
+        </div>
+      </div>
+      <template v-if="canInvoice" #actions><Btn size="sm" tone="purple" :label="{ ar: '+ تسجيل فاتورة', en: '+ Register invoice' }" @click="invoiceOpen = true" /></template>
+    </SectionCard>
+    <InvoiceForm :open="invoiceOpen" :po="po" @close="invoiceOpen = false" @done="poQ.refetch()" />
   </template>
 </template>

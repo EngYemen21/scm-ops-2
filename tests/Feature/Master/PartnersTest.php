@@ -122,8 +122,9 @@ class PartnersTest extends ApiTestCase
         $this->assertSame('لا تغييرات', $same['messageAr']);
 
         $res = $this->expectOk($this->patchAs('proc', "/api/suppliers/{$code}", ['leadDays' => 9, 'category' => 'تصنيف حر', 'email' => 'sales@example.com', 'active' => false]));
-        $this->assertSame(5, $res['changed']);
+        $this->assertSame(6, $res['changed'], 'leadDays, category (ar+en), email, active — and status follows active');
         $row = Supplier::where('code', $code)->firstOrFail();
+        $this->assertSame('suspended', $row->status, 'inactive ⇔ suspended');
         $this->assertSame(9, $row->lead_days);
         $this->assertSame('تصنيف حر', $row->category_en);
         $this->assertFalse($row->active);

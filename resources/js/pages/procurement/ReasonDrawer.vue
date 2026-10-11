@@ -13,6 +13,9 @@ const props = defineProps({
   okLabel: { type: [String, Object], default: () => ({ ar: 'تأكيد', en: 'Confirm' }) },
   pending: { type: Boolean, default: false },
   error: { type: null, default: null },
+  /** Field caption (default: reason) and the minimum length the server enforces. */
+  label: { type: [String, Object], default: () => ({ ar: 'السبب', en: 'Reason' }) },
+  min: { type: Number, default: 3 },
 });
 const emit = defineEmits(['close', 'submit', 'clearError']);
 
@@ -27,10 +30,10 @@ watch(() => props.open, async (open) => {
 </script>
 
 <template>
-  <ActionDrawer :open="open" :title="title" :sub="sub" :width="440" :pending="pending" :error="error" :disabled="reason.trim().length < 3" :submit-label="okLabel"
+  <ActionDrawer :open="open" :title="title" :sub="sub" :width="440" :pending="pending" :error="error" :disabled="reason.trim().length < min" :submit-label="okLabel"
                 @submit="emit('submit', reason.trim())" @close="emit('close')" @clear-error="emit('clearError')">
     <div ref="box">
-      <TextArea v-model="reason" :label="{ ar: 'السبب', en: 'Reason' }" required :rows="3" :hint="{ ar: '3 أحرف على الأقل — يُسجَّل في Audit Trail', en: 'At least 3 characters — recorded in the Audit Trail' }" />
+      <TextArea v-model="reason" :label="label" required :rows="3" :hint="{ ar: `${min} أحرف على الأقل — يُسجَّل في Audit Trail`, en: `At least ${min} characters — recorded in the Audit Trail` }" />
     </div>
   </ActionDrawer>
 </template>

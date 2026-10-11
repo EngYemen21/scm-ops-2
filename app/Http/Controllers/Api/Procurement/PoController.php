@@ -15,7 +15,7 @@ class PoController extends ProcurementBaseController
 
     public function index(Request $request): array
     {
-        return $this->po->list(Paging::from($request), $request->only(['status', 'supplier', 'warehouse', 'step']));
+        return $this->po->list(Paging::from($request), $request->only(['status', 'supplier', 'warehouse', 'step', 'late']));
     }
 
     public function show(string $id): array
@@ -28,7 +28,8 @@ class PoController extends ProcurementBaseController
         $data = $request->validate([
             'supplierCode' => 'required|string|min:1', 'warehouseCode' => 'required|string|min:1', 'dueDate' => Rules::date(true),
             'paymentTerms' => 'nullable|string', 'reference' => 'nullable|string', 'notes' => 'nullable|string',
-        ] + Rules::lines(priceRequired: true) + Rules::scoreOverride());
+            'discount' => 'nullable|numeric|min:0', 'shippingCost' => 'nullable|numeric|min:0', 'vatPct' => 'nullable|numeric|min:0|max:100',
+        ] + Rules::lines(priceRequired: true) + Rules::scoreOverride() + Rules::documentsOverride());
 
         return $this->created($this->po->create(AuthUser::current(), $data));
     }
@@ -50,6 +51,13 @@ class PoController extends ProcurementBaseController
         $data = $request->validate(['reason' => 'required|string|min:3'], ['reason.required' => 'سبب الرفض مطلوب', 'reason.min' => 'سبب الرفض مطلوب']);
 
         return $this->created($this->po->reject(AuthUser::current(), $id, $data['reason']));
+    }
+
+    public function followUp(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate(['note' => 'required|string|min:3|max:500'], ['note.required' => 'اكتب ملاحظة المتابعة', 'note.min' => 'اكتب ملاحظة المتابعة']);
+
+        return $this->created($this->po->followUp(AuthUser::current(), $id, $data['note']));
     }
 
     public function send(string $id): JsonResponse

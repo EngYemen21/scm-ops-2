@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\Procurement\InvoicesController;
 use App\Http\Controllers\Api\Procurement\PoController;
 use App\Http\Controllers\Api\Procurement\PrController;
 use App\Http\Controllers\Api\Procurement\ProcurementController;
 use App\Http\Controllers\Api\Procurement\RfqController;
+use App\Http\Controllers\Api\Procurement\SupplierDocumentsController;
 use Illuminate\Support\Facades\Route;
 
 // Procurement: replenishment suggestions → PR → RFQ / quotations / award → PO (approval chain) → send → expected inbound.
@@ -50,7 +52,23 @@ Route::prefix('procurement')->group(function () {
     Route::post('po/{id}/send', [PoController::class, 'send'])->middleware('perm:po.send');
     Route::post('po/{id}/confirm', [PoController::class, 'confirm'])->middleware('perm:po.send');
     Route::post('po/{id}/cancel', [PoController::class, 'cancel'])->middleware('perm:po.cancel');
+    // delivery follow-up on an open PO (last contact / delay reason)
+    Route::post('po/{id}/follow-up', [PoController::class, 'followUp'])->middleware('perm:po.send');
+
+    // supplier invoices: three-way match → approval for payment → payment recorded
+    Route::get('invoices', [InvoicesController::class, 'index']);
+    Route::get('invoices/summary', [InvoicesController::class, 'summary']);
+    Route::get('invoices/{id}', [InvoicesController::class, 'show']);
+    Route::post('invoices', [InvoicesController::class, 'store'])->middleware('perm:invoice.register');
+    Route::post('invoices/{id}/approve', [InvoicesController::class, 'approve'])->middleware('perm:invoice.approve');
+    Route::post('invoices/{id}/pay', [InvoicesController::class, 'pay'])->middleware('perm:invoice.pay');
+    Route::post('invoices/{id}/cancel', [InvoicesController::class, 'cancel'])->middleware('perm:invoice.register');
 });
 
 // Supplier performance (OTIF / fill rate / lead) — lives with procurement since it is computed from POs and GRNs.
 Route::get('suppliers/{code}/performance', [ProcurementController::class, 'supplierPerformance']);
+
+// Supplier qualification documents (CR, VAT certificate, licences…) with expiry — an expired mandatory one blocks new POs.
+Route::get('suppliers/{code}/documents', [SupplierDocumentsController::class, 'index']);
+Route::post('suppliers/{code}/documents', [SupplierDocumentsController::class, 'store'])->middleware('perm:supplier.manage');
+Route::delete('suppliers/{code}/documents/{id}', [SupplierDocumentsController::class, 'destroy'])->middleware('perm:supplier.manage');

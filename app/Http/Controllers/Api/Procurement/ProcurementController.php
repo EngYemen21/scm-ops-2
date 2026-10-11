@@ -27,7 +27,7 @@ class ProcurementController extends ProcurementBaseController
     public function toPr(Request $request, string $sku): JsonResponse
     {
         $data = $request->validate([
-            'qty' => 'nullable|integer|min:1', 'warehouseCode' => 'nullable|string', 'needDate' => Rules::date(), 'priority' => 'nullable|in:normal,urgent,low',
+            'qty' => 'nullable|integer|min:1', 'warehouseCode' => 'nullable|string', 'needDate' => Rules::date(), 'priority' => 'nullable|in:normal,urgent,emergency,low',
             'costCenter' => 'nullable|string', 'justification' => 'nullable|string',
         ]);
 

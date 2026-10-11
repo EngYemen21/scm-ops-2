@@ -40,7 +40,7 @@ class ProductsService
     /** @param  array{category?:?string, storageClass?:?string, active?:?string, warehouse?:?string, supplier?:?string}  $filters */
     public function list(Paging $page, array $filters): array
     {
-        $query = Product::query()->with(['category', 'baseUom', self::HOME_WAREHOUSE, 'barcodes' => fn ($q) => $q->where('is_primary', true)->orderBy('id')]);
+        $query = Product::query()->with(['category', 'baseUom', 'packUom', self::HOME_WAREHOUSE, 'barcodes' => fn ($q) => $q->where('is_primary', true)->orderBy('id')]);
         $active = PartnersService::flag($filters['active'] ?? null);
         if ($active !== null) {
             $query->where('active', $active);
@@ -88,7 +88,7 @@ class ProductsService
     public function get(string $idOrSku): array
     {
         $p = Product::where(fn ($w) => $w->where('id', $idOrSku)->orWhere('sku', $idOrSku))->with([
-            'category.parent', 'baseUom', self::HOME_WAREHOUSE, 'storageReq',
+            'category.parent', 'baseUom', 'packUom', self::HOME_WAREHOUSE, 'storageReq',
             'barcodes' => fn ($q) => $q->with('uom')->orderByDesc('is_primary')->orderBy('barcode'),
             'suppliers' => fn ($q) => $q->with('supplier:id,code,name_ar,name_en,score,lead_days,is_new,active')->orderByDesc('preferred')->orderBy('id'),
         ])->first() ?? throw AppError::notFound('PRODUCT_NOT_FOUND', 'المنتج غير موجود', 'Product not found');
@@ -118,6 +118,8 @@ class ProductsService
                 'length_cm' => $dto['lengthCm'], 'width_cm' => $dto['widthCm'], 'height_cm' => $dto['heightCm'],
                 'volume_m3' => self::volume($dto['lengthCm'], $dto['widthCm'], $dto['heightCm']), 'shelf_life_days' => $dto['shelfLifeDays'] ?? null,
                 'home_warehouse_id' => ($refs['warehouse'] ?? null)?->id, 'preferred_supplier_name' => ($refs['supplier'] ?? null)?->name_ar,
+                // purchase pack: base units per pack (all stock quantities stay in the base unit; the pack is an input/display helper)
+                'pack_qty' => max(1, (int) ($dto['packQty'] ?? 1)), 'pack_uom_id' => ($refs['packUom'] ?? null)?->id,
             ]);
             ProductStorageRequirement::create([
                 'product_id' => $created->id, 'storage_class' => $storageClass,
@@ -184,6 +186,9 @@ class ProductsService
         if (array_key_exists('uom', $refs)) {
             $set('uom', 'base_uom_id', $p->baseUom?->code, $refs['uom']?->code, $refs['uom']?->id, true);
         }
+        if (array_key_exists('packUom', $refs)) {
+            $set('packUom', 'pack_uom_id', $p->packUom?->code, $refs['packUom']?->code, $refs['packUom']?->id, true);
+        }
         if (array_key_exists('warehouse', $refs)) {
             $set('homeWarehouse', 'home_warehouse_id', $p->homeWarehouse?->code, $refs['warehouse']?->code, $refs['warehouse']?->id, true);
         }
@@ -193,7 +198,7 @@ class ProductsService
         if (isset($dto['storageClass'])) {
             $set('storageClass', 'storage_class', $p->storage_class, self::storageKey($dto['storageClass']));
         }
-        foreach (['weightKg' => 'weight_kg', 'unitsPerPallet' => 'units_per_pallet', 'reorderMin' => 'reorder_min', 'reorderMax' => 'reorder_max', 'lengthCm' => 'length_cm', 'widthCm' => 'width_cm', 'heightCm' => 'height_cm', 'shelfLifeDays' => 'shelf_life_days', 'purchasePrice' => 'purchase_price'] as $k => $column) {
+        foreach (['weightKg' => 'weight_kg', 'unitsPerPallet' => 'units_per_pallet', 'reorderMin' => 'reorder_min', 'reorderMax' => 'reorder_max', 'lengthCm' => 'length_cm', 'widthCm' => 'width_cm', 'heightCm' => 'height_cm', 'shelfLifeDays' => 'shelf_life_days', 'purchasePrice' => 'purchase_price', 'packQty' => 'pack_qty'] as $k => $column) {
             if (isset($dto[$k])) {
                 $current = $p->getAttribute($column);
                 $set($k, $column, $current === null ? null : $current + 0, $dto[$k]);
@@ -575,6 +580,10 @@ class ProductsService
         if (array_key_exists('uomCode', $dto)) {
             $v = $dto['uomCode'];
             $out['uom'] = $v ? (Uom::where('code', $v)->orWhere('id', $v)->first() ?? throw AppError::validation('BAD_UOM', 'وحدة القياس غير معروفة', 'Unknown UoM')) : null;
+        }
+        if (array_key_exists('packUomCode', $dto)) {
+            $v = $dto['packUomCode'];
+            $out['packUom'] = $v ? (Uom::where('code', $v)->orWhere('id', $v)->first() ?? throw AppError::validation('BAD_UOM', 'وحدة الشراء غير معروفة', 'Unknown pack UoM')) : null;
         }
         if (array_key_exists('homeWarehouseCode', $dto)) {
             $v = $dto['homeWarehouseCode'];

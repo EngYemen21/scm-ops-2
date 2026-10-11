@@ -41,7 +41,9 @@ async function cancelRfq() {
   void act.run(() => api.postIdempotent(`/procurement/rfq/${n}/cancel`, {}), { success: t(`أُلغي ${n}`, `${n} cancelled`) });
 }
 
-const GT_STYLE = { '--gt-cols': 'minmax(160px,1.3fr) 90px 90px 90px 120px 70px minmax(220px,1.6fr) 160px', '--gt-min': '1000px' };
+const GT_STYLE = { '--gt-cols': 'minmax(160px,1.3fr) 85px 100px 80px 70px 110px 60px minmax(200px,1.5fr) 150px', '--gt-min': '1120px' };
+/** Three-quotes policy: fewer received → the award needs a written exception. */
+const belowPolicy = computed(() => !!cmp.value?.policy && cmp.value.policy.received < cmp.value.policy.minQuotes);
 </script>
 
 <template>
@@ -62,12 +64,13 @@ const GT_STYLE = { '--gt-cols': 'minmax(160px,1.3fr) 90px 90px 90px 120px 70px m
 
     <div class="mx-[18px]"><ErrorBanner :error="cmpQ.error.value || act.error.value" @close="act.clearError()" /></div>
     <div v-if="cmpQ.isLoading.value" class="skel m-[18px] min-h-[100px]" />
+    <div v-if="cmp?.policy" class="mx-[18px] mb-2 banner" :class="belowPolicy ? 'amber' : 'green'">{{ belowPolicy ? t(`سياسة ${cmp.policy.minQuotes} عروض: المستلم ${cmp.policy.received} — الترسية تتطلب مبرّر استثناء مكتوبًا (مورد وحيد، طارئ…)`, `${cmp.policy.minQuotes}-quotes policy: ${cmp.policy.received} received — awarding needs a written exception (sole source, emergency…)`) : t(`سياسة ${cmp.policy.minQuotes} عروض مستوفاة (${cmp.policy.received} عرض)`, `${cmp.policy.minQuotes}-quotes policy met (${cmp.policy.received} quotes)`) }}</div>
     <div v-if="cmp && cmp.quotes.length === 0" class="empty">{{ t('لا عروض مسجلة بعد — سجّل عروض الموردين لتبدأ المقارنة', 'No quotations recorded yet — record supplier quotes to start comparing') }}</div>
 
     <div v-if="cmp && cmp.quotes.length > 0" class="gt-wrap">
       <div class="gt" :style="GT_STYLE">
         <div class="gt-head">
-          <div>{{ t('المورد', 'Supplier') }}</div><div>{{ t('سعر الوحدة', 'Unit price') }}</div><div>{{ t('الإجمالي', 'Total') }}</div><div>{{ t('مهلة التوريد', 'Lead time') }}</div>
+          <div>{{ t('المورد', 'Supplier') }}</div><div>{{ t('سعر الوحدة', 'Unit price') }}</div><div>{{ t('الإجمالي الواصل', 'Landed total') }}</div><div>{{ t('مهلة التوريد', 'Lead time') }}</div><div>{{ t('ضمان', 'Warranty') }}</div>
           <div>{{ t('الدفع', 'Payment') }}</div><div>{{ t('حد أدنى', 'MOQ') }}</div><div>{{ t('تقييم النظام', 'System note') }}</div><div />
         </div>
         <div v-for="r in cmp.quotes" :key="r.quotationId" class="gt-row" :class="{ 'bg-[#F6FDF8]': r.rec }">
@@ -77,8 +80,9 @@ const GT_STYLE = { '--gt-cols': 'minmax(160px,1.3fr) 90px 90px 90px 120px 70px m
             <div v-if="r.rec" class="mt-1"><Chip small fg="#1d7a3e" bg="#e6f9ec" :label="{ ar: 'توصية النظام', en: 'Recommended' }" /></div>
           </div>
           <div class="num ltr text-start text-[12px] text-ink">{{ fmtMoney(r.unitPrice) }}</div>
-          <div class="num ltr text-start text-[11px]">{{ fmtMoney(r.price) }}<div v-if="r.weighted != null" class="text-[8px] text-faint">w {{ r.weighted }}</div></div>
+          <div class="num ltr text-start text-[11px]">{{ fmtMoney(r.price) }}<div v-if="Number(r.shipping) > 0" class="text-[8px] text-faint">{{ fmtMoney(r.goods) }} + {{ t('شحن', 'ship') }} {{ fmtMoney(r.shipping) }}</div><div v-if="r.weighted != null" class="text-[8px] text-faint">w {{ r.weighted }}</div></div>
           <div class="num text-violet">{{ r.lead }} {{ t('يوم', 'days') }}</div>
+          <div class="num text-[10px]" :class="r.warrantyMonths ? 'text-ink' : 'text-faint'">{{ r.warrantyMonths ? `${r.warrantyMonths} ${t('شهر', 'mo')}` : '—' }}</div>
           <div class="text-[9.5px] font-bold">{{ r.pay || '—' }}{{ r.deliveryTerms ? ` · ${r.deliveryTerms}` : '' }}</div>
           <div class="num ltr text-start" :class="r.moqExceedsNeed ? 'text-bad' : 'text-muted'">{{ fmtNum(r.min) }}</div>
           <div class="text-[9.5px] leading-[1.7] text-muted">
@@ -94,8 +98,8 @@ const GT_STYLE = { '--gt-cols': 'minmax(160px,1.3fr) 90px 90px 90px 120px 70px m
       </div>
     </div>
 
-    <div v-if="cmp" class="hint mx-[18px] !mt-0 mb-4">{{ t(`التوصية تُحسب آليًا: السعر 50% · مهلة التوريد 30% · تقييم المورد 20% — الحاجة ${fmtNum(need)} وحدة. الترسية تُنشئ أمر شراء بانتظار الاعتماد وتُغلق العروض الأخرى.`, `Recommendation is computed automatically: price 50% · lead 30% · supplier score 20% — need ${fmtNum(need)} units. Awarding creates a PO pending approval and closes the other quotes.`) }}</div>
+    <div v-if="cmp" class="hint mx-[18px] !mt-0 mb-4">{{ t(`التوصية تُحسب آليًا على الإجمالي الواصل (الأصناف + الشحن): السعر 50% · مهلة التوريد 30% · تقييم المورد 20% — الحاجة ${fmtNum(need)} وحدة. اختيار عرض غير الموصى به يتطلب سببًا مكتوبًا. الترسية تُنشئ أمر شراء بانتظار الاعتماد وتُغلق العروض الأخرى.`, `Recommendation is computed on the landed total (goods + shipping): price 50% · lead 30% · supplier score 20% — need ${fmtNum(need)} units. Choosing a non-recommended quote needs a written reason. Awarding creates a PO pending approval and closes the other quotes.`) }}</div>
   </div>
 
-  <AwardDrawer :rfq-number="number" :quote="cmp ? award : null" :default-warehouse="cmp?.rfq.warehouse?.code" @close="award = null" />
+  <AwardDrawer :rfq-number="number" :quote="cmp ? award : null" :default-warehouse="cmp?.rfq.warehouse?.code" :recommended="cmp?.rec" :policy="cmp?.policy" @close="award = null" />
 </template>

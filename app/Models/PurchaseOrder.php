@@ -18,6 +18,12 @@ class PurchaseOrder extends BaseModel
     {
         return [
             'total' => 'decimal:2',
+            'discount' => 'decimal:2',
+            'shipping_cost' => 'decimal:2',
+            'vat_pct' => 'float',
+            'gross_total' => 'decimal:2',
+            'followed_up_at' => 'datetime',
+            'late_alerted_at' => 'datetime',
             'due_date' => 'datetime',
             'approval_step' => 'integer',
             'open_qty' => 'integer',
@@ -61,5 +67,18 @@ class PurchaseOrder extends BaseModel
     public function grns(): HasMany
     {
         return $this->hasMany(GoodsReceipt::class, 'po_id', 'id');
+    }
+
+    /** Received share of the ordered quantity (open_qty is maintained by receiving). */
+    public function receivedPct(): int
+    {
+        $ordered = (int) $this->lines()->sum('qty');
+
+        return $ordered > 0 ? (int) round(($ordered - (int) $this->open_qty) / $ordered * 100) : 0;
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(SupplierInvoice::class, 'po_id', 'id');
     }
 }

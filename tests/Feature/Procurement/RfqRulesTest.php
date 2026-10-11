@@ -160,7 +160,7 @@ class RfqRulesTest extends ApiTestCase
         $this->assertSame($qLow['id'], $cmp['rec']);
         $this->assertContains('تقييم المورد 50 دون الحد الأدنى (65) — OTIF 70% وتأخر سابق', $rows[$qLow['id']]['reasons']);
         $this->assertContains('مورد جديد قيد التقييم', $rows[$qLow['id']]['reasons']);
-        $this->assertContains('أعلى من السعر الأدنى بـ 33%', $rows[$qGood['id']]['reasons']);
+        $this->assertContains('أعلى من الإجمالي الأدنى بـ 33%', $rows[$qGood['id']]['reasons']);
         $this->assertContains('مهلة توريد 9 يومًا (الأسرع 2)', $rows[$qGood['id']]['reasons']);
         $this->assertContains('أعلى تقييم مورد (90)', $rows[$qGood['id']]['reasons']);
         $this->assertContains('OTIF 80% منخفض', $rows[$qGood['id']]['reasons']);

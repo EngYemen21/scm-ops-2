@@ -7,7 +7,7 @@ import { DateInput, SelectInput, TextArea, optV } from '@/components';
 import { t } from '@/i18n';
 import ActionDrawer from './ActionDrawer.vue';
 import LinesEditor from './LinesEditor.vue';
-import { SELECT_PLACEHOLDER, linesValid, plusDays, useWarehouseOptions } from './shared';
+import { PRIORITY_OPTIONS, SELECT_PLACEHOLDER, linesValid, plusDays, useWarehouseOptions } from './shared';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -18,7 +18,8 @@ const emit = defineEmits(['close', 'done']);
 const act = useAction();
 const whOpts = useWarehouseOptions();
 
-const PRIORITIES = [['normal', { ar: 'عادية', en: 'Normal' }], ['urgent', { ar: 'عاجلة — نافد/حرج', en: 'Urgent — out of stock' }], ['low', { ar: 'منخفضة', en: 'Low' }]];
+/** emergency = production stop / safety — bypasses nothing, but is flagged for the approver and the dashboard. */
+const PRIORITIES = PRIORITY_OPTIONS;
 const COST_CENTERS = [['ops', { ar: 'العمليات', en: 'Operations' }], ['sales', { ar: 'المبيعات', en: 'Sales' }], ['fr', { ar: 'الأسطول', en: 'Fleet' }]];
 const ACTIONS = [['submit', { ar: 'إرسال للمراجعة', en: 'Submit' }], ['draft', { ar: 'حفظ كمسودة', en: 'Save as draft' }]];
 

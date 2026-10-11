@@ -4,7 +4,7 @@
 import { ref, watch } from 'vue';
 import { api, useAction, useList } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, Tabs } from '@/components';
-import { fmtDateOnly, t } from '@/i18n';
+import { fmtDateOnly, fmtNum, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { confirm } from '@/stores/ui';
 import { useWarehouse } from '@/stores/warehouse';
@@ -32,8 +32,17 @@ const toRfq = ref(null);
 
 const inReview = (r) => ['submitted', 'review'].includes(r.status);
 const submitPr = (r) => act.run(() => api.postIdempotent(`/procurement/pr/${r.number}/submit`), { success: t(`أُرسل ${r.number} للمراجعة`, `${r.number} submitted`) });
+/** The approver sees the stock behind each line (available vs. requested) before deciding. */
+async function stockSummary(r) {
+  try {
+    const d = await api.get(`/procurement/pr/${encodeURIComponent(r.number)}`);
+    const parts = (d.lines || []).filter((l) => l.stock).map((l) => `${pname(l.product)}: ${t('متاح', 'avail')} ${fmtNum(l.stock.available)} / ${t('مطلوب', 'req')} ${fmtNum(l.qty)}${l.stock.shortfall > 0 ? ` (${t('نقص', 'short')} ${fmtNum(l.stock.shortfall)})` : ''}`);
+    return parts.length ? parts.join(' · ') : '';
+  } catch { return ''; }
+}
 async function approve(r) {
-  const yes = await confirm({ title: { ar: `اعتماد ${r.number}؟`, en: `Approve ${r.number}?` }, sub: { ar: 'بعد الاعتماد يمكن تحويله إلى RFQ أو أمر شراء', en: 'After approval it can be converted to an RFQ or PO' }, tone: 'dark', okLabel: { ar: 'اعتماد', en: 'Approve' } });
+  const stock = await stockSummary(r);
+  const yes = await confirm({ title: { ar: `اعتماد ${r.number}؟`, en: `Approve ${r.number}?` }, sub: { ar: `${stock ? stock + ' — ' : ''}بعد الاعتماد يمكن تحويله إلى RFQ أو أمر شراء`, en: `${stock ? stock + ' — ' : ''}After approval it can be converted to an RFQ or PO` }, tone: 'dark', okLabel: { ar: 'اعتماد', en: 'Approve' } });
   if (yes) void act.run(() => api.postIdempotent(`/procurement/pr/${r.number}/approve`, {}), { success: t(`اعتُمد ${r.number}`, `${r.number} approved`) });
 }
 async function doReject(reason) {

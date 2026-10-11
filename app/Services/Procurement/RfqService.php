@@ -198,6 +198,7 @@ class RfqService
                 'number' => $number, 'supplier_id' => $supplier->id, 'rfq_id' => $rfq?->id, 'supplier_ref' => $dto['supplierRef'], 'date' => ! empty($dto['date']) ? H::parseDate($dto['date']) : now(),
                 'valid_until' => H::parseDate($dto['validUntil']), 'payment_terms' => ($dto['paymentTerms'] ?? null) ?: null, 'delivery_terms' => ($dto['deliveryTerms'] ?? null) ?: null,
                 'min_order' => (int) ($dto['minOrder'] ?? 0), 'lead_days' => (int) $dto['leadDays'], 'notes' => ($dto['notes'] ?? null) ?: null, 'attachment_name' => $dto['attachmentName'], 'attachment_type' => $ext, 'status' => 'received',
+                'shipping_cost' => H::round2((float) ($dto['shippingCost'] ?? 0)), 'warranty_months' => isset($dto['warrantyMonths']) ? (int) $dto['warrantyMonths'] : null,
             ]);
             foreach ($dto['lines'] as $l) {
                 SupplierQuotationLine::create(['quotation_id' => $sq->id, 'product_id' => $products[$l['sku']]->id, 'qty' => isset($l['qty']) ? (int) $l['qty'] : null, 'price' => H::round2((float) $l['price']),
@@ -250,10 +251,15 @@ class RfqService
                 $maxLineLead = max($maxLineLead, (int) ($ql->lead_days ?: 0));
             }
             $s = $q->supplier;
+            // the comparison is on the landed total (goods + shipping), never on the unit price alone
+            $goods = H::round2($price);
+            $shipping = H::round2((float) ($q->shipping_cost ?? 0));
+            $price = H::round2($goods + $shipping);
             $rows[] = [
                 'quotationId' => $q->id, 'number' => $q->number, 'supplierRef' => $q->supplier_ref, 'status' => $q->status,
                 'supplier' => ['code' => $s->code, 'nameAr' => $s->name_ar, 'nameEn' => $s->name_en, 'score' => $s->score, 'otif' => $s->otif, 'isNew' => (bool) $s->is_new],
-                'price' => H::round2($price), 'unitPrice' => $need ? H::round2($price / $need) : 0, 'lead' => (int) ($q->lead_days ?: $maxLineLead ?: 0), 'pay' => $q->payment_terms, 'deliveryTerms' => $q->delivery_terms,
+                'goods' => $goods, 'shipping' => $shipping, 'warrantyMonths' => $q->warranty_months,
+                'price' => $price, 'unitPrice' => $need ? H::round2($goods / $need) : 0, 'lead' => (int) ($q->lead_days ?: $maxLineLead ?: 0), 'pay' => $q->payment_terms, 'deliveryTerms' => $q->delivery_terms,
                 'min' => (int) ($q->min_order ?: 0), 'score' => $s->score, 'validUntil' => $q->valid_until?->toJSON(), 'complete' => $complete, 'expired' => $q->valid_until !== null && H::isPastDate($q->valid_until),
                 'moqExceedsNeed' => (int) ($q->min_order ?: 0) > $need, 'weighted' => null, 'rec' => false, 'reasons' => [], 'reasonsEn' => [],
             ];
@@ -278,12 +284,16 @@ class RfqService
             }
             if ($eligible && $r['complete'] && ! $r['expired']) {
                 if ($r['price'] == $minPrice) {
-                    $r['reasons'][] = 'السعر الأدنى';
-                    $r['reasonsEn'][] = 'Lowest price';
+                    $r['reasons'][] = $r['shipping'] > 0 ? 'الإجمالي الأدنى شاملًا الشحن' : 'السعر الأدنى';
+                    $r['reasonsEn'][] = $r['shipping'] > 0 ? 'Lowest landed total' : 'Lowest price';
                 } else {
                     $pct = (int) round((($r['price'] - $minPrice) / $minPrice) * 100);
-                    $r['reasons'][] = "أعلى من السعر الأدنى بـ {$pct}%";
-                    $r['reasonsEn'][] = "{$pct}% above lowest price";
+                    $r['reasons'][] = "أعلى من الإجمالي الأدنى بـ {$pct}%".($r['shipping'] > 0 ? ' (شاملًا الشحن)' : '');
+                    $r['reasonsEn'][] = "{$pct}% above lowest total";
+                }
+                if ($r['warrantyMonths']) {
+                    $r['reasons'][] = "ضمان {$r['warrantyMonths']} شهرًا";
+                    $r['reasonsEn'][] = "{$r['warrantyMonths']}-month warranty";
                 }
                 if ($r['lead'] === $minLead) {
                     $r['reasons'][] = 'أسرع توريد';
@@ -360,6 +370,7 @@ class RfqService
             'need' => $rfq->lines->map->toArray()->all(),
             'invited' => $rfq->suppliers->map(fn ($s) => $s->supplier?->toArray())->filter()->values()->all(),
             'quotes' => $cmp['rows'], 'rec' => $cmp['rec'], 'weights' => ['price' => 0.5, 'lead' => 0.3, 'score' => 0.2],
+            'policy' => ['minQuotes' => (int) ($this->settings->get('procurement.minQuotes') ?? 3), 'received' => $rfq->quotations->count()],
         ];
     }
 
@@ -398,20 +409,35 @@ class RfqService
                     ?? throw AppError::rule('QUOTE_INCOMPLETE', "العرض {$q->number} لا يتضمن سعرًا لـ {$l->product->name_ar}", "Quotation {$q->number} has no price for {$l->product->sku}");
                 $lines[] = ['sku' => $l->product->sku, 'qty' => $l->qty, 'price' => (float) $ql->price];
             }
+            // Policy: at least N quotations before awarding; fewer only with a written, audited exception (sole source, emergency…)
+            $minQuotes = (int) ($this->settings->get('procurement.minQuotes') ?? 3);
+            $received = $rfq->quotations->count();
+            $quotesException = trim((string) ($dto['quotesException'] ?? ''));
+            if ($received < $minQuotes && mb_strlen($quotesException) < 5) {
+                throw AppError::rule('RFQ_MIN_QUOTES', "السياسة تتطلب {$minQuotes} عروض على الأقل والمستلم {$received} — اكتب مبرّر الاستثناء (مورد وحيد، طارئ…) ليُعتمد بدل تجاوز السياسة بصمت", "Policy requires {$minQuotes} quotations ({$received} received) — a written exception is required", ['minQuotes' => $minQuotes, 'received' => $received]);
+            }
+            // Choosing a quotation other than the system recommendation needs the reason (why not the lowest / best weighted)
+            $cmp = $this->compare($rfq, $this->minScore());
+            $awardReason = trim((string) ($dto['awardReason'] ?? ''));
+            if ($cmp['rec'] !== null && $cmp['rec'] !== $q->id && mb_strlen($awardReason) < 5) {
+                throw AppError::rule('RFQ_AWARD_REASON', "العرض {$q->number} ليس العرض الموصى به — اكتب سبب اختياره (ولماذا لم يُختر الأقل)", "Quotation {$q->number} is not the recommended one — the reason for choosing it is required", ['recommended' => $cmp['rec']]);
+            }
             $dueDate = ($dto['dueDate'] ?? null) ?: H::isoDatePlus((int) ($q->lead_days ?: 0));
             $po = $this->po->create($user, [
                 'supplierCode' => $q->supplier->code, 'warehouseCode' => $wh->code, 'dueDate' => $dueDate, 'paymentTerms' => ($dto['paymentTerms'] ?? null) ?: ($q->payment_terms ?: null),
-                'reference' => "{$rfq->number} / {$q->number}", 'notes' => $dto['notes'] ?? null, 'lines' => $lines,
+                'reference' => "{$rfq->number} / {$q->number}", 'notes' => $dto['notes'] ?? null, 'lines' => $lines, 'shippingCost' => (float) ($q->shipping_cost ?? 0),
                 'overrideSupplierScore' => $dto['overrideSupplierScore'] ?? null, 'overrideReason' => $dto['overrideReason'] ?? null,
+                'overrideDocuments' => $dto['overrideDocuments'] ?? null, 'documentsReason' => $dto['documentsReason'] ?? null,
             ], ['rfqId' => $rfq->id, 'source' => 'rfq']);
             SupplierQuotation::where('rfq_id', $rfq->id)->where('id', '!=', $q->id)->update(['status' => 'lost']);
             SupplierQuotation::where('id', $q->id)->update(['status' => 'awarded']);
             $from = $rfq->status;
-            Rfq::where('id', $rfq->id)->update(['status' => 'awarded', 'awarded_quotation_id' => $q->id, 'awarded_at' => now()]);
+            Rfq::where('id', $rfq->id)->update(['status' => 'awarded', 'awarded_quotation_id' => $q->id, 'awarded_at' => now(), 'award_reason' => $awardReason ?: null, 'quotes_exception' => $received < $minQuotes ? $quotesException : null]);
             if ($rfq->pr_id) {
                 PurchaseRequisition::where('id', $rfq->pr_id)->update(['po_id' => $po->id]);
             }
-            $this->audit->log($user, ['action' => 'RFQ.AWARD', 'entityType' => 'Rfq', 'entityId' => $rfq->id, 'entityNumber' => $rfq->number, 'newValue' => ['quotation' => $q->number, 'supplier' => $q->supplier->code, 'po' => $po->number, 'total' => (float) $po->total]]);
+            $this->audit->log($user, ['action' => 'RFQ.AWARD', 'entityType' => 'Rfq', 'entityId' => $rfq->id, 'entityNumber' => $rfq->number, 'newValue' => ['quotation' => $q->number, 'supplier' => $q->supplier->code, 'po' => $po->number, 'total' => (float) $po->total,
+                'recommended' => $cmp['rec'] === $q->id, 'awardReason' => $awardReason ?: null, 'quotations' => $received, 'minQuotes' => $minQuotes, 'quotesException' => $received < $minQuotes ? $quotesException : null]]);
             $this->audit->status($user, 'Rfq', $rfq->id, $rfq->number, $from, 'awarded', "{$q->number} → {$po->number}");
             $this->notify->activity($user, 'Rfq', $rfq->id, $rfq->number, "رُسّي {$rfq->number} على {$q->supplier->name_ar} — أُنشئ {$po->number} بانتظار الاعتماد", "{$rfq->number} awarded to {$q->supplier->name_en} — {$po->number} created", ['proc']);
 

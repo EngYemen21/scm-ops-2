@@ -37,7 +37,7 @@ async function save() {
   const body = {
     sku: s.sku.trim().toUpperCase(), nameAr: s.nameAr.trim(), nameEn: s.nameEn?.trim() || s.nameAr.trim(), brand: s.brand || undefined, purchasePrice: s.purchasePrice ?? undefined,
     storageClass: s.storageClass, categoryCode: s.categoryCode || undefined, uomCode: s.uomCode || undefined, weightKg: s.weightKg, lengthCm: s.lengthCm, widthCm: s.widthCm, heightCm: s.heightCm,
-    barcode: s.barcode || undefined, reorderMin: s.reorderMin ?? 0,
+    barcode: s.barcode || undefined, reorderMin: s.reorderMin ?? 0, packQty: s.packQty ?? undefined, packUomCode: s.packUomCode || undefined,
   };
   const r = await act.run(() => api.postIdempotent('/products', body), { success: (d) => t(`أُضيف ${d.nameAr} إلى Master بالرمز ${d.sku}`, `${d.nameEn} added as ${d.sku}`), invalidate: ['products', 'master', 'categories'] });
   if (r) { emit('done', r); emit('close'); }
@@ -59,6 +59,8 @@ async function save() {
       <NumberInput :model-value="v.heightCm" :label="{ ar: 'الارتفاع سم', en: 'Height cm' }" :min="0" :error="errs.heightCm" @update:model-value="set('heightCm', $event)" />
       <NumberInput :model-value="v.weightKg" :label="{ ar: 'الوزن كجم', en: 'Weight kg' }" :min="0" :error="errs.weightKg" @update:model-value="set('weightKg', $event)" />
       <NumberInput :model-value="v.reorderMin" :label="{ ar: 'حد إعادة الطلب', en: 'Reorder point' }" :min="0" @update:model-value="set('reorderMin', $event)" />
+      <NumberInput :model-value="v.packQty" :label="{ ar: 'عبوة الشراء (وحدات أساسية)', en: 'Purchase pack (base units)' }" :min="1" :hint="{ ar: 'المخزون يبقى بالوحدة الأساسية', en: 'Stock stays in the base unit' }" @update:model-value="set('packQty', $event)" />
+      <SelectInput :model-value="v.packUomCode" :label="{ ar: 'وحدة عبوة الشراء', en: 'Pack UoM' }" :options="uoms" :placeholder="{ ar: '—', en: '—' }" @update:model-value="set('packUomCode', $event)" />
       <PillChoice :model-value="v.storageClass" :label="{ ar: 'شرط التخزين', en: 'Storage' }" full purple :options="storageOpts" @update:model-value="set('storageClass', $event)" />
       <PillChoice :model-value="v.categoryCode" :label="{ ar: 'التصنيف', en: 'Category' }" full :options="categoryOpts" @update:model-value="set('categoryCode', $event === v.categoryCode ? '' : $event)" />
     </div>

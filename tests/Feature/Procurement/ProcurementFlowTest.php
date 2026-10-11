@@ -79,7 +79,8 @@ class ProcurementFlowTest extends ApiTestCase
 
         // ── comparison: 50% price / 30% lead / 20% score ──
         $cmp = $this->expectOk($this->getAs('proc', "/api/procurement/rfq/{$rfq['number']}/comparison"));
-        $this->assertSame(['rfq', 'need', 'invited', 'quotes', 'rec', 'weights'], array_keys($cmp));
+        $this->assertSame(['rfq', 'need', 'invited', 'quotes', 'rec', 'weights', 'policy'], array_keys($cmp));
+        $this->assertSame(['minQuotes' => 3, 'received' => 2], $cmp['policy'], 'the three-quotes policy is visible on the comparison');
         $this->assertSame('compared', $cmp['rfq']['status']);
         $this->assertSame(['price' => 0.5, 'lead' => 0.3, 'score' => 0.2], $cmp['weights']);
         $this->assertCount(2, $cmp['quotes']);
@@ -106,7 +107,10 @@ class ProcurementFlowTest extends ApiTestCase
 
         // ── award → PO pending (19,000 SAR → proc + finance) ──
         $this->expectRejected($this->postAs('wm', "/api/procurement/rfq/{$rfq['number']}/award", ['quotation' => $q1['number']]), 'FORBIDDEN', [403]);
-        $award = $this->expectOk($this->postAs('proc', "/api/procurement/rfq/{$rfq['number']}/award", ['quotation' => $q1['number'], 'warehouseCode' => 'RYD', 'dueDate' => self::future(9)]));
+        // policy: three quotations — two received, so the award needs a written exception (audited), never a silent bypass
+        $this->expectRejected($this->postAs('proc', "/api/procurement/rfq/{$rfq['number']}/award", ['quotation' => $q1['number'], 'warehouseCode' => 'RYD', 'dueDate' => self::future(9)]), 'RFQ_MIN_QUOTES', [422]);
+        $award = $this->expectOk($this->postAs('proc', "/api/procurement/rfq/{$rfq['number']}/award", ['quotation' => $q1['number'], 'warehouseCode' => 'RYD', 'dueDate' => self::future(9), 'quotesException' => 'المورد الثالث اعتذر عن التسعير']));
+        $this->assertSame('المورد الثالث اعتذر عن التسعير', $award['rfq']['quotesException']);
         $this->assertSame(['rfq', 'po'], array_keys($award));
         $this->assertSame(['awarded', $q1['id']], [$award['rfq']['status'], $award['rfq']['awardedQuotationId']]);
         $this->assertSame(['awarded', 'lost'], [collect($award['rfq']['quotations'])->firstWhere('id', $q1['id'])['status'], collect($award['rfq']['quotations'])->firstWhere('id', $q2['id'])['status']]);
@@ -132,7 +136,9 @@ class ProcurementFlowTest extends ApiTestCase
         $this->expectRejected($this->postAs('proc', "/api/procurement/po/{$poNumber}/send"), 'PO_TRANSITION', [422]);
         $denied = $this->expectRejected($this->postAs('finance', "/api/procurement/po/{$poNumber}/approve"), 'PO_APPROVAL_ROLE', [422]);
         $this->assertSame(['step' => 1, 'requiredRole' => 'proc'], $denied['details']);
-        $s1 = $this->expectOk($this->postAs('proc', "/api/procurement/po/{$poNumber}/approve", ['note' => 'اعتماد المشتريات']));
+        // segregation of duties: the buyer who awarded (created the PO) cannot approve it — another holder of the role (or super) does
+        $this->expectRejected($this->postAs('proc', "/api/procurement/po/{$poNumber}/approve"), 'PO_SELF_APPROVAL', [422]);
+        $s1 = $this->expectOk($this->postAs('admin', "/api/procurement/po/{$poNumber}/approve", ['note' => 'اعتماد المشتريات']));
         $this->assertSame(['pending', 1], [$s1['status'], $s1['approvalStep']]);
         $s2 = $this->expectOk($this->postAs('finance', "/api/procurement/po/{$poNumber}/approve"));
         $this->assertSame(['approved', 99], [$s2['status'], $s2['approvalStep']]);

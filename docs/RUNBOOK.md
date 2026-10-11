@@ -53,6 +53,9 @@ Vercel / Netlify cannot run it (they do not run PHP).
 6. PHP limits: `post_max_size` and `upload_max_filesize` ≥ 8M (proof-of-delivery photo + signature arrive as base64 JSON).
 7. After every deploy: `php artisan migrate --force` then the three `*:cache` commands again.
 8. Health check: `GET /up`. Stock integrity check (cron it nightly): `php artisan scm:reconcile` — exit code 1 on mismatch.
+   Procurement follow-up alerts (late purchase orders, expiring supplier documents) ride on the integration heartbeat once an hour;
+   without a heartbeat, cron `php artisan scm:procurement-followup` daily. New permissions a release introduces are inserted by
+   `migrate` (`PermissionSync`) — `php artisan scm:sync-permissions` re-runs that step by hand.
 9. Back up the MySQL database daily; the application keeps no state on disk.
 
 Sign-in is rate limited (10 attempts per minute per username + IP, `LOGIN_ATTEMPTS_PER_MINUTE`); it needs a working

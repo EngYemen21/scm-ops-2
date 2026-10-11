@@ -26,7 +26,7 @@ class PrController extends ProcurementBaseController
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'warehouseCode' => 'required|string|min:1', 'needDate' => Rules::date(), 'priority' => 'nullable|in:normal,urgent,low',
+            'warehouseCode' => 'required|string|min:1', 'needDate' => Rules::date(), 'priority' => 'nullable|in:normal,urgent,emergency,low',
             'justification' => 'required|string|min:1', 'costCenter' => 'nullable|string',
         ] + Rules::lines());
 

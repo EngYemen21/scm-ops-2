@@ -27,12 +27,18 @@ class Supplier extends BaseModel
             'min_order' => 'decimal:2',
             'is_new' => 'boolean',
             'active' => 'boolean',
+            'credit_limit' => 'decimal:2',
         ];
     }
 
     public function products(): HasMany
     {
         return $this->hasMany(ProductSupplier::class, 'supplier_id', 'id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(SupplierDocument::class, 'supplier_id', 'id');
     }
 
     public function quotations(): HasMany

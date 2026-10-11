@@ -28,7 +28,7 @@ const add = () => emit('update:modelValue', [...props.modelValue, { max: null, r
     <div v-for="(tier, i) in modelValue" :key="i" class="tile">
       <div class="row wrap">
         <span class="text-[10px] font-extrabold text-violet">{{ t('شريحة', 'Tier') }} <span class="num">{{ i + 1 }}</span></span>
-        <span class="text-[10px] text-muted">{{ t('إجمالي أمر الشراء حتى', 'PO total up to') }}</span>
+        <span class="text-[10px] text-muted">{{ t('القيمة حتى', 'Value up to') }}</span>
         <NumberInput small class="w-[120px]" :model-value="tier.max" :min="0" :placeholder="{ ar: 'بلا حد', en: 'No limit' }" @update:model-value="(v) => patch(i, { max: v })" />
         <span class="text-[9px] text-faint">{{ t('ر.س', 'SAR') }}</span>
         <div class="grow" />

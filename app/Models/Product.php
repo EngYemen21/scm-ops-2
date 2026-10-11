@@ -29,6 +29,7 @@ class Product extends BaseModel
             'height_cm' => 'float',
             'volume_m3' => 'float',
             'shelf_life_days' => 'integer',
+            'pack_qty' => 'integer',
             'active' => 'boolean',
         ];
     }
@@ -36,6 +37,11 @@ class Product extends BaseModel
     public function category(): BelongsTo
     {
         return $this->belongsTo(ProductCategory::class, 'category_id', 'id');
+    }
+
+    public function packUom(): BelongsTo
+    {
+        return $this->belongsTo(Uom::class, 'pack_uom_id', 'id');
     }
 
     public function baseUom(): BelongsTo

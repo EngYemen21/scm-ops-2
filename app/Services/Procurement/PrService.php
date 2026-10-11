@@ -2,6 +2,7 @@
 
 namespace App\Services\Procurement;
 
+use App\Models\InventoryBalance;
 use App\Models\PrApproval;
 use App\Models\PrLine;
 use App\Models\PurchaseOrder;
@@ -10,6 +11,8 @@ use App\Models\Rfq;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
+use App\Services\Core\SettingsService;
+use App\Services\Inventory\InventoryService;
 use App\Services\Procurement\ProcurementHelpers as H;
 use App\Support\AppError;
 use App\Support\AuthUser;
@@ -20,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 /** Purchase requisitions: header + lines → submit → role-checked approval steps → approved → convert to RFQ or PO. */
 class PrService
 {
-    /** PR approval chain (procurement review). Kept as a constant here; PO chains are the configurable ones. */
+    /** Roles notified when a PR is submitted / approved (the first approval step decides who acts). */
     private const PR_CHAIN = ['proc'];
 
     private const PRODUCT_SEL = 'id,sku,name_ar,name_en,purchase_price,reorder_min,preferred_supplier_name';
@@ -31,6 +34,8 @@ class PrService
         private readonly NotifyService $notify,
         private readonly PoService $po,
         private readonly RfqService $rfq,
+        private readonly SettingsService $settings,
+        private readonly InventoryService $inventory,
     ) {}
 
     /**
@@ -99,6 +104,7 @@ class PrService
             throw AppError::rule('PR_NO_STEP', 'لا توجد خطوة اعتماد معلّقة', 'No pending approval step');
         }
         $this->assertStepRole($user, $pr, $step);
+        $this->assertNotSelf($user, $pr);
 
         return DB::transaction(function () use ($user, $pr, $step, $note) {
             $step->update(['decision' => 'approved', 'approver_id' => $user->id, 'approver' => $user->username, 'note' => $note ?: null, 'decided_at' => now()]);
@@ -232,7 +238,7 @@ class PrService
         $rfq = $pr->rfq_id ? Rfq::where('id', $pr->rfq_id)->first(['id', 'number', 'status']) : null;
         $po = $pr->po_id ? PurchaseOrder::where('id', $pr->po_id)->first(['id', 'number', 'status', 'total']) : null;
 
-        return $pr->toArray() + $this->computed($pr) + ['rfq' => $rfq?->toArray(), 'po' => $po?->toArray()];
+        return $this->withStock($pr, $pr->toArray() + $this->computed($pr) + ['rfq' => $rfq?->toArray(), 'po' => $po?->toArray()]);
     }
 
     /** @return array{estTotal: float, currentStep: ?array} */
@@ -244,11 +250,73 @@ class PrService
         ];
     }
 
+    /** The detail view adds the stock context of every line (approvers judge the need against it). */
+    private function withStock(PurchaseRequisition $pr, array $row): array
+    {
+        $stock = $this->stockContext($pr);
+        foreach ($row['lines'] ?? [] as $i => $l) {
+            $row['lines'][$i]['stock'] = $stock[$l['productId'] ?? ''] ?? null;
+        }
+
+        return $row;
+    }
+
+    /**
+     * Approval chain by the requisition's estimated value — first tier of `procurement.prApprovalTiers` whose max is null
+     * or ≥ the estimate (same mechanism as purchase orders). Default: procurement review only.
+     *
+     * @return string[] role keys in order
+     */
+    public function chainFor(float $estTotal): array
+    {
+        $tiers = (array) ($this->settings->get('procurement.prApprovalTiers') ?: []);
+        $tier = null;
+        foreach ($tiers as $t) {
+            if (! isset($t['max']) || $estTotal <= (float) $t['max']) {
+                $tier = $t;
+                break;
+            }
+        }
+        $tier ??= $tiers ? $tiers[count($tiers) - 1] : ['max' => null, 'roles' => self::PR_CHAIN];
+        $roles = array_values(array_filter(array_map('strval', (array) ($tier['roles'] ?? []))));
+
+        return $roles ?: self::PR_CHAIN;
+    }
+
     private function createChain(string $prId): void
     {
-        foreach (self::PR_CHAIN as $i => $roleKey) {
+        $pr = $this->load($prId);
+        foreach ($this->chainFor($this->computed($pr)['estTotal']) as $i => $roleKey) {
             PrApproval::create(['pr_id' => $prId, 'step' => $i + 1, 'role_key' => $roleKey]);
         }
+    }
+
+    /** Segregation of duties: the requester never approves their own requisition (unless the policy allows it). */
+    private function assertNotSelf(AuthUser $user, PurchaseRequisition $pr): void
+    {
+        if ($pr->requested_by_id === $user->id && ! (bool) $this->settings->get('procurement.allowSelfApproval')) {
+            throw AppError::rule('PR_SELF_APPROVAL', "لا يعتمد مقدّم الطلب طلبه {$pr->number} — فصل المسؤوليات؛ يعتمده شخص آخر بالدور المطلوب", "The requester cannot approve their own requisition {$pr->number} (segregation of duties)");
+        }
+    }
+
+    /**
+     * Stock context per line for the requesting warehouse: on hand / reserved / available / shortfall against the
+     * requested quantity — what the approver needs to judge the need.
+     *
+     * @return array<string, array{onHand:int, reserved:int, available:int, shortfall:int}> by product id
+     */
+    private function stockContext(PurchaseRequisition $pr): array
+    {
+        $ids = $pr->lines->pluck('product_id')->all();
+        $rows = InventoryBalance::whereIn('product_id', $ids)->where('warehouse_id', $pr->warehouse_id)->get(['product_id', 'on_hand', 'reserved']);
+        $out = [];
+        foreach ($pr->lines as $l) {
+            $mine = $rows->where('product_id', $l->product_id);
+            $available = (int) ($this->inventory->availability($l->product_id, $pr->warehouse_id)['total'] ?? 0);
+            $out[$l->product_id] = ['onHand' => (int) $mine->sum('on_hand'), 'reserved' => (int) $mine->sum('reserved'), 'available' => $available, 'shortfall' => max(0, $l->qty - $available)];
+        }
+
+        return $out;
     }
 
     private function includes(): array
