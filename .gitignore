@@ -44,3 +44,19 @@ ios/App/build/
 *.jks
 android/.kotlin/
 android/app/.cxx/
+
+# Private reports and audit documents
+/reports/
+*.docx
+*.pdf
+
+# Backups
+/storage/backups/
+*.sql
+*.sql.gz
+
+# Local IDE agents and Boost configs
+.agents/
+boost.json
+
+
