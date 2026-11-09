@@ -18,7 +18,7 @@ Go-live is a sequence of gates; each must be true before the next step.
 |---|---|---|
 | 1 | **Sales sign-in is hardened** — registered account (phone + 4-digit PIN with lockout; SMS OTP later), role and tenant from the account record, `/api/state` scoped to the tenant, ownership checked on every command | **done** — built and tested in Sales (`docs/SECURITY.md`, 93 HTTP checks in CI, upgrade rehearsed on the previous schema), merged to `master` with the owner's approval |
 | 2 | **Sales production is on that version** — deploy, then `POST /api/admin/migrate` (additive + data upgrade), then sign in once per account to replace the temporary PIN | **deployed and migrated** (old OTP/role-pick actions answer 400, `/api/state` 401 without a session, migration idempotent); the owner still has to sign in to each seed account once |
-| 3 | **Stage 1 — preparation** (`OPS_INTEGRATION_ORDERS=false` on Sales): customers and products flow to OPS, availability flows back; **orders stay manual in Sales** | **live since 2026-10-04** — signed health 200 (wrong secret 401), first cycle delivered 11 customers + 28 products (all processed, 13 delivery sites), availability refreshed for 28 products, GitHub Actions heartbeat every 5 minutes green |
+| 3 | **Stage 1 — preparation** (`OPS_INTEGRATION_ORDERS=false` on Sales): customers and products flow to OPS, availability flows back; **orders stay manual in Sales** | **live since 2026-10-04** — signed health 200 (wrong secret 401), first cycle delivered 11 customers + 28 products (all processed, 13 delivery sites), availability refreshed for 28 products, GitHub Actions heartbeat green (4–8 runs a day in practice, see §4) |
 | 4 | **Products mapped and stocked** — every Sales product linked to its OPS SKU in برج التكامل → ربط الأصناف, with stock received in OPS | **done as a pilot (2026-10-04, owner's choice)** — the 28 Sales products did not exist in OPS, so they were created there and linked (`scm:integration-adopt-products`), with *estimated* weight/dimensions and a **trial opening balance of 100 each in RYD**; Sales reads ATP 100 for all 28. Before real operation: correct the attributes and replace the trial balances by a stock count |
 | 5 | **Stage 2 — operation** (`OPS_INTEGRATION_ORDERS=true`, `OPS_INTEGRATION_SINCE=<switch date>`): approved orders reserve stock in OPS and are fulfilled there | **on since 2026-10-04T13:43Z** (`OPS_INTEGRATION_SINCE`): orders approved after that moment go to OPS; older ones stay manual. Verified by signed cycles (nothing old was sent, availability refreshed). **First live order verified the same day:** ORD-2497 placed in Sales by the owner account → OPS `SO-2026-00126`, reserved FEFO in RYD (ATP 100 → 99), `order.accepted` + `order.reserved` applied in Sales and shown in the order (desktop and mobile). **Completed live on 2026-10-05:** FO-3314 picked and packed, trip TRP-2026-0033 loaded and dispatched, POD-1000 recorded (by dispatch on behalf of the driver), the restaurant worker confirmed receipt in Sales → order `done`; OPS processed `sales_order.received` with no mismatch, 8 OPS→Sales events gap-free, stock 100 → 99, trip closed. Not yet exercised live: shortage/backorder, cancellation, partial delivery and returns (covered by the local E2E and the test suite) |
 
@@ -91,12 +91,28 @@ Then: OPS `php artisan migrate --force` (creates `int_*`, adds the service user 
 | Path | When | What |
 |---|---|---|
 | Inline | right after a request commits | the events that request produced are delivered at once (5 s timeout; failure never affects the user) |
-| Opportunistic | after a mutating / system / tower request, at most every `INTEGRATION_OPPORTUNISTIC_SECONDS` | full cycle: inbox retries, waiting backorders, deliveries, the Sales cycle, reconciliation |
+| Opportunistic | on the background notification poll of any open OPS screen (`GET /api/notifications`, once a minute per screen), at most every `INTEGRATION_OPPORTUNISTIC_SECONDS` | full cycle: inbox retries, waiting backorders, deliveries, the Sales cycle, reconciliation |
 | Scheduler | `php artisan schedule:work` or cron `* * * * * php artisan schedule:run` | same cycle every minute (`scm:integration-run`) |
-| Heartbeat | signed `POST /api/v1/ops/heartbeat` (scope `ops:run`) | same cycle — for hosts without a scheduler; the workflow `.github/workflows/integration-cycle.yml` in the Sales repository calls it every 5 minutes once its variables are set |
+| Heartbeat | signed `POST /api/v1/ops/heartbeat` (scope `ops:run`) | same cycle — for hosts without a scheduler; the workflow `.github/workflows/integration-cycle.yml` in the Sales repository calls it |
+| On demand | برج التكامل → «تشغيل دورة» (`POST /api/integration/run`) | same cycle, now |
 
 One cycle on OPS also triggers the Sales cycle (`cycle_url`): outbox retries, repair of approved orders that were
 never sent, changed customers / products, refresh of the availability copy. So **one** scheduler drives both systems.
+
+**What to expect in practice (checked 2026-11-09).**
+
+* While anyone has OPS open, a cycle runs every two minutes by itself (the notification poll). No user action and no
+  call from Sales ever carries a cycle: on Vercel the work after a response finishes *before* the response is
+  delivered, and a cycle takes 7–10 s — attached to a save it froze that action (measured: 7.9 s against 0.6 s).
+* With nobody in OPS (nights, weekends) only the heartbeat runs. The workflow asks for every 5 minutes, but GitHub
+  starts scheduled workflows when it has capacity: **4 to 8 runs a day were observed for five weeks, not 288.** An
+  event that failed inline then waits for the next Sales command, the next OPS screen or the next heartbeat — hours in
+  the worst case. Nothing is lost; it is late.
+* GitHub disables the schedule of a public repository after 60 days without activity. The workflow re-enables itself
+  on every run, so it does not stop.
+* A real 5-minute cadence around the clock needs a real scheduler: a server with cron / `schedule:work`, Vercel Cron
+  (paid plan; the endpoint would need its own secret) or an external cron service calling the heartbeat. Owner's
+  decision — until then the two points above describe the behaviour.
 
 ## 5. Watching and repairing — برج التكامل (`/itower`)
 

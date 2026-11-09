@@ -188,27 +188,34 @@ class ControlTowerTest extends ApiTestCase
         $this->assertNotNull($this->expectOk($this->getAs('admin', '/api/integration/overview'))['lastReconciliation']);
     }
 
-    public function test_without_a_scheduler_a_cycle_runs_after_relevant_requests_at_most_once_per_window(): void
+    public function test_without_a_scheduler_a_cycle_rides_on_the_background_notification_poll_at_most_once_per_window(): void
     {
         Cache::forget('int:opportunistic');
         Cache::forget(\App\Integration\Services\IntegrationRunner::LAST_KEY);
         $last = fn () => Cache::get(\App\Integration\Services\IntegrationRunner::LAST_KEY);
 
         // off (the default in tests): nothing runs by itself
-        $this->signed('GET', '/api/v1/health')->assertOk();
+        $this->getAs('admin', '/api/notifications?limit=30')->assertOk();
         $this->assertNull($last());
 
         config(['integration.opportunistic_seconds' => 120]);
-        $this->getAs('admin', '/api/inventory/balances?pageSize=1')->assertOk(); // a plain read never triggers it
+        // A cycle takes seconds and on serverless PHP it finishes before the response is delivered, so nothing a person
+        // or another system waits for may carry it: not a read, not a user's action, not a system call (5 s timeout).
+        $this->getAs('admin', '/api/inventory/balances?pageSize=1')->assertOk();
+        $this->postAs('admin', '/api/notifications/read-all')->assertSuccessful();
+        $this->signed('GET', '/api/v1/health')->assertOk();
+        $this->getAs('admin', '/api/integration/overview')->assertOk();
+        $this->getJson('/api/notifications?limit=30')->assertStatus(401);         // nor an unauthenticated poll
         $this->assertNull($last());
-        $this->signed('GET', '/api/v1/health')->assertOk();                      // a call from another system does
+
+        $this->getAs('admin', '/api/notifications?limit=30')->assertOk();        // the poll every open screen sends in the background does
         $first = $last();
         $this->assertSame('opportunistic', $first['trigger']);
-        $this->signed('GET', '/api/v1/health')->assertOk();                      // inside the window: not again
+        $this->getAs('admin', '/api/notifications?limit=30')->assertOk();        // inside the window: not again
         $this->assertSame($first['at'], $last()['at']);
         $this->travel(121)->seconds();
         Cache::forget('int:opportunistic');                                      // the array cache does not follow the test clock
-        $this->signed('GET', '/api/v1/health')->assertOk();
+        $this->getAs('admin', '/api/notifications?limit=30')->assertOk();
         $this->assertNotSame($first['at'], $last()['at']);
     }
 

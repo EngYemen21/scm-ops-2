@@ -78,12 +78,13 @@ const excCols = computed(() => [
   { key: 'createdAt', header: { ar: 'منذ', en: 'Age' }, width: '62px' },
   { key: 'act', header: '', width: '138px', hidden: !exc.manage },
 ]);
+// tracks sum to 334px (+ row padding): the table fits the narrowest side column (340px) without scrolling inside its card
 const throughputCols = [
-  { key: 'code', header: { ar: 'المستودع', en: 'Warehouse' } },
-  { key: 'grnQty', header: { ar: 'استلام', en: 'GRN' }, kind: 'num', width: '80px' },
-  { key: 'pickedQty', header: { ar: 'تجهيز', en: 'Picked' }, kind: 'num', width: '70px' },
-  { key: 'dispatchedOrders', header: { ar: 'شحن', en: 'Dispatched' }, kind: 'num', width: '70px' },
-  { key: 'dispatchedTrips', header: { ar: 'رحلات', en: 'Trips' }, kind: 'num', width: '60px' },
+  { key: 'code', header: { ar: 'المستودع', en: 'Warehouse' }, width: 'minmax(72px,1fr)' },
+  { key: 'grnQty', header: { ar: 'استلام', en: 'GRN' }, kind: 'num', width: '70px' },
+  { key: 'pickedQty', header: { ar: 'تجهيز', en: 'Picked' }, kind: 'num', width: '58px' },
+  { key: 'dispatchedOrders', header: { ar: 'شحن', en: 'Dispatched' }, kind: 'num', width: '54px' },
+  { key: 'dispatchedTrips', header: { ar: 'رحلات', en: 'Trips' }, kind: 'num', width: '52px' },
 ];
 
 // ---- KPI cards: a /tower?… link becomes a queue filter, anything else navigates
@@ -133,14 +134,15 @@ const fields = [
   </PageHead>
   <ErrorBanner :error="tower.error.value" :closable="false" />
 
-  <KpiGrid compact class="!grid-cols-[repeat(auto-fit,minmax(140px,1fr))]">
+  <KpiGrid compact :min="140">
     <template v-if="tower.isLoading.value && !tw"><KpiCard v-for="i in 6" :key="i" loading compact label="" /></template>
     <template v-else>
       <KpiCard v-for="k in tw?.kpis || []" :key="k.key" compact clickable :value="k.value" :label="{ ar: k.labelAr, en: k.labelEn }" :sub="k.hint" :color="KPI_COLOR[k.key] || '#20242E'" :active="kpiActive(k)" @click="goKpi(k)" />
     </template>
   </KpiGrid>
 
-  <div class="grid-2 items-start">
+  <!-- `wide-main`: the queue table needs ~900px, so the side column sits beside it only on wide screens (app.css) -->
+  <div class="grid-2 wide-main items-start">
     <!-- left: exceptions queue -->
     <div class="col !gap-3.5">
       <div class="card">
@@ -205,7 +207,7 @@ const fields = [
     </div>
 
     <!-- right: SLA engine · stock at risk · throughput · integrations -->
-    <div class="col !gap-3.5">
+    <div class="col side-cards !gap-3.5">
       <div class="card">
         <CardTitle>
           {{ t('محرك SLA — حسب نوع الاستثناء', 'SLA engine — by exception kind') }}
@@ -232,7 +234,8 @@ const fields = [
 
       <div v-if="tw" class="card sm">
         <CardTitle>{{ t('مخزون معرّض للخطر', 'Stock at risk') }}</CardTitle>
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2 px-[18px] pb-3.5">
+        <!-- six tiles: always 3 + 3 (2 × 3 on a narrow phone), never 4 + 2 -->
+        <div class="grid grid-cols-3 gap-2 px-[18px] pb-3.5 max-[420px]:grid-cols-2">
           <div class="tile red cursor-pointer" @click="router.push('/batches?status=expired')">
             <div class="tile-v text-bad">{{ fmtNum(tw.stockAtRisk.expiredQty) }}</div>
             <div class="tile-l">{{ t('منتهي الصلاحية', 'Expired') }}<span v-if="tw.costVisible && tw.stockAtRisk.expiredValue != null" class="num"> · {{ fmtMoney(tw.stockAtRisk.expiredValue) }} {{ t('ر.س', 'SAR') }}</span></div>
@@ -269,11 +272,15 @@ const fields = [
           <Btn v-if="auth.can('settings.manage')" tone="ghost" size="sm" class="!text-[#7FD6E5]" :label="{ ar: 'الإعدادات ←', en: 'Settings →' }" @click="router.push('/settings?tab=integrations')" />
         </div>
         <div class="col !gap-[7px]">
+          <!-- name over its setting, status at the end: one even row per integration at any column width (the three
+               items side by side stuck out of a narrow side column) -->
           <div v-for="i in tw?.integrations || []" :key="i.key" class="flex items-center gap-2">
             <div class="h-1.5 w-1.5 flex-none rounded-full" :class="i.status === 'connected' ? 'pulse bg-brand' : 'bg-warn'" />
-            <div class="min-w-[90px] text-[10px] font-bold text-[#7FD6E5]">{{ lang === 'ar' ? i.labelAr : i.labelEn }}</div>
-            <div class="num text-[8px] text-[#5b6076]" dir="ltr">{{ i.configVar }}</div>
-            <div class="flex-1 text-end"><IntegrationChip :status="i.status" small /></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-[10px] font-bold text-[#7FD6E5]">{{ lang === 'ar' ? i.labelAr : i.labelEn }}</div>
+              <div class="num ltr ellipsis text-[8px] text-[#5b6076]">{{ i.configVar }}</div>
+            </div>
+            <IntegrationChip :status="i.status" small class="flex-none" />
           </div>
           <div v-if="tw && tw.integrations.length === 0" class="text-[10px] text-[#8b90a5]">—</div>
         </div>

@@ -139,10 +139,16 @@ Decisions:
    added later as advisory only.
 
 Scheduling (Vercel has no worker): `php artisan scm:integration-run` every minute where a scheduler exists; without
-one the same cycle runs opportunistically after a mutating / system request (at most every
-`INTEGRATION_OPPORTUNISTIC_SECONDS`) and from the signed `POST /api/v1/ops/heartbeat` (GitHub Actions cron in the
-Sales repository, every 5 min once configured). One OPS cycle also triggers the Sales cycle. The inline attempt makes
-the normal path immediate; the cycle only repairs.
+one the same cycle rides on the background notification poll every open OPS screen sends once a minute (at most every
+`INTEGRATION_OPPORTUNISTIC_SECONDS`) and runs from the signed `POST /api/v1/ops/heartbeat` (GitHub Actions cron in the
+Sales repository). One OPS cycle also triggers the Sales cycle. The inline attempt makes the normal path immediate;
+the cycle only repairs.
+
+Why the notification poll and not "after a mutating / system request" (the first design): on serverless PHP the
+terminable middleware finishes **before** the response reaches the client, and a cycle takes 7–10 s because it also
+runs the other system's cycle. Measured in production on 2026-11-09: 7.9 s for the request that carried a cycle against
+0.6 s without one. Attached to a user's save that froze the action about once every two minutes; attached to a call
+from Sales it outlived Sales' 5 s timeout. Nobody waits for a notification poll, so the cycle costs no one anything.
 
 ---
 

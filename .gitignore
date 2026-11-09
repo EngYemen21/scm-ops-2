@@ -44,3 +44,6 @@ ios/App/build/
 *.jks
 android/.kotlin/
 android/app/.cxx/
+
+# developer hand-off packages prepared locally (may contain tokens)
+/handoff/

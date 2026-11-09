@@ -38,6 +38,35 @@ class SettingsService
         'company' => ['value' => ['nameAr' => 'B2B', 'nameEn' => 'B2B', 'currency' => 'SAR'], 'group' => 'general', 'description' => 'Company profile'],
     ];
 
+    /** Arabic text of each policy for the settings page (`descriptionAr`); `description` stays the English one. */
+    public const DESCRIPTIONS_AR = [
+        'procurement.approvalTiers' => 'سلسلة اعتماد أمر الشراء حسب الإجمالي (ر.س)',
+        'procurement.minSupplierScore' => 'المورد الذي يقل تقييمه عن هذا الحد يحتاج استثناءً من مدير المشتريات لإصدار أمر شراء جديد',
+        'procurement.newSupplierScore' => 'التقييم الابتدائي للمورد الجديد',
+        'procurement.prApprovalTiers' => 'سلسلة اعتماد طلب الشراء حسب القيمة التقديرية: تُطبَّق أول شريحة حدّها مفتوح أو لا يقل عن القيمة',
+        'procurement.allowSelfApproval' => 'السماح لمنشئ طلب الشراء أو أمر الشراء باعتماده بنفسه (يُعطّل فصل المهام)',
+        'procurement.minQuotes' => 'عدد عروض الأسعار المطلوب قبل ترسية طلب العروض؛ الأقل يتطلب استثناءً موثقًا',
+        'procurement.invoiceTolerancePct' => 'نسبة الفرق المسموح بها بين فاتورة المورد وأمر الشراء (سعرًا أو إجماليًا) قبل اعتبارها محل خلاف',
+        'finance.fleetExpensesIncludeVat' => 'مبالغ الوقود والصيانة تشمل ضريبة 15%: تُفصل ضريبة المدخلات منها (قرار المدير المالي)',
+        'finance.customerTermsDays' => 'أيام الائتمان الافتراضية لفواتير العملاء عند عدم تحديدها للعميل (0 = تستحق عند التسليم)',
+        'procurement.supplierDocWarnDays' => 'التنبيه عند انتهاء مستند المورد خلال N يومًا',
+        'receiving.allowExcess' => 'السماح باستلام كمية تزيد على المفتوح في أمر الشراء',
+        'inventory.autoQuarantineDays' => 'الدفعات التي تنتهي صلاحيتها خلال N يومًا تُحجر آليًا بالمهمة اليومية',
+        'inventory.expiringSoonDays' => 'نافذة «قريب الانتهاء» في لوحة المتابعة (بالأيام)',
+        'sales.vatPct' => 'نسبة ضريبة القيمة المضافة',
+        'sales.maxDiscountPct' => 'الخصم الأعلى من هذه النسبة يحتاج اعتماد مدير المبيعات',
+        'sales.enforceCreditLimit' => 'رفض أمر البيع إذا تجاوز رصيد العميل مع الطلب حدّه الائتماني',
+        'delivery.autoReturnOnPartial' => 'التسليم الجزئي يُنشئ مرتجع عميل بالكمية المتبقية',
+        'exceptions.sla' => 'ساعات اتفاقية مستوى الخدمة (SLA) لكل نوع استثناء',
+        'fleet.docExpiryWarnDays' => 'التنبيه عند انتهاء مستندات المركبة أو السائق خلال N يومًا',
+        'fleet.driverLicenseMinDays' => 'السائق الذي تنتهي رخصته خلال N يومًا لا يُفعَّل ولا يُسند إليه',
+        'fleet.fuelMaxPricePerLiter' => 'الحد الأعلى لسعر اللتر المقبول في سجل الوقود (ر.س/لتر)',
+        'fleet.fuelAnomalyRatio' => 'يُعلَّم الاستهلاك إذا قلّ معدل كم/لتر عن هذه النسبة من متوسط المركبة',
+        'fleet.maintenanceSoonKm' => 'خفض ترشيح المركبة عند استحقاق صيانتها خلال N كم',
+        'loading.cbmPerCarton' => 'الحجم الافتراضي للكرتون (م³) عند غياب حجم الطلب',
+        'company' => 'بيانات الشركة',
+    ];
+
     /** @var array<string, mixed> per-process cache; cleared on set() and by flush() (tests). */
     private array $cache = [];
 
@@ -67,10 +96,10 @@ class SettingsService
     {
         $out = [];
         foreach (self::DEFAULTS as $key => $d) {
-            $out[$key] = ['value' => $d['value'], 'group' => $d['group'], 'description' => $d['description'], 'isDefault' => true];
+            $out[$key] = ['value' => $d['value'], 'group' => $d['group'], 'description' => $d['description'], 'isDefault' => true, 'descriptionAr' => self::DESCRIPTIONS_AR[$key] ?? null];
         }
         foreach (SystemSetting::all() as $row) {
-            $out[$row->key] = ['value' => $row->value, 'group' => $row->group, 'description' => $row->description, 'isDefault' => false, 'updatedAt' => $row->updated_at];
+            $out[$row->key] = ['value' => $row->value, 'group' => $row->group, 'description' => $row->description, 'isDefault' => false, 'updatedAt' => $row->updated_at, 'descriptionAr' => self::DESCRIPTIONS_AR[$row->key] ?? null];
         }
 
         return $out;
