@@ -21,7 +21,8 @@ const act = useAction();
 // The server applies the same rule (DeliveryService::myTrips); every action is recorded under the signed-in user.
 const route = useRoute();
 const onBehalf = computed(() => (auth.can('trip.manage') && typeof route.query.driver === 'string' && route.query.driver ? route.query.driver : null));
-const q = useGet('/delivery/my-trips', computed(() => (onBehalf.value ? { driver: onBehalf.value } : undefined)), { refetchInterval: 30_000 });
+// Polls every 30 s — except once the server said the account is not a driver: that answer does not change by asking again.
+const q = useGet('/delivery/my-trips', computed(() => (onBehalf.value ? { driver: onBehalf.value } : undefined)), { refetchInterval: (query) => (query.state.error?.code === 'NOT_A_DRIVER' ? false : 30_000) });
 const opr = useList('/transport/ops-requests', { pageSize: 5 });
 const oprOpen = ref(false);
 

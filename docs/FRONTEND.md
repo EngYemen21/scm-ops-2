@@ -38,6 +38,10 @@ page work. Need something new? Put it in your domain folder; propose shared chan
 2. **Server data goes through `useList` / `useGet`**; pass params as a getter so the query follows your refs:
    `useList('/sales/orders', () => ({ page: page.value, status: status.value, ...wh.whParams }))`.
    A null path disables a query: `useGet(() => (sel.value ? `/sales/orders/${sel.value}` : null))`.
+   A refusal (403 / 404 / 422) is an answer and is shown at once; only a network or 5xx failure is retried, once.
+   When you call `useQuery` yourself, never pass an option as `undefined` — vue-query spreads the per-query options
+   over the client defaults, so `retry: undefined` silently becomes "retry three times with back-off" (that is how
+   every refused GET used to show a skeleton for ~7 s).
 3. **Every mutation goes through `useAction().run(...)`** with `api.postIdempotent` (double clicks are replayed by the
    server, not repeated). It toasts success/errors, invalidates queries (`invalidate: ['sales', 'inventory']` = URL
    prefixes) and exposes `pending` / `error` refs — bind `:loading="act.pending.value"` and
@@ -86,6 +90,12 @@ page work. Need something new? Put it in your domain folder; propose shared chan
 Every tab, table, filter, drawer, form, action button, empty / loading / error state and deep link of the reference page
 exists and calls the same endpoint; `npm run build` passes; the page was opened in the browser against the running API
 with no console errors, and each action button was pressed once on demo data.
+
+**Before a release, sweep the whole client**: `tools/ui-sweep.cjs` opens every page, tab, entity page, "+ …" form and
+first table row as one role at one screen size and fails on JS exceptions, failed API calls, error banners, render
+crashes, placeholders that never go away, raw `undefined` / `NaN` in text, a page that scrolls sideways and a drawer
+that does not close (usage and the full release matrix — sizes × roles — are in the file's header). It runs against a
+local server only.
 
 ## Phone layout
 

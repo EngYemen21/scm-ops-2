@@ -19,8 +19,10 @@ const groups = computed(() => {
 <template>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <div v-if="q.isLoading.value && !q.data.value" class="card p-[18px]"><div class="skel h-3.5 w-2/5" /></div>
-  <div class="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3">
-    <div v-for="[g, rows] in groups" :key="g" class="card sm px-[18px] py-4">
+  <!-- Columns, not a grid: the groups differ a lot in height (procurement holds the approval tiers), and a grid row is
+       as tall as its tallest card — the short cards beside it were mostly empty. Columns pack the cards under each other. -->
+  <div class="columns-[340px] gap-3">
+    <div v-for="[g, rows] in groups" :key="g" class="card sm mb-3 break-inside-avoid px-[18px] py-4">
       <div class="text-[12.5px] font-extrabold text-violet">{{ lang === 'ar' ? SETTING_GROUP_LABELS[g]?.ar || g : SETTING_GROUP_LABELS[g]?.en || g }}</div>
       <div class="mt-1.5"><SettingEditor v-for="[k, r] in rows" :key="k" :k="k" :row="r" /></div>
     </div>

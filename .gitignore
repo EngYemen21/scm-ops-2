@@ -59,4 +59,5 @@ android/app/.cxx/
 .agents/
 boost.json
 
-
+# developer hand-off packages prepared locally (may contain tokens)
+/handoff/

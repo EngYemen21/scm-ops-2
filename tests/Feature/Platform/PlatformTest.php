@@ -131,6 +131,11 @@ class PlatformTest extends ApiTestCase
         $all = $this->expectOk($this->getAs('admin', '/api/settings'));
         $this->assertEqualsCanonicalizing(array_keys(SettingsService::DEFAULTS), array_keys($all));
         $this->assertSame(['value', 'group', 'description', 'isDefault'], array_slice(array_keys($all['sales.vatPct']), 0, 4));
+        // the settings page is used in Arabic: every policy carries its Arabic text, none falls back to the English one
+        $this->assertEqualsCanonicalizing(array_keys(SettingsService::DEFAULTS), array_keys(SettingsService::DESCRIPTIONS_AR));
+        foreach ($all as $key => $row) {
+            $this->assertMatchesRegularExpression('/\p{Arabic}/u', (string) $row['descriptionAr'], "Arabic description of {$key}");
+        }
         $before = $all['inventory.expiringSoonDays']['value'];
         $this->assertSame(30, $before);
 

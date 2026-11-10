@@ -166,10 +166,21 @@ export const api = {
 // ---------------------------------------------------------------- vue-query
 export const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 10_000, refetchOnWindowFocus: false, retry: (count, err) => !(isApiError(err) && err.status > 0 && err.status < 500) && count < 1 },
+    // staleTime 0: a page always revalidates when it opens (the cached copy shows meanwhile); a query opts into a longer
+    //   freshness itself (lookups). retry: a refusal (4xx — forbidden, not found, validation) is an ANSWER, never
+    //   retried; a network / 5xx failure is retried once.
+    queries: { staleTime: 0, refetchOnWindowFocus: false, retry: (count, err) => !(isApiError(err) && err.status > 0 && err.status < 500) && count < 1 },
     mutations: { retry: 0 },
   },
 });
+
+/**
+ * Only the options a caller actually set. vue-query merges per-query options OVER the client defaults with a plain
+ * spread, so a key that is present but `undefined` REPLACES the default — `retry: undefined` silently became the
+ * library's "retry 3 times with back-off" for every failed GET (a 403 / 404 showed a skeleton for ~7 s and hit the
+ * server four times before the message appeared).
+ */
+const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 /** `['api', ...segments, params]` so `invalidate(['inventory'])` hits every query under `/inventory/**`. */
 export const queryKey = (path, params) => ['api', ...String(path).split('?')[0].split('/').filter(Boolean), ...(params ? [params] : [])];
@@ -185,10 +196,7 @@ export function useList(path, params, opts = {}) {
     queryKey: computed(() => queryKey(toValue(path), toValue(params))),
     queryFn: ({ signal }) => api.get(toValue(path), toValue(params), signal),
     enabled: computed(() => !!toValue(path) && (toValue(opts.enabled) ?? true)),
-    refetchInterval: opts.refetchInterval,
-    staleTime: opts.staleTime,
-    placeholderData: opts.keepPrevious === false ? undefined : keepPreviousData,
-    retry: opts.retry === false ? 0 : undefined,
+    ...defined({ refetchInterval: opts.refetchInterval, staleTime: opts.staleTime, placeholderData: opts.keepPrevious === false ? undefined : keepPreviousData, retry: opts.retry === false ? 0 : undefined }),
   });
 }
 
@@ -198,9 +206,7 @@ export function useGet(path, params, opts = {}) {
     queryKey: computed(() => queryKey(toValue(path) || '__disabled__', toValue(params))),
     queryFn: ({ signal }) => api.get(toValue(path), toValue(params), signal),
     enabled: computed(() => !!toValue(path) && (toValue(opts.enabled) ?? true)),
-    refetchInterval: opts.refetchInterval,
-    staleTime: opts.staleTime,
-    retry: opts.retry === false ? 0 : undefined,
+    ...defined({ refetchInterval: opts.refetchInterval, staleTime: opts.staleTime, retry: opts.retry === false ? 0 : undefined }),
   });
 }
 

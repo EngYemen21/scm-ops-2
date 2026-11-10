@@ -123,8 +123,9 @@
   .card-sub { font-size: 10px; color: #7d7990; margin-top: 2px; font-weight: 400; }
   .card-count { font-size: 9.5px; color: #a8a4b8; font-weight: 700; }
   .card-body { padding: 0 18px 16px; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .kpi-grid.compact { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px; }
+  /* `--kpi-min` = minimum tile width; <KpiGrid> reads it to spread the tiles over even rows (components/KpiGrid.vue). */
+  .kpi-grid { --kpi-min: 170px; display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--kpi-min), 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi-grid.compact { --kpi-min: 128px; gap: 9px; }
   .kpi { background: #fff; border: 1px solid #E9E6F0; border-radius: 14px; padding: 13px 15px; }
   .kpi.click { cursor: pointer; } .kpi.click:hover { border-color: #7FD6E5; }
   .kpi-v { font-size: 21px; font-weight: 700; font-family: 'Quicksand', sans-serif; line-height: 1.2; direction: ltr; display: flex; align-items: baseline; gap: 4px; }
@@ -338,9 +339,19 @@
   .row.wrap { flex-wrap: wrap; }
   .col { display: flex; flex-direction: column; gap: 8px; }
   .grow { flex: 1; min-width: 0; }
-  .grid-2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
-  .grid-eq { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
-  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  /* Tracks may shrink below their content (minmax(0, …) + min-width: 0): a wide table inside scrolls in its own card
+     instead of pushing the whole page sideways (an `fr` track alone never gets narrower than its widest child). */
+  .grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; }
+  .grid-eq { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+  .grid-2 > *, .grid-eq > * { min-width: 0; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+  /* `wide-main`: the main column carries a wide table. Side by side only when both fit (≥ 1560px); below that the
+     table takes the full width and the side cards (`side-cards`) flow in columns under it. */
+  .grid-2.wide-main { grid-template-columns: minmax(0, 2.4fr) minmax(340px, 1fr); }
+  @media (max-width: 1559px) {
+    .grid-2.wide-main { grid-template-columns: minmax(0, 1fr); }
+    .grid-2.wide-main > .side-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); align-items: start; }
+  }
   .mb8 { margin-bottom: 8px; } .mb12 { margin-bottom: 12px; } .mb16 { margin-bottom: 16px; } .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; }
   .tile { background: #FAF9FC; border-radius: 12px; padding: 10px 12px; }
   .tile.amber { background: #FBF0DD; } .tile.green { background: #E6F9EC; } .tile.red { background: #FDECEC; } .tile.purple { background: #EFEAF8; } .tile.teal { background: #d9f4f9; }

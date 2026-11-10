@@ -111,7 +111,7 @@ const pgTo = computed(() => (pg.value ? Math.min(pg.value.total, pg.value.page *
     <Btn tone="outline" size="sm" :disabled="!rows.length" :label="{ ar: 'تصدير Excel', en: 'Export Excel' }" @click="exportCsv" />
   </PageHead>
 
-  <KpiGrid compact class="!grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
+  <KpiGrid compact :min="150">
     <KpiCard compact clickable :value="kActive.data.value?.total" :loading="kActive.isLoading.value" :label="{ ar: 'صنفًا معتمدًا', en: 'Active SKUs' }" color="#20242E" :active="active === 'true' && !stor" @click="active = 'true'; page = 1" />
     <KpiCard compact clickable :value="lk ? lk.categories.filter((c) => c.active).length : null" :loading="!lk" :label="{ ar: 'فئة', en: 'Categories' }" color="#654e92" @click="catsOpen = true" />
     <KpiCard compact clickable :value="coldCount" :loading="kChilled.isLoading.value || kFrozen.isLoading.value" :label="{ ar: 'مبرد ومجمد', en: 'Cold chain SKUs' }" color="#3C79F5" @click="stor = stor === 'chilled' ? 'frozen' : 'chilled'; page = 1" />

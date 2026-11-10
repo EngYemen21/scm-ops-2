@@ -11,7 +11,7 @@ import { TIER_KEYS, isTierList, settingKind, settingText, validateTiers } from '
 const props = defineProps({
   /** Setting key, e.g. `inventory.expiringSoonDays`. */
   k: { type: String, required: true },
-  /** { value, group, description, isDefault, updatedAt } */
+  /** { value, group, description, descriptionAr, isDefault, updatedAt } */
   row: { type: Object, required: true },
 });
 
@@ -54,7 +54,7 @@ async function save() {
         <Chip v-if="row.isDefault" small :label="{ ar: 'افتراضي', en: 'Default' }" fg="#0d7f93" bg="#d9f4f9" />
         <Chip v-else small :label="{ ar: 'مُعدّل', en: 'Overridden' }" fg="#654e92" bg="#efeaf8" :title="row.updatedAt ? fmtDate(row.updatedAt) : null" />
       </div>
-      <div class="mt-0.5 text-[10px] leading-[1.7] text-muted">{{ row.description }}</div>
+      <div class="mt-0.5 text-[10px] leading-[1.7] text-muted">{{ lang === 'ar' && row.descriptionAr ? row.descriptionAr : row.description }}</div>
       <div class="row mt-1.5 !items-start">
         <SelectInput v-if="kind === 'bool'" v-model="draft" small class="w-[140px]" :options="[['true', { ar: 'مفعّل', en: 'On' }], ['false', { ar: 'معطّل', en: 'Off' }]]" />
         <NumberInput v-else-if="kind === 'num'" small class="w-[140px]" :model-value="draft === '' ? null : Number(draft)" :error="invalid" @update:model-value="(n) => { draft = n == null ? '' : String(n); invalid = null; }" @enter="save" />
