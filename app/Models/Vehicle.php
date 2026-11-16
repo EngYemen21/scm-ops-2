@@ -46,6 +46,9 @@ class Vehicle extends BaseModel
             'course' => 'integer',
             'lng' => 'float',
             'active' => 'boolean',
+            'purchase_cost' => 'decimal:2',
+            'salvage_value' => 'decimal:2',
+            'life_km' => 'integer',
         ];
     }
 

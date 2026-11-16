@@ -11,7 +11,7 @@ import { useAuth } from '@/stores/auth';
 import { useWarehouse } from '@/stores/warehouse';
 import PutawayList from './PutawayList.vue';
 import ShipmentPanel from './ShipmentPanel.vue';
-import { pn, useShipmentActions } from './shared';
+import { liveGrn, pn, useShipmentActions } from './shared';
 
 const props = defineProps({
   sel: { type: String, default: null },
@@ -71,7 +71,7 @@ const STATUSES = [
       <template #cell-supplier="{ row }"><span class="cell-name">{{ pn(row.supplier) }}</span></template>
       <template #cell-wh="{ row }"><span class="text-[10px] font-bold">{{ row.warehouse.code }} · {{ pn(row.warehouse) }}</span></template>
       <template #cell-status="{ row }">
-        <div class="row !gap-1"><Chip :map="SHIPMENT_LABELS" :k="row.status" /><Chip v-if="row.locked" small fg="#7d7990" bg="#F1EFF6" :label="{ ar: 'بانتظار اعتماد PO', en: 'Awaiting PO approval' }" /></div>
+        <div class="row !gap-1"><Chip :map="SHIPMENT_LABELS" :k="row.status" /><Chip v-if="row.locked" small fg="#7d7990" bg="#F1EFF6" :label="{ ar: 'بانتظار اعتماد PO', en: 'Awaiting PO approval' }" /><Chip v-if="row.refusedAt" small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'رُفضت عند البوابة', en: 'Refused at the gate' }" :title="row.refusedReason || null" /></div>
       </template>
       <template #cell-act="{ row }">
         <span class="row justify-end !gap-1.5">
@@ -88,8 +88,9 @@ const STATUSES = [
     <div v-if="sel && !shipment && detail.isLoading.value" class="skel min-h-[260px]" />
     <template v-if="shipment">
       <div class="-mt-3.5"><ShipmentPanel :shipment="shipment" @changed="detail.refetch(); list.refetch()" @grn-posted="detail.refetch(); list.refetch()" @open="open" /></div>
-      <PutawayList v-if="['putaway', 'done'].includes(shipment.status)" :params="{ grn: shipment.grns[0]?.number, status: shipment.status === 'done' ? 'done' : 'open' }">
-        <template #title>{{ t('مهام التخزين لهذه الشحنة', 'Putaway tasks for this shipment') }} <span class="num muted text-[10px]">{{ shipment.grns.map((g) => g.number).join(' · ') }}</span></template>
+      <!-- the tasks of the receipt in force: a voided receipt (still listed on the panel) has none left -->
+      <PutawayList v-if="['putaway', 'done'].includes(shipment.status) && liveGrn(shipment)" :params="{ grn: liveGrn(shipment), status: shipment.status === 'done' ? 'done' : 'open' }">
+        <template #title>{{ t('مهام التخزين لهذه الشحنة', 'Putaway tasks for this shipment') }} <span class="num muted text-[10px]">{{ liveGrn(shipment) }}</span></template>
       </PutawayList>
     </template>
   </Drawer>

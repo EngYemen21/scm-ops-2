@@ -7,6 +7,7 @@ use App\Models\Batch;
 use App\Models\Bin;
 use App\Models\InventoryAllocation;
 use App\Models\InventoryBalance;
+use App\Models\InventoryHold;
 use App\Models\InventoryMovement;
 use App\Models\InventoryReservation;
 use App\Models\Product;
@@ -263,13 +264,17 @@ class InventoryService
      * Reserve + allocate (FEFO) for one sales-order line. Locks the candidate rows; throws when insufficient.
      *
      * @param  array{soId:string, soLineId:string, productId:string, warehouseId:string, qty:int, referenceNumber:string,
-     *               preferBinId?:?string, preferBatchId?:?string}  $p
+     *               preferBinId?:?string, preferBatchId?:?string, excludeRows?:string[]}  $p
      * @return array{reservation:InventoryReservation, allocations:InventoryAllocation[]}
      */
     public function reserve(?AuthUser $user, ?string $txId, array $p): array
     {
         $this->requireTransaction();
         $rows = $this->allocRows($p['productId'], $p['warehouseId'], true);
+        // `excludeRows` (balance row ids): a batch substitution re-allocates away from the row the picker reported
+        if (! empty($p['excludeRows'])) {
+            $rows = $rows->reject(fn ($r) => in_array($r->id, $p['excludeRows'], true))->values();
+        }
         $available = (int) $rows->sum(fn ($r) => $r->on_hand - $r->reserved);
         if ($available < $p['qty']) {
             $name = Product::find($p['productId'])?->name_ar ?? '';
@@ -347,11 +352,90 @@ class InventoryService
         $row?->update(['reserved' => max(0, $row->reserved - $qty), 'allocated' => max(0, $row->allocated - $qty), 'version' => $row->version + 1]);
     }
 
+    // ───────────── holds: stock kept for a document that is not a sales order ─────────────
+
+    /**
+     * Holds stock on ONE balance row for an approved transfer or a supplier return taken from the shelf. reserved and
+     * allocated go up exactly like a sales allocation, so nothing else can take the quantity; it leaves the row later
+     * through postHold(), or comes back with releaseHolds(). Throws INSUFFICIENT_AVAILABLE when the row cannot cover it.
+     *
+     * @param  array{ownerType:string, ownerId:string, ownerNumber?:?string, ownerLineId?:?string, productId:string,
+     *               binId:string, batchId?:?string, qty:int, allowQuarantine?:bool}  $h
+     */
+    public function hold(array $h): InventoryHold
+    {
+        $this->requireTransaction();
+        $qty = $h['qty'] ?? null;
+        if (! is_int($qty) || $qty <= 0) {
+            throw AppError::validation('BAD_QTY', 'الكمية يجب أن تكون عددًا صحيحًا أكبر من صفر', 'Quantity must be a positive integer');
+        }
+        $batchId = $h['batchId'] ?? null;
+        $row = $this->lockRow($h['productId'], $h['binId'], $batchId, false);
+        $usable = $row && ! $row->blocked && (! $row->quarantine || ! empty($h['allowQuarantine']));
+        $free = $usable ? $row->on_hand - $row->reserved : 0;
+        if ($qty > $free) {
+            $code = Bin::whereKey($h['binId'])->value('code');
+            throw AppError::rule('INSUFFICIENT_AVAILABLE', "المتاح في {$code} ({$free}) أقل من {$qty} — لا يمكن حجزه", "Available at {$code} ({$free}) is less than {$qty}", ['available' => $free, 'requested' => $qty]);
+        }
+        $row->update(['reserved' => $row->reserved + $qty, 'allocated' => $row->allocated + $qty, 'version' => $row->version + 1]);
+
+        return InventoryHold::create([
+            'owner_type' => $h['ownerType'], 'owner_id' => $h['ownerId'], 'owner_number' => $h['ownerNumber'] ?? null, 'owner_line_id' => $h['ownerLineId'] ?? null,
+            'product_id' => $h['productId'], 'warehouse_id' => $row->warehouse_id, 'bin_id' => $h['binId'], 'batch_id' => $batchId, 'qty' => $qty,
+        ]);
+    }
+
+    /**
+     * The active holds of a document (optionally of one of its lines), oldest first.
+     *
+     * @return Collection<int, InventoryHold>
+     */
+    public function activeHolds(string $ownerType, string $ownerId, ?string $ownerLineId = null): Collection
+    {
+        return InventoryHold::where('owner_type', $ownerType)->where('owner_id', $ownerId)->where('status', 'active')
+            ->when($ownerLineId, fn ($q) => $q->where('owner_line_id', $ownerLineId))->orderBy('created_at')->orderBy('id')->get();
+    }
+
+    /** Gives the active holds of a document (or of one line) back to available. Returns the released quantity. */
+    public function releaseHolds(string $ownerType, string $ownerId, ?string $ownerLineId = null): int
+    {
+        $this->requireTransaction();
+        $released = 0;
+        foreach ($this->activeHolds($ownerType, $ownerId, $ownerLineId) as $hold) {
+            $row = $this->lockRow($hold->product_id, $hold->bin_id, $hold->batch_id, false);
+            $row?->update(['reserved' => max(0, $row->reserved - $hold->qty), 'allocated' => max(0, $row->allocated - $hold->qty), 'version' => $row->version + 1]);
+            $hold->update(['status' => 'released', 'released_at' => now()]);
+            $released += $hold->qty;
+        }
+
+        return $released;
+    }
+
+    /**
+     * Moves the held quantity out of its row and closes the hold (transfer ship, supplier-return ship).
+     *
+     * @param  array  $m  the post() payload WITHOUT productId / batchId / qty / from / consumeReserved (taken from the hold)
+     */
+    public function postHold(?AuthUser $user, ?string $txId, InventoryHold $hold, array $m): InventoryMovement
+    {
+        $this->requireTransaction();
+        if ($hold->status !== 'active') {
+            throw AppError::conflict('HOLD_CLOSED', 'الحجز مُغلق مسبقًا', 'Hold is no longer active');
+        }
+        $mv = $this->post($user, $txId, [
+            'productId' => $hold->product_id, 'batchId' => $hold->batch_id, 'qty' => $hold->qty,
+            'from' => ['warehouseId' => $hold->warehouse_id, 'binId' => $hold->bin_id], 'consumeReserved' => $hold->qty,
+        ] + $m);
+        $hold->update(['status' => 'consumed', 'released_at' => now()]);
+
+        return $mv;
+    }
+
     // ───────────── reconciliation ─────────────
 
     /**
      * Σ ledger (stock types, destination − source) per (product, bin, batch) must equal the balance row, and
-     * reserved must equal Σ active allocations (qty − picked).
+     * reserved must equal Σ active allocations (qty − picked) + Σ active holds.
      *
      * @return array{ok:bool, checked:int, mismatches:array<int,array<string,mixed>>}
      */
@@ -367,11 +451,14 @@ class InventoryService
         $allocated = InventoryAllocation::where('status', 'active')->groupBy('product_id', 'bin_id', 'batch_id')
             ->selectRaw('product_id, bin_id, batch_id, SUM(qty) - SUM(picked_qty) as open_qty')->get()
             ->mapWithKeys(fn ($a) => [$key($a->product_id, $a->bin_id, $a->batch_id) => (int) $a->open_qty]);
+        $held = InventoryHold::where('status', 'active')->groupBy('product_id', 'bin_id', 'batch_id')
+            ->selectRaw('product_id, bin_id, batch_id, SUM(qty) as held_qty')->get()
+            ->mapWithKeys(fn ($h) => [$key($h->product_id, $h->bin_id, $h->batch_id) => (int) $h->held_qty]);
 
-        $rows = $balances->map(function ($b) use ($key, $in, $out, $allocated) {
+        $rows = $balances->map(function ($b) use ($key, $in, $out, $allocated, $held) {
             $k = $key($b->product_id, $b->bin_id, $b->batch_id);
             $ledger = ($in[$k] ?? 0) - ($out[$k] ?? 0);
-            $expected = $allocated[$k] ?? 0;
+            $expected = ($allocated[$k] ?? 0) + ($held[$k] ?? 0);
 
             return [
                 'sku' => $b->product->sku, 'name' => $b->product->name_ar, 'bin' => $b->bin->code, 'batch' => $b->batch?->batch_no ?? '—',

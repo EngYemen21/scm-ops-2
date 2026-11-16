@@ -2,9 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Finance\FinanceBootstrap;
 use App\Integration\IntegrationBootstrap;
 use App\Models\User;
 use App\Services\Core\SettingsService;
+use App\Services\Sales\CreditService;
 use App\Support\PermissionSync;
 use App\Support\SnapshotImporter;
 use Illuminate\Database\Seeder;
@@ -34,8 +36,10 @@ class DatabaseSeeder extends Seeder
         $settings->ensureDefaults();
         IntegrationBootstrap::ensure(); // the snapshot replaced the access tables: integration permissions + service users
         PermissionSync::ensure(); // permissions added after the snapshot was taken (e.g. supplier invoices) with their default role grants
-        \App\Finance\FinanceBootstrap::ensure(); // chart of accounts + cost centers per warehouse + cash/bank rows (no balances)
+        PermissionSync::grant(PermissionSync::GRANTS_2026_11); // existing permissions the 2026-11 hardening gave to more roles
+        FinanceBootstrap::ensure(); // chart of accounts + cost centers per warehouse + cash/bank rows (no balances)
         $this->call(DemoCoordinatesSeeder::class);
+        app(CreditService::class)->syncAll(); // customers.balance = unpaid invoices + open orders (the snapshot carries the old counter)
         $this->command?->info('[seed] imported '.array_sum($counts).' rows into '.count(array_filter($counts)).' tables');
         $this->command?->info('[seed] logins: admin, sales, wm, inv, proc, disp, worker, driver, gm, finance — password = SEED_PASSWORD');
     }

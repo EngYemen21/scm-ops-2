@@ -41,6 +41,7 @@ class Driver extends BaseModel
             'phone_accuracy' => 'float',
             'phone_speed_kph' => 'float',
             'phone_at' => 'datetime',
+            'hourly_cost' => 'decimal:2',
         ];
     }
 

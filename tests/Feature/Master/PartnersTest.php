@@ -3,8 +3,13 @@
 namespace Tests\Feature\Master;
 
 use App\Models\AuditLog;
+use App\Models\Product;
+use App\Models\SalesOrder;
+use App\Models\SalesOrderLine;
 use App\Models\StatusHistory;
 use App\Models\Supplier;
+use App\Models\Warehouse;
+use App\Services\Sales\CreditService;
 use Tests\ApiTestCase;
 
 /** Suppliers + customers: numbering, CR/VAT and credit rules, paging / search / filters, audit, RBAC. */
@@ -188,15 +193,28 @@ class PartnersTest extends ApiTestCase
         $this->assertSame([], $got['recentOrders']);
         $this->assertSame(['orders', 'quotations', 'returns', 'fos'], array_keys($got['_count']));
 
+        // credit is derived from its sources (unpaid invoices + accepted orders not yet delivered), not from a stored counter
         $seeded = $this->expectOk($this->getAs('wm', '/api/customers/CUS-1001'));
-        $this->assertEquals(150000 - 42300, $seeded['availableCredit']);
+        $exposure = $this->app->make(CreditService::class)->exposure($seeded['id']);
+        $this->assertEquals($exposure, $seeded['credit']);
+        $this->assertSame(['limit', 'receivables', 'openOrders', 'exposure', 'available', 'limited'], array_keys($seeded['credit']));
+        $this->assertEquals(150000 - $exposure['exposure'], $seeded['availableCredit']);
+        $this->assertEquals($exposure['exposure'], $seeded['balance']);
         if ($seeded['recentOrders']) {
             $this->assertSame(['id', 'number', 'status', 'dueDate', 'date', 'warehouse'], array_keys($seeded['recentOrders'][0]));
             $this->assertArrayHasKey('code', $seeded['recentOrders'][0]['warehouse']);
         }
 
         $this->expectRejected($this->patchAs('sales', "/api/customers/{$code}", ['creditLimit' => 0]), 'CUSTOMER_CREDIT_LIMIT', [422]);
-        $this->expectRejected($this->patchAs('sales', '/api/customers/CUS-1001', ['creditLimit' => 1000]), 'CUSTOMER_LIMIT_BELOW_BALANCE', [422]);
+        // a limit cannot be lowered under what the customer owes — here an accepted order of 11,500 that is not delivered yet
+        $open = SalesOrder::create(['number' => 'SO-T-'.self::n(), 'customer_id' => self::$customer['id'], 'warehouse_id' => Warehouse::where('code', 'RYD')->value('id'), 'status' => 'confirmed']);
+        SalesOrderLine::create(['so_id' => $open->id, 'line_no' => 1, 'product_id' => Product::orderBy('sku')->value('id'), 'qty' => 10, 'price' => 1000]);
+        $low = $this->expectRejected($this->patchAs('sales', "/api/customers/{$code}", ['creditLimit' => 1000]), 'CUSTOMER_LIMIT_BELOW_BALANCE', [422]);
+        $this->assertEquals(11500, $low['details']['exposure']);
+        $this->expectRejected($this->patchAs('sales', "/api/customers/{$code}", ['terms' => 'نقدي / محفظة', 'creditLimit' => 0]), 'CUSTOMER_HAS_BALANCE', [422]);
+        $this->assertEquals(50000 - 11500, $this->expectOk($this->getAs('wm', "/api/customers/{$code}"))['availableCredit']);
+        SalesOrderLine::where('so_id', $open->id)->delete();
+        $open->delete();
         $this->expectRejected($this->patchAs('sales', '/api/customers/CUS-NOPE', ['city' => 'x']), 'CUSTOMER_NOT_FOUND', [404]);
 
         $res = $this->expectOk($this->patchAs('sales', "/api/customers/{$code}", ['creditLimit' => 75000, 'city' => 'جدة', 'zone' => 'العليا']));

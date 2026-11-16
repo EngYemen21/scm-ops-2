@@ -36,9 +36,12 @@ class SeededDocumentsTest extends ApiTestCase
         $this->assertNotEmpty($oc['orders']);
 
         $plan = $this->expectOk($this->getAs('disp', '/api/fulfillment/trips/TRP-2026-0031/loading'));
-        $this->assertSame(['trip', 'rows', 'totals', 'nextToLoad'], array_keys($plan));
-        $this->assertSame(['stopSeq', 'customer', 'fo', 'status', 'loaded', 'loadedAt', 'cartons', 'kg', 'cbm', 'packages', 'ready'], array_keys($plan['rows'][0]));
-        $this->assertSame(['kg', 'cbm', 'loadedKg', 'loadedCbm', 'utilKg', 'utilCbm'], array_keys($plan['totals']));
+        // the loading plan belongs to the fulfillment domain and grows with it (door, load gate …): here only the keys
+        // the seeded documents have always been served with are required, whatever was added since
+        $has = fn (array $keys, array $in) => $this->assertSame([], array_values(array_diff($keys, array_keys($in))));
+        $has(['trip', 'rows', 'totals', 'nextToLoad'], $plan);
+        $has(['stopSeq', 'customer', 'fo', 'status', 'loaded', 'loadedAt', 'cartons', 'kg', 'cbm', 'packages', 'ready'], $plan['rows'][0]);
+        $has(['kg', 'cbm', 'loadedKg', 'loadedCbm', 'utilKg', 'utilCbm'], $plan['totals']);
         $seqs = array_column($plan['rows'], 'stopSeq');
         $sorted = $seqs;
         rsort($sorted);

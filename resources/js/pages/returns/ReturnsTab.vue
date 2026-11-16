@@ -1,5 +1,6 @@
 <script setup>
 // Returns list of one type ('' = all): KPI tiles, search + status pills + warehouse select, cards → emits `open(number)`.
+// A card says what matters at a glance: taken from stock or arriving, a short receipt, the debit note of a supplier return.
 import { computed, ref, watch } from 'vue';
 import { useList } from '@/api/client';
 import { Chip, ErrorBanner, SelectInput, Tabs, TextInput } from '@/components';
@@ -7,7 +8,7 @@ import { bi, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { RETURN_LABELS } from '@/shared';
 import { useWarehouse } from '@/stores/warehouse';
 import ReturnStatusChip from './ReturnStatusChip.vue';
-import { RETURN_REASON_LABELS, RETURN_TYPE_LABELS, labelOf, pname, sourceOf, useAutoOpen, useReturnKpis, useWhOpts } from './shared';
+import { RETURN_REASON_LABELS, RETURN_TYPE_LABELS, isFromStock, labelOf, pname, sourceOf, useAutoOpen, useReturnKpis, useWhOpts } from './shared';
 
 const props = defineProps({
   /** '' | cust | sup | del | dmg */
@@ -38,6 +39,8 @@ const TILES = [
 const statusTabs = [{ k: '', label: { ar: 'الكل', en: 'All' } }, ...Object.entries(RETURN_LABELS).map(([k, l]) => ({ k, label: { ar: l.ar, en: l.en } }))];
 const setStatus = (s) => { status.value = s; page.value = 1; };
 const reasonNote = (r) => (lang.value === 'en' && r.reasonEn) || r.reasonAr || r.notes || '';
+/** Units that were requested but did not arrive (0 until the return is received). */
+const shortOf = (r) => (r.lines || []).reduce((a, l) => a + (l.receivedQty != null ? Math.max(0, l.qty - l.receivedQty) : 0), 0);
 </script>
 
 <template>
@@ -66,6 +69,7 @@ const reasonNote = (r) => (lang.value === 'en' && r.reasonEn) || r.reasonAr || r
           <Chip small :map="RETURN_TYPE_LABELS" :k="r.type" />
           <b class="text-[11px]">{{ sourceOf(r) }}</b>
           <Chip v-if="r.reasonCode" small fg="#55506a" bg="#F1EFF6" :label="`${t('كود السبب', 'Reason')}: ${bi(labelOf(RETURN_REASON_LABELS, r.reasonCode))}`" />
+          <Chip v-if="isFromStock(r)" small fg="#0d7f93" bg="#d9f4f9" :label="{ ar: 'من المخزون', en: 'From stock' }" />
           <span class="num muted ltr text-[9px]">{{ fmtDateOnly(r.createdAt) }} · {{ r.warehouse?.code }}</span>
           <div class="grow" /><ReturnStatusChip :r="r" />
         </div>
@@ -76,6 +80,8 @@ const reasonNote = (r) => (lang.value === 'en' && r.reasonEn) || r.reasonAr || r
           </span>
           <span class="muted">{{ reasonNote(r) }}</span>
           <span v-if="r.reference" class="num muted">· {{ r.reference }}</span>
+          <span v-if="shortOf(r) > 0" class="font-bold text-warn">· {{ t(`استلام ناقص ${fmtNum(shortOf(r))}`, `${fmtNum(shortOf(r))} short on receipt`) }}</span>
+          <span v-for="n in r.debitNotes || []" :key="n.number" class="font-bold text-violet">· {{ t('إشعار مدين', 'Debit note') }} <span class="num">{{ n.number }}</span></span>
         </div>
       </div>
     </div>
@@ -83,6 +89,6 @@ const reasonNote = (r) => (lang.value === 'en' && r.reasonEn) || r.reasonAr || r
     <div v-if="list.data.value && list.data.value.pages > 1" class="row mt-2.5 justify-center !gap-1.5">
       <button v-for="i in list.data.value.pages" :key="i" type="button" class="pg-btn" :class="{ active: page === i }" @click="page = i">{{ i }}</button>
     </div>
-    <div class="hint teal mt-3">{{ t('كل مرتجع يمر بمسار: اعتماد ← استلام ← فحص ← قرار. القرار ينشئ حركة مخزون (RETURN / SCRAP) ويُسجل في Audit. مرتجعات التوصيل تُنشأ تلقائيًا من فشل التسليم أو التسليم الجزئي.', 'Every return follows approve → receive → inspect → decide. The decision creates a stock movement (RETURN / SCRAP) and is audited. Delivery returns are created automatically from failed or partial deliveries.') }}</div>
+    <div class="hint teal mt-3">{{ t('بضاعة تصل (عميل / توصيل): اعتماد ← استلام ما وصل فعلًا ← فحص ← قرار لكل سطر، وكل قرار حركة مخزون مسجلة. من المخزون (إرجاع لمورد / تالف): اعتماد يحجز الكمية في موقعها ← شحن. مرتجعات التوصيل تُنشأ تلقائيًا من فشل التسليم أو التسليم الجزئي. الإلغاء متاح قبل الاستلام أو الشحن.', 'Arriving goods (customer / delivery): approve → receive what actually arrived → inspect → decide per line; every decision is a recorded stock movement. From stock (supplier / damaged): approval holds the quantity in its bin → ship. Delivery returns are created automatically from failed or partial deliveries. Cancelling is possible before receipt or shipping.') }}</div>
   </div>
 </template>

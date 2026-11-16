@@ -56,6 +56,12 @@ abstract class ApiTestCase extends TestCase
         $this->app->make(SettingsService::class)->flush();
     }
 
+    /** A real 1×1 PNG as a data URL — what the signature pad sends. A file name is refused as a proof of delivery. */
+    protected static function proofImage(): string
+    {
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    }
+
     /** Short unique suffix for codes/SKUs created by a test. */
     protected static function uid(): string
     {

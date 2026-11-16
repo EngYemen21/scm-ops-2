@@ -22,7 +22,7 @@ class TripsController extends TransportBaseController
 
     public function index(Request $request): array
     {
-        return $this->trips->list(Paging::from($request), $request->only(['status', 'warehouse', 'date', 'vehicle', 'driver']));
+        return $this->trips->list(Paging::from($request), $request->only(['status', 'kind', 'warehouse', 'date', 'vehicle', 'driver']));
     }
 
     public function show(string $number): array
@@ -84,9 +84,26 @@ class TripsController extends TransportBaseController
         return $this->created($this->trips->cancel(AuthUser::current(), $number, $data['reason']));
     }
 
-    public function close(string $number): JsonResponse
+    /** Action button: no body needed. `odometer` = the reading at the return, when the dispatcher has it. */
+    public function close(Request $request, string $number): JsonResponse
     {
-        return $this->created($this->trips->close(AuthUser::current(), $number));
+        $data = $request->validate(['odometer' => ['nullable', 'integer', 'min:0']]);
+
+        return $this->created($this->trips->close(AuthUser::current(), $number, isset($data['odometer']) ? (int) $data['odometer'] : null));
+    }
+
+    public function addOrder(Request $request, string $number): JsonResponse
+    {
+        $data = $request->validate(['foNumber' => ['required', 'string', 'max:120']]);
+
+        return $this->created($this->trips->addOrder(AuthUser::current(), $number, $data['foNumber']));
+    }
+
+    public function removeOrder(Request $request, string $number, string $fo): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+
+        return $this->created($this->trips->removeOrder(AuthUser::current(), $number, $fo, $data['reason'] ?? null));
     }
 
     public function events(string $number): array

@@ -34,6 +34,14 @@ class ConsolidationsController extends Controller
         return $this->sales->advanceConsolidation(AuthUser::current(), $id);
     }
 
+    /** Dissolve the batch (action button: the reason is optional). */
+    public function cancel(Request $request, string $id): array
+    {
+        $data = $request->validate(SalesRules::NOTE);
+
+        return $this->sales->cancelConsolidation(AuthUser::current(), $id, ($data['reason'] ?? null) ?: ($data['note'] ?? null));
+    }
+
     public function add(Request $request, string $id): array
     {
         $data = $request->validate(['orderNumber' => 'required|string']);
@@ -43,8 +51,16 @@ class ConsolidationsController extends Controller
 
     public function remove(Request $request, string $id): array
     {
-        $data = $request->validate(['orderNumber' => 'required|string']);
+        $data = $request->validate(['orderNumber' => 'required|string', 'reason' => 'nullable|string']);
 
-        return $this->sales->addRemoveOrder(AuthUser::current(), $id, $data['orderNumber'], false);
+        return $this->sales->addRemoveOrder(AuthUser::current(), $id, $data['orderNumber'], false, $data['reason'] ?? null);
+    }
+
+    /** Same as remove(), with the order in the path: an action button that needs no body. */
+    public function removeOrder(Request $request, string $id, string $so): array
+    {
+        $data = $request->validate(SalesRules::NOTE);
+
+        return $this->sales->addRemoveOrder(AuthUser::current(), $id, $so, false, ($data['reason'] ?? null) ?: ($data['note'] ?? null));
     }
 }

@@ -2,24 +2,31 @@
 // Receiving lines: one card per shipment line — the product and its facts (ordered · received before · open) on the
 // first row, then a labelled, evenly sized field grid (accepted / damaged / rejected · batch · mfg · expiry · QC note)
 // that wraps instead of scrolling sideways, and a running summary of what this receipt will do to the line.
+// A line that arrives in more than one batch gets "+ another batch": every extra row is a quantity carved out of the
+// accepted total with its own batch number and dates; what is left belongs to the first batch (the line's own fields).
 // Read-only once the shipment is no longer being inspected.
-//   <ReceiveLinesGrid v-model:drafts="drafts" :lines="shipment.lines" :editable="editable" />
+//   <ReceiveLinesGrid v-model:drafts="drafts" :lines="shipment.lines" :editable="editable" :rejected-stays-open="shipment.policy?.rejectedStaysOpen" />
 import { watch } from 'vue';
 import { Chip, ScanButton } from '@/components';
 import { fmtDateOnly, fmtNum, lang, t } from '@/i18n';
-import { draftSum, emptyDraft, parseQty, pn } from './shared';
+import { draftSum, emptyBatch, emptyDraft, firstBatchQty, parseQty, pn, splitProblem } from './shared';
 
 const props = defineProps({
   lines: { type: Array, required: true },
   editable: { type: Boolean, default: false },
   /** `{ [lineNo]: ReceiveDraft }` */
   drafts: { type: Object, required: true },
+  /** Policy `procurement.rejectedStaysOpen`: rejected goods are still owed by the supplier (default) or count as fulfilled. */
+  rejectedStaysOpen: { type: Boolean, default: true },
 });
 const emit = defineEmits(['update:drafts']);
 
 const draftOf = (l) => props.drafts[l.lineNo] || emptyDraft(l);
 const over = (l) => draftSum(draftOf(l)) > l.openQty;
-const remaining = (l) => Math.max(0, l.openQty - draftSum(draftOf(l)));
+/** Still owed on the purchase order after this receipt: what did not come, plus what was rejected (it never entered). */
+const remaining = (l) => Math.max(0, l.openQty - draftSum(draftOf(l))) + (props.rejectedStaysOpen ? Number(draftOf(l).rejectedQty) || 0 : 0);
+const extraOf = (l) => draftOf(l).extra || [];
+const splitErr = (l) => splitProblem(l, draftOf(l));
 const needsBatch = (l) => l.product.tracksExpiry && !draftOf(l).batchNo;
 const needsExpiry = (l) => l.product.tracksExpiry && !draftOf(l).expiryDate;
 // Edits are merged into the LATEST drafts, not into the prop: two changes in the same tick (a scanner that fills batch
@@ -29,6 +36,11 @@ watch(() => props.drafts, (v) => { latest = v; });
 const set = (l, patch) => { latest = { ...latest, [l.lineNo]: { ...(latest[l.lineNo] || emptyDraft(l)), ...patch } }; emit('update:drafts', latest); };
 // Digits only; the box is re-synced so letters never show.
 function onQty(e, l, key) { const n = parseQty(e.target.value); e.target.value = n ?? ''; set(l, { [key]: n }); }
+// extra batches of a line
+const addBatch = (l) => set(l, { extra: [...extraOf(l), emptyBatch()] });
+const removeBatch = (l, i) => set(l, { extra: extraOf(l).filter((_, k) => k !== i) });
+const setBatch = (l, i, patch) => set(l, { extra: extraOf(l).map((b, k) => (k === i ? { ...b, ...patch } : b)) });
+function onBatchQty(e, l, i) { const n = parseQty(e.target.value); e.target.value = n ?? ''; setBatch(l, i, { qty: n }); }
 const suggestion = (l) => (lang.value === 'ar' ? l.suggestionAr : l.suggestionEn);
 const QTY = 'inp sm num !h-9 w-full !text-[11.5px] !font-bold';
 </script>
@@ -93,10 +105,48 @@ const QTY = 'inp sm num !h-9 w-full !text-[11.5px] !font-bold';
             <input :value="draftOf(l).qcNote" :placeholder="t('اختياري — سبب التلف أو الرفض، رقم الصورة…', 'Optional — damage / rejection reason, photo ref…')" class="inp sm !h-9 w-full !text-[10.5px]" @input="set(l, { qcNote: $event.target.value })">
           </div>
         </div>
+
+        <!-- more than one batch on this line -->
+        <div v-if="extraOf(l).length" class="mt-2.5 rounded-lg border border-line-2 bg-soft px-2.5 py-2">
+          <div class="row wrap !gap-x-3 text-[9.5px] font-extrabold text-muted">
+            <span>{{ t('الدفعة الأولى', 'First batch') }} <span class="num text-violet">{{ draftOf(l).batchNo || '—' }}</span>:
+              <span class="num" :class="firstBatchQty(draftOf(l)) > 0 ? 'text-ok' : 'text-bad'">{{ fmtNum(firstBatchQty(draftOf(l))) }}</span>
+              {{ t('من المقبول', 'of the accepted') }} <span class="num">{{ fmtNum(Number(draftOf(l).acceptedQty) || 0) }}</span></span>
+            <span class="font-normal text-faint">{{ t('التالف والمرفوض يُسجَّلان على الدفعة الأولى', 'Damaged and rejected are recorded on the first batch') }}</span>
+          </div>
+          <div v-for="(b, i) in extraOf(l)" :key="i" class="mt-2 grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] items-end gap-x-2.5 gap-y-2">
+            <div class="field">
+              <label class="field-l">{{ t(`كمية الدفعة ${i + 2}`, `Batch ${i + 2} qty`) }} <span class="text-bad">*</span></label>
+              <input :value="b.qty ?? ''" placeholder="0" dir="ltr" inputmode="numeric" :class="[QTY, '!border-[#BFE8CC] focus:!border-[#1d7a3e]']" @input="onBatchQty($event, l, i)">
+            </div>
+            <div class="field">
+              <label class="field-l">{{ t('رقم الدفعة', 'Batch no.') }} <span class="text-bad">*</span></label>
+              <div class="flex items-center gap-1">
+                <input :value="b.batchNo" :placeholder="t('الدفعة', 'Batch')" dir="ltr" class="inp sm num !h-9 min-w-0 flex-1 !text-[11px]" :class="{ '!border-[#F0DEB8]': !b.batchNo }" @input="setBatch(l, i, { batchNo: $event.target.value })">
+                <ScanButton :title="{ ar: 'امسح رقم الدفعة', en: 'Scan the batch number' }" @detected="(code) => setBatch(l, i, { batchNo: code })" />
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-l">{{ t('تاريخ الإنتاج', 'Production date') }}</label>
+              <input type="date" :value="b.mfgDate" dir="ltr" class="inp sm num !h-9 w-full !text-[10.5px]" @input="setBatch(l, i, { mfgDate: $event.target.value })">
+            </div>
+            <div class="field">
+              <label class="field-l">{{ t('تاريخ الانتهاء', 'Expiry date') }} <span v-if="l.product.tracksExpiry" class="text-bad">*</span></label>
+              <input type="date" :value="b.expiryDate" dir="ltr" class="inp sm num !h-9 w-full !text-[10.5px]" :class="{ '!border-[#F0DEB8]': l.product.tracksExpiry && !b.expiryDate }" @input="setBatch(l, i, { expiryDate: $event.target.value })">
+            </div>
+            <button type="button" class="btn dangerOutline sm !h-9" @click="removeBatch(l, i)">{{ t('حذف الدفعة', 'Remove batch') }}</button>
+          </div>
+          <div v-if="splitErr(l)" class="field-err mt-1.5">{{ lang === 'ar' ? splitErr(l).ar : splitErr(l).en }}</div>
+        </div>
+        <div class="mt-2">
+          <button type="button" class="btn soft sm" :disabled="!(Number(draftOf(l).acceptedQty) > 1)" :title="Number(draftOf(l).acceptedQty) > 1 ? null : t('أدخل الكمية المقبولة أولًا (أكثر من 1) لتقسيمها على دفعات', 'Enter the accepted quantity first (more than 1) to split it over batches')" @click="addBatch(l)">+ {{ t('دفعة أخرى', 'Another batch') }}</button>
+          <span class="ms-2 text-[9px] text-faint">{{ t('عند وصول السطر بأكثر من دفعة: كل دفعة بكميتها ورقمها وتاريخها، ولكل دفعة مهمة تخزين مستقلة', 'When the line arrives in several batches: each with its quantity, number and dates — and its own putaway task') }}</span>
+        </div>
+
         <div class="row wrap mt-2.5 !gap-x-4 !gap-y-1 text-[9.5px] font-bold text-muted">
           <span>{{ t('سيدخل المتاح', 'Into available stock') }}: <span class="num text-ok">{{ fmtNum(Number(draftOf(l).acceptedQty) || 0) }}</span></span>
           <span>{{ t('تالف (محجور)', 'Damaged (quarantined)') }}: <span class="num text-bad">{{ fmtNum(Number(draftOf(l).damagedQty) || 0) }}</span></span>
-          <span>{{ t('مرفوض (يُعاد للمورد)', 'Rejected (back to supplier)') }}: <span class="num text-warn">{{ fmtNum(Number(draftOf(l).rejectedQty) || 0) }}</span></span>
+          <span>{{ rejectedStaysOpen ? t('مرفوض (يُعاد للمورد ويبقى مفتوحًا على أمر الشراء)', 'Rejected (back to the supplier, still owed on the PO)') : t('مرفوض (يُعاد للمورد)', 'Rejected (back to supplier)') }}: <span class="num text-warn">{{ fmtNum(Number(draftOf(l).rejectedQty) || 0) }}</span></span>
           <span class="grow" />
           <span>{{ t('يبقى على أمر الشراء بعد هذا الاستلام', 'Still open on the PO after this receipt') }}: <span class="num" :class="remaining(l) ? 'text-warn' : 'text-ok'">{{ fmtNum(remaining(l)) }}</span></span>
         </div>

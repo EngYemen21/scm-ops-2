@@ -123,7 +123,7 @@ class DashboardService
 
         $expectedInbounds = DB::table('inbound_shipments')->whereIn('status', ['expected', 'arrived'])->count();
         $inspecting = DB::table('inbound_shipments')->where('status', 'inspecting')->count();
-        $grnsToday = $inDay(DB::table('goods_receipts'), 'posted_at')->count();
+        $grnsToday = $inDay(DB::table('goods_receipts')->whereNull('voided_at'), 'posted_at')->count();
         $putaway = DB::table('putaway_tasks')->where('status', 'open')->selectRaw('COALESCE(SUM(qty), 0) AS qty, COUNT(*) AS n')->first();
         $avail = $this->availableTotals();
         $lowStock = $this->lowStockCount();
@@ -347,15 +347,15 @@ class DashboardService
         $risk = array_map(R::num(...), (array) $risk);
 
         $transit = DB::selectOne(
-            'SELECT COUNT(DISTINCT t.id) AS transfers, COALESCE(SUM(l.qty - COALESCE(l.received_qty, 0)), 0) AS qty
-             FROM warehouse_transfers t LEFT JOIN transfer_lines l ON l.transfer_id = t.id WHERE t.status = \'transit\'',
+            'SELECT COUNT(DISTINCT t.id) AS transfers, COALESCE(SUM(l.qty - COALESCE(l.received_qty, 0) - COALESCE(l.variance_qty, 0)), 0) AS qty
+             FROM warehouse_transfers t LEFT JOIN transfer_lines l ON l.transfer_id = t.id WHERE t.status IN (\'transit\', \'partial\')',
         );
         $retInspect = $this->grouped('returns', 'status', fn ($q) => $q->whereIn('status', ['received', 'inspect']));
 
         $throughput = DB::select(
             'SELECT w.id AS `warehouseId`, w.code, w.name_ar AS `nameAr`, w.name_en AS `nameEn`,
-                (SELECT COALESCE(SUM(gl.accepted_qty), 0) FROM goods_receipts g JOIN grn_lines gl ON gl.grn_id = g.id WHERE g.warehouse_id = w.id AND g.posted_at >= ? AND g.posted_at < ?) AS `grnQty`,
-                (SELECT COUNT(*) FROM goods_receipts g WHERE g.warehouse_id = w.id AND g.posted_at >= ? AND g.posted_at < ?) AS grns,
+                (SELECT COALESCE(SUM(gl.accepted_qty), 0) FROM goods_receipts g JOIN grn_lines gl ON gl.grn_id = g.id WHERE g.warehouse_id = w.id AND g.voided_at IS NULL AND g.posted_at >= ? AND g.posted_at < ?) AS `grnQty`,
+                (SELECT COUNT(*) FROM goods_receipts g WHERE g.warehouse_id = w.id AND g.voided_at IS NULL AND g.posted_at >= ? AND g.posted_at < ?) AS grns,
                 (SELECT COALESCE(SUM(pt.picked_qty), 0) FROM pick_tasks pt JOIN pick_lists pl ON pl.id = pt.pick_list_id WHERE pl.warehouse_id = w.id AND pt.picked_at >= ? AND pt.picked_at < ?) AS `pickedQty`,
                 (SELECT COUNT(*) FROM fulfillment_orders f WHERE f.warehouse_id = w.id AND f.dispatched_at >= ? AND f.dispatched_at < ?) AS `dispatchedOrders`,
                 (SELECT COUNT(*) FROM trips t WHERE t.warehouse_id = w.id AND t.dispatched_at >= ? AND t.dispatched_at < ?) AS `dispatchedTrips`

@@ -26,6 +26,9 @@ class FuelRecord extends BaseModel
             'km_per_l' => 'float',
             'cost_per_km' => 'float',
             'anomaly' => 'boolean',
+            'voided_at' => 'datetime',
+            'corrected_at' => 'datetime',
+            'prev_odometer' => 'integer',
         ];
     }
 

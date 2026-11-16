@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  */
 class FinanceReportsService
 {
-    public function __construct(private readonly CostingService $costing, private readonly LedgerService $ledger) {}
+    public function __construct(private readonly CostingService $costing, private readonly LedgerService $ledger, private readonly DebitNoteService $debitNotes) {}
 
     // ───────────── general ledger ─────────────
 
@@ -188,7 +188,15 @@ class FinanceReportsService
         return ['partner' => ['type' => $type, 'code' => $partner->code, 'nameAr' => $partner->name_ar, 'nameEn' => $partner->name_en], 'role' => $role, 'from' => $from->toDateString(), 'to' => $to->toDateString(), 'opening' => $opening, 'closing' => $running, 'rows' => $rows];
     }
 
-    /** Aging of open customer invoices (AR) or approved supplier invoices (AP) as of today, by partner and bucket. */
+    /**
+     * Aging of open customer invoices (AR) or approved supplier invoices (AP) as of today, by partner and bucket.
+     *
+     * Payables are aged net of what the supplier was sent back (`DebitNoteService::supplierCredits`: standing debit
+     * notes at their total, and goods returned without a standing note at cost). A debit note is not allocated to an
+     * invoice anywhere in the system, so the report assumes what a payment run does: the credit is taken off the
+     * supplier's OLDEST due invoices first; what exceeds every open invoice is shown as a negative amount in "current"
+     * (the supplier owes us and nothing is overdue about it). A supplier with a credit and no open invoice is listed.
+     */
     public function aging(string $type): array
     {
         $today = now()->startOfDay();
@@ -204,18 +212,11 @@ class FinanceReportsService
                 $rows[$k]['invoices']++;
             }
         } else {
-            foreach (SupplierInvoice::with('supplier:id,code,name_ar,name_en')->where('status', 'approved')->get() as $i) {
-                $k = $i->supplier_id;
-                $rows[$k] ??= ['code' => $i->supplier?->code, 'nameAr' => $i->supplier?->name_ar, 'nameEn' => $i->supplier?->name_en, 'current' => 0, 'd30' => 0, 'd60' => 0, 'd90' => 0, 'd90p' => 0, 'total' => 0, 'invoices' => 0];
-                $bal = round((float) $i->total - (float) $i->paid_amount, 2);
-                $rows[$k][$bucket($i->due_date ? Carbon::parse($i->due_date) : null)] += $bal;
-                $rows[$k]['total'] = round($rows[$k]['total'] + $bal, 2);
-                $rows[$k]['invoices']++;
-            }
+            $rows = $this->payablesAging($bucket);
         }
         $rows = array_values($rows);
         usort($rows, fn ($a, $b) => $b['total'] <=> $a['total']);
-        $totals = ['current' => 0, 'd30' => 0, 'd60' => 0, 'd90' => 0, 'd90p' => 0, 'total' => 0];
+        $totals = ['current' => 0, 'd30' => 0, 'd60' => 0, 'd90' => 0, 'd90p' => 0, 'total' => 0] + ($type === 'customer' ? [] : ['debitNotes' => 0, 'returnsUnclaimed' => 0]);
         foreach ($rows as $r) {
             foreach ($totals as $k => $v) {
                 $totals[$k] = round($v + $r[$k], 2);
@@ -223,6 +224,49 @@ class FinanceReportsService
         }
 
         return ['type' => $type, 'asOf' => $today->toDateString(), 'rows' => $rows, 'totals' => $totals];
+    }
+
+    /**
+     * Payables per supplier: every approved invoice's open balance in the bucket of its due date, after the supplier's
+     * return credits were taken off the oldest due invoices first (see aging()). Each row also carries the two credit
+     * figures it was netted by: `debitNotes` and `returnsUnclaimed`.
+     *
+     * @param  callable(?Carbon): string  $bucket
+     * @return array<string, array<string, mixed>> keyed by supplier id
+     */
+    private function payablesAging(callable $bucket): array
+    {
+        $blank = fn (?Supplier $s) => ['code' => $s?->code, 'nameAr' => $s?->name_ar, 'nameEn' => $s?->name_en, 'current' => 0.0, 'd30' => 0.0, 'd60' => 0.0, 'd90' => 0.0, 'd90p' => 0.0, 'total' => 0.0, 'invoices' => 0, 'debitNotes' => 0.0, 'returnsUnclaimed' => 0.0];
+        $rows = $open = [];
+        foreach (SupplierInvoice::with('supplier:id,code,name_ar,name_en')->where('status', 'approved')->orderBy('number')->get() as $i) {
+            $k = $i->supplier_id;
+            $rows[$k] ??= $blank($i->supplier);
+            $rows[$k]['invoices']++;
+            $open[$k][] = [$i->due_date ? Carbon::parse($i->due_date) : null, round((float) $i->total - (float) $i->paid_amount, 2)];
+        }
+        $credits = array_filter($this->debitNotes->supplierCredits(), fn (array $c) => $c['notes'] + $c['unclaimed'] > 0);
+        $unlisted = Supplier::whereIn('id', array_diff(array_keys($credits), array_keys($rows)))->get(['id', 'code', 'name_ar', 'name_en'])->keyBy('id');
+        foreach ($credits as $k => $c) {
+            $rows[$k] ??= $blank($unlisted->get($k));
+            $rows[$k]['debitNotes'] = $c['notes'];
+            $rows[$k]['returnsUnclaimed'] = $c['unclaimed'];
+        }
+        foreach ($rows as $k => $row) {
+            $credit = round($row['debitNotes'] + $row['returnsUnclaimed'], 2);
+            $items = $open[$k] ?? [];
+            // oldest due first; an invoice without a due date is not due yet, so it is netted last
+            usort($items, fn (array $a, array $b) => [$a[0] === null, $a[0]?->getTimestamp()] <=> [$b[0] === null, $b[0]?->getTimestamp()]);
+            foreach ($items as [$due, $balance]) {
+                $take = min($credit, max(0.0, $balance));
+                $credit = round($credit - $take, 2);
+                $row[$bucket($due)] = round($row[$bucket($due)] + $balance - $take, 2);
+            }
+            $row['current'] = round($row['current'] - $credit, 2);   // what no open invoice absorbs: the supplier owes us
+            $row['total'] = round($row['current'] + $row['d30'] + $row['d60'] + $row['d90'] + $row['d90p'], 2);
+            $rows[$k] = $row;
+        }
+
+        return $rows;
     }
 
     /** VAT return figures for a range: output (sales) vs input (purchases / expenses) from the tax accounts. */

@@ -1,17 +1,22 @@
 <script setup>
-// Fulfillment order — deep link /fo/:number: header + stepper, lines (qty / picked / packed / delivered / returned),
-// pick lists with tasks (scan & confirm when pickable), packages, trip / stop, PODs, returns, inventory movements, history.
+// Fulfillment order — deep link /fo/:number: header + stepper, lines (qty / picked / short / packed / delivered / returned),
+// pick lists with tasks under a header per zone (scan & confirm when pickable, who holds the list), the package and its
+// cartons (one label per carton, edit package, unpack, put the picking back), trip / door / stop, PODs, returns,
+// inventory movements, history.
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
 import { Btn, Chip, DataTable, ErrorBanner, KV, PageHead, ProgressBar, SectionCard, Stepper, Timeline } from '@/components';
 import { fmtDate, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { FO_LABELS, MOVEMENT_LABELS, RETURN_LABELS, SO_LABELS, TRIP_LABELS } from '@/shared';
+import { useAuth } from '@/stores/auth';
 import { showLabel } from '@/stores/ui';
+import FoActions from './FoActions.vue';
 import PackRow from './PackRow.vue';
 import PickTaskCard from './PickTaskCard.vue';
-import { FO_STEPS, custName, foStepIndex, historyItems, pickProgress, prodName } from './shared';
+import { CARTON_LABELS, FO_STEPS, PKG_LABELS, ZONE_TYPES, custName, foStepIndex, historyItems, pickProgress, prodName, shortUnits, tasksByZone } from './shared';
 
+const auth = useAuth();
 const route = useRoute();
 const router = useRouter();
 const number = computed(() => String(route.params.number || ''));
@@ -21,6 +26,17 @@ const fo = computed(() => det.data.value);
 const step = computed(() => (fo.value ? foStepIndex(fo.value.status) : { idx: 0, failed: false }));
 const steps = FO_STEPS.map((s) => ({ label: { ar: FO_LABELS[s].ar, en: FO_LABELS[s].en } }));
 const prog = computed(() => pickProgress(fo.value));
+const short = computed(() => shortUnits(fo.value));
+const cartons = computed(() => fo.value?.cartonList || []);
+const me = computed(() => auth.user?.username || '');
+/** The other picker who holds a list this user may not scan on (a supervisor may). */
+const heldByOther = (pl) => (pl.status === 'open' && pl.assignedTo && pl.assignedTo !== me.value && !auth.can('pick.override') ? pl.assignedTo : null);
+const zoneLabel = (z) => {
+  if (!z) return '—';
+  const name = lang.value === 'ar' ? z.nameAr : z.nameEn || z.nameAr;
+  const type = ZONE_TYPES[z.type] ? (lang.value === 'ar' ? ZONE_TYPES[z.type].ar : ZONE_TYPES[z.type].en) : '';
+  return [z.code, name, type].filter(Boolean).join(' · ');
+};
 const taskCount = computed(() => (fo.value?.pickLists || []).reduce((s, p) => s + p.tasks.length, 0));
 const history = computed(() => historyItems(fo.value?.history));
 const sub = computed(() => (fo.value
@@ -36,6 +52,7 @@ const lineCols = [
   { key: 'product', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(180px,1.6fr)' },
   { key: 'qty', header: { ar: 'المطلوب', en: 'Qty' }, width: '80px', kind: 'num', value: (l) => fmtNum(l.qty) },
   { key: 'pickedQty', header: { ar: 'مصروف', en: 'Picked' }, width: '80px', kind: 'num' },
+  { key: 'shortQty', header: { ar: 'ناقص', en: 'Short' }, width: '70px', kind: 'num' },
   { key: 'packedQty', header: { ar: 'معبأ', en: 'Packed' }, width: '80px', kind: 'num' },
   { key: 'deliveredQty', header: { ar: 'مسلّم', en: 'Delivered' }, width: '80px', kind: 'num' },
   { key: 'returnedQty', header: { ar: 'مرتجع', en: 'Returned' }, width: '80px', kind: 'num' },
@@ -47,8 +64,16 @@ const pkgCols = [
   { key: 'weightKg', header: { ar: 'الوزن كجم', en: 'Weight kg' }, width: '90px', kind: 'num', value: (p) => fmtNum(p.weightKg, 1) },
   { key: 'volumeM3', header: { ar: 'الحجم م³', en: 'Volume m³' }, width: '90px', kind: 'num', value: (p) => (p.volumeM3 != null ? fmtNum(p.volumeM3, 2) : '—') },
   { key: 'labelRef', header: { ar: 'الملصق', en: 'Label' }, width: 'minmax(120px,1fr)' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '90px' },
   { key: 'packedBy', header: { ar: 'عبّأه', en: 'Packed by' }, width: '110px', kind: 'muted' },
   { key: 'packedAt', header: { ar: 'التاريخ', en: 'At' }, width: '120px', kind: 'date', value: (p) => fmtDate(p.packedAt) },
+];
+const cartonCols = [
+  { key: 'seq', header: '#', width: '70px', kind: 'num' },
+  { key: 'code', header: { ar: 'رمز الكرتون (يُمسح)', en: 'Carton code (scanned)' }, width: 'minmax(170px,1fr)', kind: 'id' },
+  { key: 'weightKg', header: { ar: 'الوزن كجم', en: 'Weight kg' }, width: '100px', kind: 'num', value: (c) => (c.weightKg != null ? fmtNum(c.weightKg, 1) : '—') },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '110px' },
+  { key: 'at', header: { ar: 'حُمّل · سُلّم', en: 'Loaded · delivered' }, width: '200px', kind: 'date', value: (c) => [c.loadedAt ? fmtDate(c.loadedAt) : null, c.deliveredAt ? fmtDate(c.deliveredAt) : null].filter(Boolean).join(' · ') || '—' },
 ];
 const mvCols = [
   { key: 'number', header: { ar: 'الحركة', en: 'Movement' }, width: '120px', kind: 'id' },
@@ -71,7 +96,7 @@ const UNIT = 'font-sans text-[9px] text-faint';
     <Btn v-if="fo?.trip" tone="softBlue" :label="{ ar: `الرحلة ${fo.trip.number}`, en: `Trip ${fo.trip.number}` }" @click="router.push(`/trip/${enc(fo.trip.number)}`)" />
     <Btn v-if="fo && ['alloc', 'picking', 'picked'].includes(fo.status)" tone="primary" :label="{ ar: 'فتح في التجهيز', en: 'Open in picking' }" @click="router.push({ path: '/picking', query: { fo: fo.number } })" />
     <Btn v-if="fo && fo.status === 'packed' && fo.trip" tone="dark" :label="{ ar: 'فتح في التحميل', en: 'Open in loading' }" @click="router.push({ path: '/dispatch', query: { trip: fo.trip.number } })" />
-    <Btn v-if="fo" tone="soft" :label="{ ar: 'ملصق الشحن', en: 'Shipping label' }" @click="showLabel({ type: 'code128', text: fo.number, title: fo.number, sub: fo.customer ? (lang === 'ar' ? fo.customer.nameAr : fo.customer.nameEn || fo.customer.nameAr) : null })" />
+    <Btn v-if="fo" tone="soft" :label="{ ar: 'ملصق الأمر', en: 'Order label' }" @click="showLabel({ type: 'code128', text: fo.number, title: fo.number, sub: fo.customer ? (lang === 'ar' ? fo.customer.nameAr : fo.customer.nameEn || fo.customer.nameAr) : null })" />
   </PageHead>
   <ErrorBanner :error="det.error.value" :closable="false" />
   <div v-if="det.isLoading.value && !fo" class="skel min-h-[240px]" />
@@ -96,6 +121,8 @@ const UNIT = 'font-sans text-[9px] text-faint';
       </div>
       <div class="mt-4"><Stepper :steps="steps" :current="step.idx" :failed="step.failed" /></div>
       <div v-if="prog.need > 0" class="mt-3 max-w-[420px]"><ProgressBar :pct="Math.round((prog.done / prog.need) * 100)" :label="{ ar: 'تقدم التجهيز', en: 'Pick progress' }" show-pct auto /></div>
+      <div v-if="short > 0" class="hint amber">{{ t(`نقص ${short} قطعة عند التجهيز — يُشحن ما جُهّز. الناقص صار طلبًا معلّقًا مرتبطًا بأمر البيع أو أُلغي حسب سياسة الشركة (انظر أمر البيع).`, `${short} units were short at picking — what was picked ships. The shortage became a backorder linked to the sales order, or was cancelled per policy (see the sales order).`) }}</div>
+      <div v-if="fo.status === 'cancelled'" class="hint">{{ t('أُلغي هذا الأمر دون شحن (لم يُجهَّز منه شيء، أو أُرجع تجهيزه للمواقع، أو أُلغي أمر البيع). أمر البيع — إن لم يُلغَ — يُخصَّص ويُنفَّذ بأمر تنفيذ جديد من صفحته.', 'This order was cancelled without shipping (nothing could be picked, its picking was put back, or the sales order was cancelled). The sales order — unless cancelled — is allocated and fulfilled again from its page.') }}</div>
       <div class="kv-grid mt-4">
         <KV :k="{ ar: 'العميل', en: 'Customer' }"><span>{{ custName(fo.customer) }} <span class="cell-sub">{{ fo.customer.code }}</span></span></KV>
         <KV :k="{ ar: 'المنطقة · العنوان', en: 'Zone · address' }" :v="[fo.customer.zone, fo.customer.address].filter(Boolean).join(' · ') || '—'" />
@@ -114,6 +141,7 @@ const UNIT = 'font-sans text-[9px] text-faint';
           </span>
           <template v-else>{{ t('لا رحلة بعد', 'No trip yet') }}</template>
         </KV>
+        <KV :k="{ ar: 'المحطة · باب التحميل', en: 'Stop · loading door' }"><span>{{ fo.stop ? t(`محطة ${fo.stop.seq}`, `Stop ${fo.stop.seq}`) : '—' }} · <span class="num">{{ fo.trip?.dockCode || t('لم يُحدَّد باب', 'no door set') }}</span></span></KV>
         <KV :k="{ ar: 'عُبّئ', en: 'Packed' }" ltr><span class="num">{{ fmtDate(fo.packedAt) }}</span></KV>
         <KV :k="{ ar: 'حُمّل', en: 'Loaded' }" ltr><span class="num">{{ fmtDate(fo.loadedAt) }}</span></KV>
         <KV :k="{ ar: 'أُرسل', en: 'Dispatched' }" ltr><span class="num">{{ fmtDate(fo.dispatchedAt) }}</span></KV>
@@ -130,6 +158,7 @@ const UNIT = 'font-sans text-[9px] text-faint';
           </div>
         </template>
         <template #cell-pickedQty="{ row }"><span class="font-extrabold" :style="{ color: pickedColor(row) }">{{ fmtNum(row.pickedQty) }}</span></template>
+        <template #cell-shortQty="{ row }"><span :class="row.shortQty ? 'font-extrabold' : ''" :style="{ color: qtyColor(row.shortQty, '#b23b3b') }">{{ fmtNum(row.shortQty || 0) }}</span></template>
         <template #cell-packedQty="{ row }"><span :style="{ color: qtyColor(row.packedQty, '#654e92') }">{{ fmtNum(row.packedQty) }}</span></template>
         <template #cell-deliveredQty="{ row }"><span :style="{ color: qtyColor(row.deliveredQty, '#1d7a3e') }">{{ fmtNum(row.deliveredQty || 0) }}</span></template>
         <template #cell-returnedQty="{ row }"><span :style="{ color: qtyColor(row.returnedQty, '#b23b3b') }">{{ fmtNum(row.returnedQty || 0) }}</span></template>
@@ -142,18 +171,33 @@ const UNIT = 'font-sans text-[9px] text-faint';
       <div v-for="pl in fo.pickLists" :key="pl.id" class="mb-2.5">
         <div class="row wrap mb-2">
           <span class="num-mixed text-[11.5px] font-extrabold">{{ pl.number }}</span>
-          <Chip :label="pl.status === 'done' ? { ar: 'مكتملة ✓', en: 'Done ✓' } : { ar: 'مفتوحة', en: 'Open' }" :fg="pl.status === 'done' ? '#1d7a3e' : '#b26a16'" :bg="pl.status === 'done' ? '#e6f9ec' : '#fbf0dd'" small />
-          <span v-if="pl.assignedTo" class="muted text-[9.5px]">{{ pl.assignedTo }}</span>
+          <Chip v-if="pl.status === 'cancelled'" :label="{ ar: 'ملغاة', en: 'Cancelled' }" fg="#7d7990" bg="#F1EFF6" small />
+          <Chip v-else :label="pl.status === 'done' ? { ar: 'مكتملة ✓', en: 'Done ✓' } : { ar: 'مفتوحة', en: 'Open' }" :fg="pl.status === 'done' ? '#1d7a3e' : '#b26a16'" :bg="pl.status === 'done' ? '#e6f9ec' : '#fbf0dd'" small />
+          <span v-if="pl.assignedTo" class="text-[9.5px] text-sec">{{ t('المجهّز', 'Picker') }}: <span class="num">{{ pl.assignedTo }}</span></span>
           <span class="cell-date">{{ fmtDate(pl.createdAt) }}{{ pl.completedAt ? ` → ${fmtDate(pl.completedAt)}` : '' }}</span>
         </div>
-        <div class="col"><PickTaskCard v-for="x in pl.tasks" :key="x.id" :task="x" :fo-status="fo.status" @changed="det.refetch()" /></div>
+        <div class="col">
+          <template v-for="(g, gi) in tasksByZone(pl.tasks)" :key="gi">
+            <div class="mt-1 border-b border-line-2 pb-1 text-[10.5px] font-extrabold text-violet">{{ t('المنطقة', 'Zone') }} {{ zoneLabel(g.zone) }}</div>
+            <PickTaskCard v-for="x in g.tasks" :key="x.id" :task="x" :fo-status="fo.status" :held-by="heldByOther(pl)" @changed="det.refetch()" />
+          </template>
+        </div>
       </div>
     </SectionCard>
 
     <SectionCard :title="{ ar: 'التعبئة والطرود', en: 'Packing & packages' }" :count="fo.packages.length" :padded="false" class="mb-3.5">
       <div v-if="fo.status === 'picked'" class="px-[18px] py-3"><PackRow :fo="fo" standalone @changed="det.refetch()" /></div>
+      <div v-else-if="['picking', 'packed', 'loaded', 'onroute'].includes(fo.status)" class="px-[18px] py-3"><FoActions :fo="fo" @changed="det.refetch()" /></div>
       <DataTable :columns="pkgCols" :rows="fo.packages" :row-key="(p) => p.id" :min-width="700" :empty-text="{ ar: 'لا طرود بعد — تُنشأ عند إتمام التعبئة', en: 'No packages yet — created on packing' }">
         <template #cell-labelRef="{ row }"><span class="num text-[9.5px] text-violet">{{ row.labelRef || '—' }}</span></template>
+        <template #cell-status="{ row }"><Chip :map="PKG_LABELS" :k="row.status || 'packed'" small :title="row.voidReason || null" /></template>
+      </DataTable>
+    </SectionCard>
+
+    <SectionCard v-if="cartons.length" :title="{ ar: 'الكراتين — ملصق لكل كرتون', en: 'Cartons — one label each' }" :count="cartons.length" :padded="false" class="mb-3.5">
+      <DataTable :columns="cartonCols" :rows="cartons" :row-key="(c) => c.code" :page-size="12" :min-width="640">
+        <template #cell-seq="{ row }"><span class="num">{{ row.seq }} / {{ cartons.length }}</span></template>
+        <template #cell-status="{ row }"><Chip :map="CARTON_LABELS" :k="row.status" small /></template>
       </DataTable>
     </SectionCard>
 

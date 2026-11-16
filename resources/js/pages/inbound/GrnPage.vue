@@ -26,5 +26,5 @@ const sub = computed(() => (g.value ? `${pn(g.value.supplier)} · ${g.value.ware
   </PageHead>
   <ErrorBanner :error="q.error.value" :closable="false" />
   <div v-if="q.isLoading.value" class="skel min-h-[240px]" />
-  <GrnDetail v-if="g" :grn="g" />
+  <GrnDetail v-if="g" :grn="g" @changed="q.refetch()" />
 </template>

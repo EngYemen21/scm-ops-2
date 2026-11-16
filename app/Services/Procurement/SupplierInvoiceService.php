@@ -2,6 +2,8 @@
 
 namespace App\Services\Procurement;
 
+use App\Finance\Models\Journal;
+use App\Finance\Services\AccountMap;
 use App\Finance\Services\LedgerService;
 use App\Finance\Services\PaymentsService;
 use App\Models\GrnLine;
@@ -60,8 +62,9 @@ class SupplierInvoiceService
             $tolerance = (float) ($this->settings->get('procurement.invoiceTolerancePct') ?? 2);
             $vatPct = isset($dto['vatPct']) && $dto['vatPct'] !== null && $dto['vatPct'] !== '' ? (float) $dto['vatPct'] : (float) ($po->vat_pct ?? 15);
 
-            // accepted on GRNs and already invoiced, per PO line
-            $received = GrnLine::whereIn('po_line_id', $po->lines->pluck('id'))->selectRaw('po_line_id, sum(accepted_qty) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
+            // accepted on GRNs (a voided receipt is not goods) and already invoiced, per PO line
+            $received = GrnLine::whereIn('po_line_id', $po->lines->pluck('id'))->whereHas('grn', fn ($q) => $q->whereNull('voided_at'))
+                ->selectRaw('po_line_id, sum(accepted_qty) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
             $invoiced = SupplierInvoiceLine::whereIn('po_line_id', $po->lines->pluck('id'))
                 ->whereHas('invoice', fn ($q) => $q->where('status', '!=', 'cancelled'))
                 ->selectRaw('po_line_id, sum(qty) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
@@ -107,10 +110,26 @@ class SupplierInvoiceService
             }
             $vatAmount = H::round2(($subtotal - $discount + $shipping) * $vatPct / 100);
             $total = H::round2($subtotal - $discount + $shipping + $vatAmount);
-            // header: the PO's own charges are the reference for shipping / discount
-            if (abs($shipping - (float) $po->shipping_cost) > 0.005 || abs($discount - (float) $po->discount) > 0.005) {
-                $variances[] = ['lineNo' => null, 'kind' => 'charges', 'expected' => ['discount' => (float) $po->discount, 'shipping' => (float) $po->shipping_cost], 'actual' => ['discount' => $discount, 'shipping' => $shipping],
-                    'textAr' => 'الخصم أو الشحن يختلف عن أمر الشراء', 'textEn' => 'Discount or shipping differs from the purchase order'];
+            // header charges: an order is often billed on several invoices, so each invoice is compared with what is LEFT of the
+            // order's discount and shipping after the earlier invoices — a second invoice that repeats the full shipping
+            // charge is a double billing, and a partial invoice that carries only its share is not a variance.
+            $left = self::chargesLeft($po);
+            $over = [];
+            foreach (['shipping' => $shipping, 'discount' => $discount] as $k => $billed) {
+                if ($billed > $left[$k]['remaining'] + $left[$k]['po'] * $tolerance / 100 + 0.005) {
+                    $over[] = $k;
+                }
+            }
+            if ($over) {
+                $names = ['shipping' => ['الشحن', 'shipping'], 'discount' => ['الخصم', 'discount']];
+                $ar = implode(' · ', array_map(fn ($k) => "{$names[$k][0]} ".PoService::num($k === 'shipping' ? $shipping : $discount).' يتجاوز المتبقي على أمر الشراء '.PoService::num($left[$k]['remaining'])
+                    .($left[$k]['invoiced'] > 0 ? ' (سبق تحميل '.PoService::num($left[$k]['invoiced']).' على فواتير أخرى من أصل '.PoService::num($left[$k]['po']).')' : ' (في الأمر '.PoService::num($left[$k]['po']).')'), $over));
+                $en = implode(' · ', array_map(fn ($k) => "{$names[$k][1]} ".PoService::num($k === 'shipping' ? $shipping : $discount).' exceeds what is left on the order '.PoService::num($left[$k]['remaining'])
+                    .' (order '.PoService::num($left[$k]['po']).', already invoiced '.PoService::num($left[$k]['invoiced']).')', $over));
+                $variances[] = ['lineNo' => null, 'kind' => 'charges', 'fields' => $over,
+                    'expected' => ['discount' => $left['discount']['remaining'], 'shipping' => $left['shipping']['remaining']], 'actual' => ['discount' => $discount, 'shipping' => $shipping],
+                    'po' => ['discount' => $left['discount']['po'], 'shipping' => $left['shipping']['po']], 'previouslyInvoiced' => ['discount' => $left['discount']['invoiced'], 'shipping' => $left['shipping']['invoiced']],
+                    'textAr' => $ar, 'textEn' => $en];
             }
             $status = $variances ? 'disputed' : 'matched';
             $dueDate = ! empty($dto['dueDate']) ? H::parseDate($dto['dueDate']) : self::dueFromTerms(H::parseDate($dto['invoiceDate']), (string) ($po->payment_terms ?: $po->supplier->terms));
@@ -136,6 +155,20 @@ class SupplierInvoiceService
 
             return $this->get($inv->id);
         });
+    }
+
+    /**
+     * Discount and shipping of a purchase order that are not yet billed: the order's figure minus what its earlier
+     * non-cancelled invoices carried. The expectation of the next invoice, and what the invoice form prefills.
+     *
+     * @return array{discount: array{po:float, invoiced:float, remaining:float}, shipping: array{po:float, invoiced:float, remaining:float}}
+     */
+    public static function chargesLeft(PurchaseOrder $po): array
+    {
+        $prior = SupplierInvoice::where('po_id', $po->id)->where('status', '!=', 'cancelled')->selectRaw('coalesce(sum(discount), 0) as d, coalesce(sum(shipping_cost), 0) as s')->toBase()->first();
+        $row = fn (float $ordered, float $invoiced) => ['po' => H::round2($ordered), 'invoiced' => H::round2($invoiced), 'remaining' => max(0.0, H::round2($ordered - $invoiced))];
+
+        return ['discount' => $row((float) $po->discount, (float) ($prior->d ?? 0)), 'shipping' => $row((float) $po->shipping_cost, (float) ($prior->s ?? 0))];
     }
 
     /** matched | disputed → approved. A disputed invoice needs a written decision. */
@@ -269,13 +302,13 @@ class SupplierInvoiceService
      * The approval journal: goods at the PO price close the GRNI accrual, the price difference is a purchase price variance,
      * shipping is freight-in, VAT input is recoverable, and the supplier is owed the invoice total.
      */
-    private function postApproval(AuthUser $user, SupplierInvoice $inv): \App\Finance\Models\Journal
+    private function postApproval(AuthUser $user, SupplierInvoice $inv): Journal
     {
         $inv->loadMissing(['lines', 'supplier', 'po']);
         $grni = round($inv->lines->sum(fn ($l) => (int) $l->qty * (float) $l->po_price), 2);
         $goods = round($inv->lines->sum(fn ($l) => (int) $l->qty * (float) $l->price), 2);
         $variance = round($goods - $grni - (float) $inv->discount, 2); // price above PO (+) / below PO or discount (−)
-        $dims = ['referenceType' => 'SupplierInvoice', 'referenceId' => $inv->id, 'warehouseId' => $inv->po?->warehouse_id, 'costCenterId' => app(\App\Finance\Services\AccountMap::class)->forWarehouse($inv->po?->warehouse_id)?->id];
+        $dims = ['referenceType' => 'SupplierInvoice', 'referenceId' => $inv->id, 'warehouseId' => $inv->po?->warehouse_id, 'costCenterId' => app(AccountMap::class)->forWarehouse($inv->po?->warehouse_id)?->id];
         $lines = [];
         if ($grni > 0) {
             $lines[] = ['role' => 'grni', 'debit' => $grni, 'description' => "إقفال بضاعة مستلمة غير مفوترة — {$inv->po?->number}"] + $dims;

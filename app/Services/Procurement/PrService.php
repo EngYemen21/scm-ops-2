@@ -157,10 +157,10 @@ class PrService
      */
     public function toRfq(AuthUser $user, string $id, array $dto): Rfq
     {
-        $pr = $this->find($id);
-        $this->transition($pr, 'converted', "لا يمكن تحويل {$pr->number} إلى RFQ إلا بعد اعتماده (الحالة: {$pr->status})");
+        $prId = $this->find($id)->id;
 
-        return DB::transaction(function () use ($user, $pr, $dto) {
+        return DB::transaction(function () use ($user, $prId, $dto) {
+            $pr = $this->lockForConversion($prId, 'RFQ');
             $rfq = $this->rfq->create($user, [
                 'prNumber' => $pr->number, 'lines' => $pr->lines->map(fn ($l) => ['sku' => $l->product->sku, 'qty' => $l->qty])->all(),
                 'invitedRule' => $dto['invitedRule'] ?? null, 'supplierCodes' => $dto['supplierCodes'] ?? null, 'closeDate' => $dto['closeDate'], 'terms' => $dto['terms'] ?? null,
@@ -176,30 +176,34 @@ class PrService
 
     /**
      * approved → converted: creates a PO directly (prices from dto, else PR estimate, else product purchase price).
+     * Every PO line keeps the requisition's estimate (`po_lines.pr_est_price`); a price above it beyond
+     * `procurement.prPriceTolerancePct` needs `priceReason`, flags the order and adds finance to its approval chain
+     * (PoService::create). The requisition row is locked, so two people cannot convert the same requisition twice.
      *
-     * @param  array{supplierCode:string, dueDate:string, paymentTerms?:?string, notes?:?string, prices?:?array, overrideSupplierScore?:?bool, overrideReason?:?string}  $dto
+     * @param  array{supplierCode:string, dueDate:string, paymentTerms?:?string, notes?:?string, prices?:?array, priceReason?:?string, overrideSupplierScore?:?bool, overrideReason?:?string}  $dto
      */
     public function toPo(AuthUser $user, string $id, array $dto): PurchaseOrder
     {
-        $pr = $this->find($id);
-        $this->transition($pr, 'converted', "لا يمكن تحويل {$pr->number} إلى أمر شراء إلا بعد اعتماده (الحالة: {$pr->status})");
-        $given = [];
-        foreach (($dto['prices'] ?? null) ?: [] as $p) {
-            $given[$p['sku']] ??= (float) $p['price'];
-        }
-        $lines = [];
-        foreach ($pr->lines as $l) {
-            $price = $given[$l->product->sku] ?? ($l->est_price !== null ? (float) $l->est_price : ($l->product->purchase_price !== null ? (float) $l->product->purchase_price : null));
-            if (! $price || $price <= 0) {
-                throw AppError::validation('PRICE_REQUIRED', "حدد سعر الوحدة لـ {$l->product->name_ar}", "Unit price required for {$l->product->sku}");
-            }
-            $lines[] = ['sku' => $l->product->sku, 'qty' => $l->qty, 'price' => $price];
-        }
+        $prId = $this->find($id)->id;
 
-        return DB::transaction(function () use ($user, $pr, $dto, $lines) {
+        return DB::transaction(function () use ($user, $prId, $dto) {
+            $pr = $this->lockForConversion($prId, 'أمر شراء');
+            $given = [];
+            foreach (($dto['prices'] ?? null) ?: [] as $p) {
+                $given[$p['sku']] ??= (float) $p['price'];
+            }
+            $lines = [];
+            foreach ($pr->lines as $l) {
+                $price = $given[$l->product->sku] ?? ($l->est_price !== null ? (float) $l->est_price : ($l->product->purchase_price !== null ? (float) $l->product->purchase_price : null));
+                if (! $price || $price <= 0) {
+                    throw AppError::validation('PRICE_REQUIRED', "حدد سعر الوحدة لـ {$l->product->name_ar}", "Unit price required for {$l->product->sku}");
+                }
+                $lines[] = ['sku' => $l->product->sku, 'qty' => $l->qty, 'price' => $price, 'prEstPrice' => $l->est_price !== null ? (float) $l->est_price : null];
+            }
             $po = $this->po->create($user, [
                 'supplierCode' => $dto['supplierCode'], 'warehouseCode' => $pr->warehouse->code, 'dueDate' => $dto['dueDate'], 'paymentTerms' => $dto['paymentTerms'] ?? null, 'reference' => $pr->number,
                 'notes' => $dto['notes'] ?? null, 'lines' => $lines, 'overrideSupplierScore' => $dto['overrideSupplierScore'] ?? null, 'overrideReason' => $dto['overrideReason'] ?? null,
+                'priceReason' => $dto['priceReason'] ?? null,
             ], ['source' => 'pr']);
             $from = $pr->status;
             $pr->update(['status' => 'converted', 'po_id' => $po->id]);
@@ -327,6 +331,21 @@ class PrService
     private function load(string $prId): PurchaseRequisition
     {
         return PurchaseRequisition::with($this->includes())->findOrFail($prId);
+    }
+
+    /**
+     * Row-locks the requisition and checks approved → converted INSIDE the caller's transaction: the second of two
+     * simultaneous conversions waits for the lock, then sees `converted` and is refused (it used to create a second
+     * document). The lock is the first statement of the transaction — under MySQL REPEATABLE READ a plain read before it
+     * would fix a snapshot in which the other conversion is still invisible.
+     */
+    private function lockForConversion(string $prId, string $target): PurchaseRequisition
+    {
+        PurchaseRequisition::whereKey($prId)->lockForUpdate()->first(['id']);
+        $pr = $this->load($prId);
+        $this->transition($pr, 'converted', "لا يمكن تحويل {$pr->number} إلى {$target} إلا بعد اعتماده (الحالة: {$pr->status})");
+
+        return $pr;
     }
 
     private function find(string $id): PurchaseRequisition

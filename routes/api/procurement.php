@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('procurement')->group(function () {
     // dashboard & replenishment
     Route::get('dashboard', [ProcurementController::class, 'dashboard']);
+    // the procurement / receiving policies the screens need (score limit, price and invoice tolerances) — read-only
+    Route::get('policy', [ProcurementController::class, 'policy']);
     Route::get('suggestions', [ProcurementController::class, 'suggestions']);
     Route::post('suggestions/{sku}/pr', [ProcurementController::class, 'toPr'])->middleware('perm:pr.create');
     Route::post('suggestions/{sku}/rfq', [ProcurementController::class, 'toRfq'])->middleware('perm:rfq.create');
@@ -52,6 +54,8 @@ Route::prefix('procurement')->group(function () {
     Route::post('po/{id}/send', [PoController::class, 'send'])->middleware('perm:po.send');
     Route::post('po/{id}/confirm', [PoController::class, 'confirm'])->middleware('perm:po.send');
     Route::post('po/{id}/cancel', [PoController::class, 'cancel'])->middleware('perm:po.cancel');
+    // close an order short after a partial receipt: what the supplier still owes is waived { reason }
+    Route::post('po/{id}/close', [PoController::class, 'close'])->middleware('perm:po.cancel');
     // delivery follow-up on an open PO (last contact / delay reason)
     Route::post('po/{id}/follow-up', [PoController::class, 'followUp'])->middleware('perm:po.send');
 

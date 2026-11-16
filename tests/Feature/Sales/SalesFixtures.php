@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Finance\Models\CustomerInvoice;
+use App\Finance\Services\LedgerService;
 use App\Models\Batch;
 use App\Models\Customer;
 use App\Models\Driver;
@@ -14,6 +16,7 @@ use App\Models\TripStop;
 use App\Models\Vehicle;
 use App\Models\Warehouse;
 use App\Services\Inventory\InventoryService;
+use App\Services\Sales\CreditService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -111,11 +114,35 @@ trait SalesFixtures
         $fo = $this->expectOk($this->postAs('wm', "/api/sales/orders/{$soNumber}/fulfill"));
         $full = $this->expectOk($this->getAs('worker', "/api/fulfillment/orders/{$fo['number']}"));
         foreach ($full['pickLists'][0]['tasks'] as $t) {
-            $this->expectOk($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t['id']}/confirm", ['scannedBin' => $t['bin']['code'], 'scannedProduct' => $t['product']['sku']]));
+            $this->expectOk($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t['id']}/confirm", ['scannedBin' => $t['bin']['code'], 'scannedProduct' => $t['product']['sku'], 'scannedBatch' => $t['batch']['batchNo'] ?? null]));
         }
         $this->expectOk($this->postAs('worker', "/api/fulfillment/orders/{$fo['number']}/pack", ['cartons' => 2, 'weightKg' => $weightKg]));
 
         return $fo['number'];
+    }
+
+    /**
+     * What a customer really owes: an issued, unpaid customer invoice with its journal (Dr receivables / Cr revenue), so
+     * the receivables sub-ledger still equals the general ledger. `customers.balance` is derived from documents like this
+     * one (CreditService) — writing a figure into the column means nothing. Settle it with POST /api/finance/receipts.
+     */
+    protected function receivable(Customer $customer, float $amount): CustomerInvoice
+    {
+        return DB::transaction(function () use ($customer, $amount) {
+            $invoice = CustomerInvoice::create([
+                'number' => self::code('CI-T'), 'kind' => 'invoice', 'customer_id' => $customer->id, 'invoice_date' => now()->toDateString(), 'due_date' => now()->addDays(30)->toDateString(),
+                'status' => 'issued', 'subtotal' => $amount, 'vat_pct' => 0, 'vat_amount' => 0, 'total' => $amount, 'paid_amount' => 0, 'created_by' => 'test',
+            ]);
+            $ref = ['referenceType' => 'CustomerInvoice', 'referenceId' => $invoice->id];
+            $journal = $this->app->make(LedgerService::class)->post(null, [
+                'eventKey' => "ci:{$invoice->id}", 'source' => ['type' => 'CustomerInvoice', 'id' => $invoice->id, 'number' => $invoice->number], 'memo' => "فاتورة اختبار {$invoice->number}",
+                'lines' => [['role' => 'ar', 'debit' => $amount, 'partnerType' => 'customer', 'partnerId' => $customer->id] + $ref, ['role' => 'revenue', 'credit' => $amount] + $ref],
+            ]);
+            $invoice->update(['journal_id' => $journal->id]);
+            $this->app->make(CreditService::class)->sync($customer->id);
+
+            return $invoice->refresh();
+        });
     }
 
     protected function reserved(Product $product): int

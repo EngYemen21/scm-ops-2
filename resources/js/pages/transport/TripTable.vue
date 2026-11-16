@@ -1,12 +1,13 @@
 <script setup>
 // Trips table (the reference `tripColumns`): number · date · warehouse · vehicle · driver · route · stops · orders · load ·
-// plan / actual · ETA (Integration Pending unless the API sends one) · progress · delay · status.
+// plan / actual · planned arrival at the next open stop (the plan: maps or estimate — red when a stop would miss its
+// customer window) · progress · delay · status.
 //   <TripTable :paged="list.data.value" :loading="…" :selected-key="openTrip" @page="page = $event" @open="(n) => …" />
 //   <TripTable :rows="delayedRows" … />                                   (client-side rows, no pager)
 import { DataTable, Chip } from '@/components';
-import { fmtDateOnly, fmtNum, fmtTime, lang } from '@/i18n';
+import { fmtDateOnly, fmtNum, fmtTime, lang, t } from '@/i18n';
 import { TRIP_LABELS } from '@/shared';
-import { delayLabel, drvName, etaText, tripProgress } from './tms';
+import { delayLabel, drvName, plannedEta, tripProgress } from './tms';
 
 defineProps({
   paged: { type: Object, default: null },
@@ -31,7 +32,7 @@ const columns = [
   { key: 'cbm', header: { ar: 'م³', en: 'm³' }, kind: 'num', width: '42px', value: (r) => fmtNum(r.cbm, 1) },
   { key: 'km', header: { ar: 'كم', en: 'km' }, kind: 'num', width: '42px', value: (r) => fmtNum(r.km) },
   { key: 'plan', header: { ar: 'المخطط / الفعلي', en: 'Plan / actual' }, kind: 'date', width: '88px', value: (r) => `${r.plannedStart || '—'} / ${r.actualStart ? fmtTime(r.actualStart) : '—'}` },
-  { key: 'eta', header: 'ETA', width: '72px' },
+  { key: 'eta', header: { ar: 'الوصول المخطط', en: 'Planned arrival' }, width: '86px' },
   { key: 'prog', header: { ar: 'التقدم', en: 'Progress' }, width: '64px' },
   { key: 'delayMin', header: { ar: 'التأخر', en: 'Delay' }, width: '70px' },
   { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '100px' },
@@ -41,9 +42,14 @@ const columns = [
 <template>
   <DataTable :columns="columns" :paged="paged" :rows="rows" :loading="loading" compact :row-key="(r) => r.number" :selected-key="selectedKey" :empty-text="emptyText"
              @page="emit('page', $event)" @row-click="(r) => emit('open', r.number)">
+    <template #cell-number="{ row }">
+      {{ row.number }}<span v-if="row.kind === 'transfer'" class="ms-1 rounded font-sans bg-[#e8effe] px-1 py-px text-[8.5px] font-extrabold text-[#3C79F5]" :title="t('رحلة تحويل بين المستودعات', 'Warehouse transfer trip')">{{ t('تحويل', 'TRF') }}</span>
+    </template>
     <template #cell-vehicle="{ row }"><span class="num font-bold text-violet">{{ row.vehicle?.code || '—' }}</span></template>
     <template #cell-driver="{ row }"><b class="text-[10px]">{{ drvName(row.driver, lang) }}</b></template>
-    <template #cell-eta="{ row }"><span class="num text-[9px] font-bold text-brand-dark">{{ etaText(row) }}</span></template>
+    <template #cell-eta="{ row }">
+      <span dir="ltr" class="num text-[9.5px] font-bold" :class="plannedEta(row).late > 0 ? 'text-bad' : 'text-brand-dark'" :title="plannedEta(row).late > 0 ? t(`${plannedEta(row).late} محطة خارج نافذة العميل`, `${plannedEta(row).late} stop(s) outside the customer window`) : t('الوصول المخطط للمحطة التالية', 'Planned arrival at the next stop')">{{ plannedEta(row).next || '—' }}{{ plannedEta(row).late > 0 ? ' ⚠' : '' }}</span>
+    </template>
     <template #cell-prog="{ row }">
       <div class="row !gap-1.5"><div class="progress !h-1.5 flex-1"><div :style="{ width: tripProgress(row).pct + '%', background: '#1BC4DB' }" /></div><span class="num text-[9px] font-bold">{{ tripProgress(row).pct }}%</span></div>
     </template>

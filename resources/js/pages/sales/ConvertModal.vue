@@ -1,17 +1,20 @@
 <script setup>
-// Convert an approved quotation into a sales order (warehouse, delivery date / window, priority).
-//   <ConvertModal :qt="quotationOrNull" @close="…" @done="(so) => …" />
+// Convert an approved quotation into a sales order (warehouse, delivery date / window, priority). When stock is short
+// the server's refusal lists what is available and the order can be accepted with the rest on backorder (ShortagePanel).
+//   <ConvertModal :qt="quotationOrNull" @close="…" @done="(so) => …" @refused="refetch" />
+// `refused` fires when the server said no: the refusal may have changed the quotation (an expired one becomes `expired`).
 import { computed, reactive, watch } from 'vue';
 import { api, useAction } from '@/api/client';
 import { Btn, DateInput, ErrorBanner, Modal, SelectInput } from '@/components';
 import { fmtMoney, t } from '@/i18n';
+import ShortagePanel from './ShortagePanel.vue';
 import { PRIORITIES, WINDOWS, custName, isoDatePlus, useLookups, warehouseOptions } from './shared';
 
 const props = defineProps({
   /** Quotation to convert; null = closed. */
   qt: { type: Object, default: null },
 });
-const emit = defineEmits(['close', 'done']);
+const emit = defineEmits(['close', 'done', 'refused']);
 
 const lookups = useLookups();
 const act = useAction();
@@ -25,19 +28,24 @@ watch(() => [props.qt, lookups.data.value], () => {
 
 const warehouses = computed(() => warehouseOptions(lookups.data.value));
 
-async function go() {
+async function go(allowBackorder = false) {
   const qt = props.qt;
-  const r = await act.run(() => api.postIdempotent(`/sales/quotations/${qt.number}/convert`, { ...v }), {
-    success: (so) => t(`حُوّل ${qt.number} إلى أمر البيع ${so.number} — حُجز المخزون FEFO`, `${qt.number} converted to ${so.number}`),
+  const r = await act.run(() => api.postIdempotent(`/sales/quotations/${qt.number}/convert`, { ...v, ...(allowBackorder ? { allowBackorder: true } : {}) }), {
+    success: (so) => (so.backorders?.length
+      ? t(`حُوّل ${qt.number} إلى ${so.number} — حُجز المتاح والباقي في الطلب المعلّق ${so.backorders[0].number}`, `${qt.number} converted to ${so.number} — the rest is on backorder ${so.backorders[0].number}`)
+      : so.status === 'confirmed'
+        ? t(`حُوّل ${qt.number} إلى ${so.number} — معلّق بانتظار المخزون`, `${qt.number} converted to ${so.number} — waiting for stock`)
+        : t(`حُوّل ${qt.number} إلى أمر البيع ${so.number} — حُجز المخزون FEFO`, `${qt.number} converted to ${so.number}`)),
     invalidate: ['sales', 'inventory', 'customers'],
+    errorToast: false,
   });
-  if (r) { emit('done', r); emit('close'); }
+  if (r) { emit('done', r); emit('close'); } else emit('refused');
 }
 </script>
 
 <template>
   <Modal v-if="qt" open :width="520" :title="{ ar: `تحويل ${qt.number} لأمر بيع`, en: `Convert ${qt.number} to a sales order` }"
-         :sub="{ ar: 'يتطلب عرضًا معتمدًا — فحص المتاح والحد الائتماني ثم حجز FEFO', en: 'Requires an approved quotation — stock/credit check then FEFO reservation' }" @close="emit('close')">
+         :sub="{ ar: 'يتطلب عرضًا معتمدًا ساري الصلاحية — فحص الخصم والحد الائتماني والمتاح ثم حجز FEFO', en: 'Requires an approved, still valid quotation — discount / credit / stock check then FEFO reservation' }" @close="emit('close')">
     <div class="form-grid">
       <SelectInput v-model="v.warehouseCode" :label="{ ar: 'المستودع', en: 'Warehouse' }" required :options="warehouses" :placeholder="{ ar: '— اختر —', en: '— select —' }" />
       <DateInput v-model="v.dueDate" :label="{ ar: 'تاريخ التسليم', en: 'Delivery date' }" required />
@@ -45,11 +53,12 @@ async function go() {
       <SelectInput v-model="v.priority" :label="{ ar: 'الأولوية', en: 'Priority' }" :options="PRIORITIES" />
     </div>
     <div class="hint teal !mt-3">{{ t(`${qt.lines.length} أسطر · الإجمالي ${fmtMoney(qt.totals.total)} ر.س · العميل ${custName(qt.customer)}`, `${qt.lines.length} lines · total ${fmtMoney(qt.totals.total)} SAR · customer ${custName(qt.customer)}`) }}</div>
+    <ShortagePanel :error="act.error.value" :loading="act.pending.value" @accept="go(true)" />
 
     <template #footer>
-      <ErrorBanner :error="act.error.value" @close="act.clearError()" />
+      <ErrorBanner :error="act.error.value" hide-details @close="act.clearError()" />
       <div class="flex gap-2">
-        <Btn tone="purple" class="!h-[42px] flex-1" :loading="act.pending.value" :label="{ ar: 'تحويل لأمر بيع', en: 'Convert to SO' }" @click="go" />
+        <Btn tone="purple" class="!h-[42px] flex-1" :loading="act.pending.value" :label="{ ar: 'تحويل لأمر بيع', en: 'Convert to SO' }" @click="go(false)" />
         <Btn tone="soft" class="!h-[42px] w-[110px]" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="emit('close')" />
       </div>
     </template>

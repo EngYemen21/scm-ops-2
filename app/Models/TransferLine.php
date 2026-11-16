@@ -21,6 +21,8 @@ class TransferLine extends BaseModel
             'line_no' => 'integer',
             'qty' => 'integer',
             'received_qty' => 'integer',
+            'variance_qty' => 'integer',
+            'unit_cost' => 'decimal:4',
         ];
     }
 

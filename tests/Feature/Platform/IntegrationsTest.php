@@ -6,10 +6,12 @@ use App\Models\Attachment;
 use App\Models\AuditLog;
 use App\Models\IntegrationEvent;
 use App\Models\PodAttachment;
+use App\Models\StoredFile;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Integrations\Adapters\AdapterFactory;
 use App\Services\Integrations\Adapters\B2bWebhook;
+use App\Services\Integrations\Adapters\DatabaseStorage;
 use App\Services\Integrations\Adapters\ErpAdapter;
 use App\Services\Integrations\Adapters\HttpErp;
 use App\Services\Integrations\Adapters\ObjectStorageAdapter;
@@ -107,8 +109,14 @@ class IntegrationsTest extends ApiTestCase
         $this->assertSame('integration_pending', $svc->maps->eta('Riyadh', 'Jeddah')['status']);
         $route = $svc->maps->optimizeRoute([['id' => 'b'], ['id' => 'a'], ['id' => 'c']]);
         $this->assertSame(['integration_pending', ['b', 'a', 'c']], [$route['status'], $route['order']], 'a pending optimiser keeps the input order');
-        $this->assertSame('integration_pending', $svc->storage->putObject('k', 'bytes', 'text/plain')['status']);
-        $this->assertNull($svc->storage->getSignedUrl('k'));
+        // file storage is the one exception: without an object store a file is kept in the database — still nothing is sent anywhere
+        $this->assertInstanceOf(DatabaseStorage::class, $svc->storage);
+        $key = 'test/'.self::uid().'/k.txt';
+        $this->assertSame(['status' => 'stored', 'key' => $key, 'url' => "/api/integrations/files/{$key}"], $svc->storage->putObject($key, 'bytes', 'text/plain'));
+        $this->assertSame(['bytes' => 'bytes', 'mime' => 'text/plain', 'size' => 5], $svc->storage->getObject($key));
+        $this->assertNull($svc->storage->getObject('test/missing'));
+        $this->assertNull($svc->storage->getSignedUrl($key), 'no provider URL exists: the file is read through the API');
+        $this->assertFalse($svc->storage->configured(), 'the object-store integration itself stays pending');
         Http::assertNothingSent();
     }
 
@@ -219,15 +227,27 @@ class IntegrationsTest extends ApiTestCase
     }
 
     // ───────────── attachments ─────────────
-    public function test_attachment_without_storage_is_integration_pending_with_no_url(): void
+    public function test_attachment_without_object_storage_is_stored_in_the_database_and_served_by_the_api(): void
     {
         $entityId = 'E'.self::uid();
         $row = $this->expectOk($this->postAs('sales', '/api/integrations/attachments', ['entityType' => 'TestEntity', 'entityId' => $entityId, 'fileName' => 'proof.png', 'mime' => 'image/png', 'base64' => self::PNG_1PX]));
         $this->assertSame(['id', 'entityType', 'entityId', 'fileName', 'mime', 'size', 'storageKey', 'url', 'status', 'createdAt'], array_keys($row));
-        $this->assertSame('integration_pending', $row['status']);
-        $this->assertNull($row['storageKey']);
-        $this->assertNull($row['url']);
+        // kept for real (no object store → the database), with the key and the API path that serves it — never "pending"
+        $this->assertSame('stored', $row['status']);
+        $this->assertStringStartsWith("testentity/{$entityId}/", $row['storageKey']);
+        $this->assertSame("/api/integrations/files/{$row['storageKey']}", $row['url']);
         $this->assertSame(strlen(base64_decode(self::PNG_1PX)), $row['size']);
+        $this->assertSame(self::PNG_1PX, StoredFile::where('key', $row['storageKey'])->firstOrFail()->content);
+        $file = $this->getAs('wm', '/api/integrations/files/'.$row['storageKey']);
+        $file->assertOk();
+        $this->assertSame([base64_decode(self::PNG_1PX), 'image/png'], [$file->getContent(), $file->headers->get('Content-Type')]);
+        $this->assertSame('data:image/png;base64,'.self::PNG_1PX, $this->expectOk($this->getAs('wm', '/api/integrations/files/'.$row['storageKey'].'?as=data'))['dataUrl']);
+        // anything a browser should not render in place is offered as a download
+        $html = $this->expectOk($this->postAs('sales', '/api/integrations/attachments', ['entityType' => 'TestEntity', 'entityId' => $entityId.'H', 'fileName' => 'page.html', 'mime' => 'text/html', 'base64' => base64_encode('<b>x</b>')]));
+        $download = $this->getAs('wm', '/api/integrations/files/'.$html['storageKey']);
+        $this->assertSame('application/octet-stream', $download->headers->get('Content-Type'));
+        $this->assertStringStartsWith('attachment;', $download->headers->get('Content-Disposition'));
+        $this->expectRejected($this->getAs('wm', '/api/integrations/files/testentity/nope.png'), 'FILE_NOT_FOUND', [404]);
 
         $dataUrl = $this->expectOk($this->postAs('sales', '/api/integrations/attachments', ['entityType' => 'TestEntity', 'entityId' => $entityId, 'fileName' => 'a/../b صورة.png', 'mime' => 'image/png', 'base64' => 'data:image/png;base64,'.self::PNG_1PX]));
         $this->assertSame($row['size'], $dataUrl['size']);
@@ -238,7 +258,7 @@ class IntegrationsTest extends ApiTestCase
         $this->assertSame([$dataUrl['id'], $row['id']], array_column($list, 'id'), 'newest first');
         $audit = AuditLog::where('action', 'ATTACHMENT.ADD')->where('entity_id', $entityId)->latest('at')->first();
         $this->assertSame('sales', $audit->username);
-        $this->assertStringContainsString('integration_pending', $audit->new_value);
+        $this->assertStringContainsString('"status":"stored"', $audit->new_value);
 
         $this->expectRejected($this->getAs('wm', '/api/integrations/attachments?entityType=TestEntity'), 'INVALID_INPUT', [400]);
         $this->expectRejected($this->postAs('sales', '/api/integrations/attachments', ['entityType' => 'TestEntity', 'entityId' => $entityId, 'fileName' => 'x.bin', 'mime' => 'not a mime', 'base64' => self::PNG_1PX]), 'INVALID_INPUT', [400]);
@@ -272,7 +292,7 @@ class IntegrationsTest extends ApiTestCase
         $this->assertSame(1, Attachment::where('entity_id', $entityId)->count());
     }
 
-    public function test_pod_attachments_need_delivery_execute_and_stay_pending(): void
+    public function test_pod_attachments_need_delivery_execute_and_are_stored(): void
     {
         $file = ['kind' => 'signature', 'fileName' => 'sign.png', 'mime' => 'image/png', 'base64' => self::PNG_1PX];
         $before = PodAttachment::count();
@@ -280,7 +300,10 @@ class IntegrationsTest extends ApiTestCase
         $this->assertSame($before, PodAttachment::count());
 
         $row = $this->expectOk($this->postAs('driver', '/api/integrations/pods/POD-800/attachments', $file));
-        $this->assertSame(['signature', 'integration_pending', null, null], [$row['kind'], $row['status'], $row['storageKey'], $row['url']]);
+        $this->assertSame(['signature', 'stored'], [$row['kind'], $row['status']]);
+        $this->assertStringStartsWith('pod/POD-800/signature-', $row['storageKey']);
+        $this->assertSame("/api/integrations/files/{$row['storageKey']}", $row['url']);
+        $this->assertSame(base64_decode(self::PNG_1PX), $this->getAs('sales', $row['url'])->getContent(), 'a signed-in user who may see the POD reads its file');
         $list = $this->expectOk($this->getAs('sales', '/api/integrations/pods/POD-800/attachments'));
         $this->assertContains($row['id'], array_column($list, 'id'));
         $this->assertSame('POD-800', AuditLog::where('action', 'POD.ATTACHMENT')->latest('at')->first()->entity_number);

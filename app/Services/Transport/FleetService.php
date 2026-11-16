@@ -2,6 +2,7 @@
 
 namespace App\Services\Transport;
 
+use App\Finance\Services\FleetPosting;
 use App\Models\Driver;
 use App\Models\FleetAlert;
 use App\Models\FuelRecord;
@@ -14,6 +15,7 @@ use App\Models\Role;
 use App\Models\Route;
 use App\Models\StatusHistory;
 use App\Models\Trip;
+use App\Models\TripCost;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\Warehouse;
@@ -43,13 +45,44 @@ class FleetService
 
     private const REFRESH_CACHE_KEY = 'fleet.alerts.lastRefresh';
 
+    private const VEHICLE_DOC_FIELDS = ['regExpiry', 'insuranceExpiry', 'inspectionExpiry', 'opCardExpiry'];
+
+    private const DRIVER_DOC_FIELDS = ['licenseExpiry', 'iqamaExpiry', 'medicalExpiry'];
+
+    /** Open orders first, then closed, then cancelled (portable: no engine-specific FIELD()). */
+    private const MAINT_ORDER = "CASE status WHEN 'open' THEN 0 WHEN 'closed' THEN 1 ELSE 2 END";
+
+    /** A reason typed by a person for a correction / void / cancellation: at least this many characters. */
+    private const REASON_MIN = 3;
+
     public function __construct(
         private readonly NumberingService $numbering,
         private readonly AuditService $audit,
         private readonly NotifyService $notify,
         private readonly SettingsService $settings,
         private readonly TripsService $trips,
+        private readonly TripCostService $tripCost,
     ) {}
+
+    // ═══════════ trip cost sheet ═══════════
+    /** Recompute a trip's cost sheet on demand (it is also computed at close and whenever a linked fuel record or voucher changes). */
+    public function recomputeTripCost(AuthUser $user, string $number): array
+    {
+        $t = $this->trips->tripByNumber($number);
+
+        return DB::transaction(function () use ($user, $t) {
+            $before = TripCost::find($t->id);
+            $old = 0.0;
+            foreach (TripCostService::FIELDS as $field) {
+                $old += (float) ($before?->getAttribute($field) ?? 0);
+            }
+            $sheet = $this->tripCost->compute($t);
+            $this->audit->log($user, ['action' => 'TRIP.COST_RECOMPUTE', 'entityType' => 'Trip', 'entityId' => $t->id, 'entityNumber' => $t->number, 'field' => 'cost',
+                'oldValue' => round($old, 2), 'newValue' => ['total' => $sheet['total']] + array_intersect_key($sheet, array_flip(TripCostService::FIELDS))]);
+
+            return $sheet + ['number' => $t->number, 'message' => "أُعيد احتساب تكلفة {$t->number} — ".number_format($sheet['total'], 2).' ر.س', 'messageEn' => "Cost of {$t->number} recomputed — ".number_format($sheet['total'], 2).' SAR'];
+        });
+    }
 
     // ═══════════ vehicles ═══════════
     /** @param  array{state?:?string, kind?:?string, warehouse?:?string}  $f */
@@ -85,8 +118,8 @@ class FleetService
     {
         $v = Vehicle::with([
             'warehouse',
-            'maintenance' => fn ($q) => $q->orderBy('status')->orderByDesc('start_date')->orderByDesc('id'),
-            'fuel' => fn ($q) => $q->orderByDesc('date')->orderByDesc('id')->limit(20),
+            'maintenance' => fn ($q) => $q->orderByRaw(self::MAINT_ORDER)->orderByDesc('start_date')->orderByDesc('id'),
+            'fuel' => fn ($q) => $q->orderByDesc('date')->orderByDesc('id')->limit(20), // voided fills stay listed (struck in the client)
             'fuel.driver', 'drivers',
         ])->withCount(['trips', 'pods'])->where(fn ($w) => $w->where('id', $code)->orWhere('code', $code))->first()
             ?? throw AppError::notFound('VEHICLE_NOT_FOUND', "المركبة {$code} غير موجودة", "Vehicle {$code} not found");
@@ -130,8 +163,11 @@ class FleetService
         $kind = $dto['kind'] ?? 'dry';
         [$typeAr, $typeEn] = U::VEHICLE_TYPE_LABEL[$kind] ?? U::VEHICLE_TYPE_LABEL['dry'];
         $odometer = (int) ($dto['odometer'] ?? 0);
+        $purchase = isset($dto['purchaseCost']) ? round((float) $dto['purchaseCost'], 2) : null;
+        $salvage = isset($dto['salvageValue']) ? round((float) $dto['salvageValue'], 2) : null;
+        self::assertSalvage($purchase, $salvage);
 
-        $id = DB::transaction(function () use ($user, $dto, $code, $wh, $whCode, $kind, $typeAr, $typeEn, $odometer) {
+        $id = DB::transaction(function () use ($user, $dto, $code, $wh, $whCode, $kind, $typeAr, $typeEn, $odometer, $purchase, $salvage) {
             $v = Vehicle::create([
                 'code' => $code, 'plate_ar' => $dto['plateAr'], 'plate_en' => $dto['plateEn'] ?? null, 'vin' => $dto['vin'], 'brand' => $dto['brand'], 'model' => $dto['model'] ?? null,
                 'year' => isset($dto['year']) ? (int) $dto['year'] : null, 'kind' => $kind, 'ownership' => $dto['ownership'] ?? 'owned', 'type_ar' => $typeAr, 'type_en' => $typeEn,
@@ -141,6 +177,7 @@ class FleetService
                 'reg_expiry' => U::parseDate($dto['regExpiry']), 'insurance_expiry' => U::parseDate($dto['insuranceExpiry']), 'inspection_expiry' => U::parseDate($dto['inspectionExpiry']),
                 'op_card_expiry' => U::parseDate(($dto['opCardExpiry'] ?? null) ?: $dto['regExpiry']),
                 'gps_device_id' => $dto['gpsDeviceId'] ?? null, 'gps_online' => false, 'next_maint_km' => $odometer + 10000, 'state' => 'available',
+                'purchase_cost' => $purchase, 'salvage_value' => $salvage, 'life_km' => isset($dto['lifeKm']) ? (int) $dto['lifeKm'] : null, // depreciation per km of the trip cost sheet
             ]);
             $this->audit->log($user, ['action' => 'VEHICLE.CREATE', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityNumber' => $code,
                 'newValue' => ['kind' => $kind, 'maxKg' => (float) $dto['maxKg'], 'maxCbm' => (float) $dto['maxCbm'], 'warehouse' => $whCode]]);
@@ -166,7 +203,7 @@ class FleetService
         };
         $types = [
             'plateAr' => 'string', 'plateEn' => 'string', 'vin' => 'string', 'brand' => 'string', 'model' => 'string', 'year' => 'int', 'ownership' => 'string', 'maxKg' => 'float', 'maxCbm' => 'float',
-            'pallets' => 'int', 'odometer' => 'int', 'fuelType' => 'string', 'gpsDeviceId' => 'string', 'avgKmL' => 'float', 'nextMaintKm' => 'int', 'active' => 'bool',
+            'pallets' => 'int', 'fuelType' => 'string', 'gpsDeviceId' => 'string', 'avgKmL' => 'float', 'nextMaintKm' => 'int', 'active' => 'bool', 'lifeKm' => 'int',
         ];
         foreach ($types as $field => $type) {
             if (array_key_exists($field, $dto)) {
@@ -174,6 +211,34 @@ class FleetService
                 $set($field, $column, self::cast($dto[$field], $type), $v->getAttribute($column));
             }
         }
+        // odometer: a higher reading is an update; a LOWER one is a correction and needs its reason (audited on its own)
+        $odometerFix = null;
+        if (isset($dto['odometer'])) {
+            $reading = (int) $dto['odometer'];
+            if ($reading < $v->odometer) {
+                $why = trim((string) ($dto['odometerReason'] ?? ''));
+                if (mb_strlen($why) < self::REASON_MIN) {
+                    throw AppError::rule('VEHICLE_ODOMETER_LOWER', 'قراءة العداد ('.U::fmt0($reading).') أقل من القراءة الحالية ('.U::fmt0($v->odometer).') — تصحيح العداد للأدنى يحتاج سببًا مكتوبًا',
+                        "Odometer {$reading} is below the current reading {$v->odometer} — lowering it needs a written reason", ['current' => $v->odometer]);
+                }
+                $data['odometer'] = $reading;
+                $odometerFix = [$v->odometer, $reading, $why];
+            } else {
+                $set('odometer', 'odometer', $reading, $v->odometer);
+            }
+        }
+        // cost card (decimal columns come back as strings: compare as numbers)
+        foreach (['purchaseCost' => 'purchase_cost', 'salvageValue' => 'salvage_value'] as $field => $column) {
+            if (array_key_exists($field, $dto)) {
+                $new = $dto[$field] === null ? null : round((float) $dto[$field], 2);
+                $old = $v->getAttribute($column) === null ? null : (float) $v->getAttribute($column);
+                $set($field, $column, $new, $old);
+            }
+        }
+        self::assertSalvage(
+            array_key_exists('purchase_cost', $data) ? $data['purchase_cost'] : ($v->purchase_cost === null ? null : (float) $v->purchase_cost),
+            array_key_exists('salvage_value', $data) ? $data['salvage_value'] : ($v->salvage_value === null ? null : (float) $v->salvage_value),
+        );
         if (! empty($dto['kind']) && $dto['kind'] !== $v->kind) {
             [$typeAr, $typeEn] = U::VEHICLE_TYPE_LABEL[$dto['kind']];
             $set('kind', 'kind', $dto['kind'], $v->kind);
@@ -198,20 +263,43 @@ class FleetService
             if ($dto['warehouseCode'] && ! $wh) {
                 throw AppError::notFound('WH_NOT_FOUND', 'المستودع غير موجود');
             }
-            $data['warehouse_id'] = $wh?->id;
-            $changes['warehouse'] = [$v->warehouse_id, $wh?->code];
+            if ($wh?->id !== $v->warehouse_id) {
+                $data['warehouse_id'] = $wh?->id;
+                $changes['warehouse'] = [$v->warehouse_id ? Warehouse::where('id', $v->warehouse_id)->value('code') : null, $wh?->code];
+            }
         }
-        if (! $changes) {
+        if (! $changes && ! $odometerFix) {
             return $this->getVehicle($v->id);
         }
-        DB::transaction(function () use ($user, $v, $data, $changes) {
+        DB::transaction(function () use ($user, $v, $data, $changes, $odometerFix) {
             $v->update($data);
             foreach ($changes as $field => [$old, $new]) {
                 $this->audit->log($user, ['action' => 'VEHICLE.UPDATE', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityNumber' => $v->code, 'field' => $field, 'oldValue' => $old, 'newValue' => $new]);
             }
+            if ($odometerFix) {
+                [$old, $new, $why] = $odometerFix;
+                $this->audit->log($user, ['action' => 'VEHICLE.ODOMETER_CORRECTION', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityNumber' => $v->code, 'field' => 'odometer', 'oldValue' => $old, 'newValue' => ['odometer' => $new, 'reason' => $why]]);
+                $this->notify->activity($user, 'Vehicle', $v->id, $v->code, "صُحّح عداد {$v->code} من ".U::fmt0($old).' إلى '.U::fmt0($new)." — {$why}", "Odometer of {$v->code} corrected {$old} → {$new} — {$why}", ['disp']);
+            }
+            $renewed = array_values(array_intersect(self::VEHICLE_DOC_FIELDS, array_keys($changes)));
+            if ($renewed) {
+                $labels = array_column(array_filter(U::docInfos($v, U::VEHICLE_DOCS), fn ($doc) => in_array($doc['key'], $renewed, true)), 'labelAr');
+                $this->notify->activity($user, 'Vehicle', $v->id, $v->code, "حُدّثت وثائق {$v->code}: ".implode(' · ', $labels), "Documents of {$v->code} updated: ".implode(', ', $renewed));
+            }
+            // documents, the odometer and the maintenance plan drive the vehicle's alerts: re-evaluate them now, not at the next sweep
+            if ($v->active && ($renewed || $odometerFix || array_intersect(['odometer', 'nextMaintKm', 'nextMaintDate', 'active'], array_keys($changes)))) {
+                $this->refreshVehicleAlerts($v, $user, $this->alertPolicy());
+            }
         });
 
         return $this->getVehicle($v->id);
+    }
+
+    private static function assertSalvage(?float $purchase, ?float $salvage): void
+    {
+        if ($purchase !== null && $salvage !== null && $salvage > $purchase) {
+            throw AppError::validation('VEHICLE_SALVAGE', 'قيمة الخردة لا تتجاوز تكلفة الشراء', 'The salvage value cannot exceed the purchase cost');
+        }
     }
 
     /** VEHICLE_TRANSITIONS enforced; breakdown → critical alert + alternate suggestion. */
@@ -300,12 +388,42 @@ class FleetService
         }
         $page->sort === 'rating' ? $query->orderBy('rating', $page->order)->orderBy('code') : $query->orderBy('code');
 
-        return $page->paginate($query, function (Driver $d) {
-            $docs = U::docInfos($d, U::DRIVER_DOCS);
+        $minDaysLic = (int) $this->settings->get('fleet.driverLicenseMinDays');
+
+        return $page->paginate($query, function (Driver $d) use ($minDaysLic) {
+            $docs = self::driverDocs($d);
 
             return U::shape($d->toArray(), ['defaultVehicle' => ['code', 'plateAr'], 'user' => ['username', 'active']])
-                + ['docs' => $docs, 'docDays' => U::minDays($docs), 'canAssign' => $this->trips->driverCanAssign($d)];
+                + ['docs' => $docs, 'docDays' => U::minDays($docs), 'docBlock' => self::driverDocBlock($d, $minDaysLic), 'canAssign' => $this->trips->driverCanAssign($d)];
         });
+    }
+
+    /** Driver documents with what a lapse of each one does: the licence and the iqama stop assignment, the medical certificate only warns. */
+    private static function driverDocs(Driver $d): array
+    {
+        return array_map(fn (array $doc) => $doc + ['effect' => $doc['key'] === 'medicalExpiry' ? 'warns' : 'blocks'], U::docInfos($d, U::DRIVER_DOCS));
+    }
+
+    /**
+     * The document that stops this driver's assignment right now — a licence with fewer than `fleet.driverLicenseMinDays`
+     * days left (or expired), or an expired iqama / ID. Null when none does. The medical certificate never blocks.
+     *
+     * @return ?array{doc: string, days: int, ar: string, en: string}
+     */
+    private static function driverDocBlock(Driver $d, int $minDaysLic): ?array
+    {
+        $lic = U::daysTo($d->license_expiry);
+        if ($lic !== null && $lic < $minDaysLic) {
+            return ['doc' => 'licenseExpiry', 'days' => $lic,
+                'ar' => $lic < 0 ? 'الرخصة منتهية' : "الرخصة تنتهي خلال {$lic} يومًا (الحد الأدنى للإسناد {$minDaysLic} يومًا)",
+                'en' => $lic < 0 ? 'License expired' : "License expires in {$lic} days (assignment needs at least {$minDaysLic})"];
+        }
+        $iqama = U::daysTo($d->iqama_expiry);
+        if ($iqama !== null && $iqama < 0) {
+            return ['doc' => 'iqamaExpiry', 'days' => $iqama, 'ar' => 'الإقامة / الهوية منتهية', 'en' => 'Iqama / ID expired'];
+        }
+
+        return null;
     }
 
     public function getDriver(string $code): array
@@ -321,10 +439,10 @@ class FleetService
         $activeTrip = Trip::with('vehicle')->where('driver_id', $d->id)->whereIn('status', [...U::ACTIVE_TRIP_STATES, 'dassigned'])->first();
         $alerts = FleetAlert::where('entity_code', $d->code)->whereIn('status', self::ALERT_OPEN)->orderByDesc('created_at')->orderByDesc('id')->get();
         $pods = ProofOfDelivery::where('driver_id', $d->id)->selectRaw('result, count(*) as n')->groupBy('result')->pluck('n', 'result')->map(fn ($n) => (int) $n)->all();
-        $docs = U::docInfos($d, U::DRIVER_DOCS);
+        $docs = self::driverDocs($d);
 
         return U::shape($d->toArray(), ['defaultVehicle' => ['code', 'plateAr', 'typeAr'], 'user' => ['id', 'username', 'active', 'lastLoginAt']]) + [
-            'docs' => $docs, 'docDays' => U::minDays($docs),
+            'docs' => $docs, 'docDays' => U::minDays($docs), 'docBlock' => self::driverDocBlock($d, (int) $this->settings->get('fleet.driverLicenseMinDays')),
             'performance' => [
                 'trips' => $d->trips, 'deliveries' => $d->deliveries, 'fails' => $d->fails, 'okPct' => $d->ok_pct, 'ontimePct' => $d->ontime_pct, 'avgDelay' => $d->avg_delay, 'km' => $d->km,
                 'rating' => $d->rating, 'safety' => $d->safety, 'fuelScore' => $d->fuel_score, 'complaints' => $d->complaints, 'incidents' => $d->incidents, 'pods' => U::map($pods),
@@ -377,11 +495,13 @@ class FleetService
                 'license_no' => $dto['licenseNo'], 'license_type' => $dto['licenseType'] ?? null, 'license_expiry' => U::parseDate($dto['licenseExpiry']), 'iqama_expiry' => U::parseDate($dto['iqamaExpiry']),
                 'medical_expiry' => U::parseDate($dto['medicalExpiry'] ?? null), 'join_date' => U::parseDate($dto['joinDate'] ?? null) ?? U::today(), 'shift' => $shift, 'shift_en' => $shiftEn,
                 'default_vehicle_id' => $veh?->id, 'state' => 'available',
+                'hourly_cost' => isset($dto['hourlyCost']) ? round((float) $dto['hourlyCost'], 2) : null, // driver time of the trip cost sheet; null = fleet.driverHourlyCost
             ]);
             $this->audit->log($user, ['action' => 'DRIVER.CREATE', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityNumber' => $code,
                 'newValue' => ['name' => $dto['nameAr'], 'employeeNo' => $dto['employeeNo'], 'licenseExpiry' => $dto['licenseExpiry'], 'user' => $username]]);
             $this->audit->status($user, 'Driver', $d->id, $code, null, 'available');
-            $this->notify->activity($user, 'Driver', $d->id, $code, "أُضيف السائق {$dto['nameAr']} — متاح للإسناد", "Driver {$nameEn} added");
+            $this->refreshDriverAlerts($d->refresh(), $user, $this->alertPolicy()); // an iqama that is already expired stops assignment from the first minute
+            $this->notify->activity($user, 'Driver', $d->id, $code, "أُضيف السائق {$dto['nameAr']}".($d->blocked ? ' — موقوف عن الإسناد حتى تجديد الوثائق' : ' — متاح للإسناد'), "Driver {$nameEn} added");
 
             return $d->id;
         });
@@ -424,15 +544,27 @@ class FleetService
         }
         if (array_key_exists('defaultVehicleCode', $dto)) {
             $v = $dto['defaultVehicleCode'] ? $this->trips->vehicleByCode($dto['defaultVehicleCode']) : null;
-            $data['default_vehicle_id'] = $v?->id;
-            $changes['defaultVehicle'] = [$d->default_vehicle_id, $v?->code];
-        }
-        if (! empty($dto['licenseExpiry']) && ! array_key_exists('blocked', $dto)) {
-            $days = U::daysTo($dto['licenseExpiry']);
-            if ($days !== null && $days >= (int) $this->settings->get('fleet.driverLicenseMinDays') && $d->blocked) {
-                $data['blocked'] = false;
-                $changes['blocked'] = [true, false];
+            if ($v?->id !== $d->default_vehicle_id) {
+                $data['default_vehicle_id'] = $v?->id;
+                $changes['defaultVehicle'] = [$d->default_vehicle_id ? Vehicle::where('id', $d->default_vehicle_id)->value('code') : null, $v?->code];
             }
+        }
+        if (array_key_exists('hourlyCost', $dto)) { // decimal column: compare as numbers
+            $new = $dto['hourlyCost'] === null ? null : round((float) $dto['hourlyCost'], 2);
+            $set('hourlyCost', 'hourly_cost', $new, $d->hourly_cost === null ? null : (float) $d->hourly_cost);
+        }
+        // the block follows the documents: licence under the minimum days or an expired iqama stop assignment. Judge the
+        // dates as they will be after this change.
+        $minDaysLic = (int) $this->settings->get('fleet.driverLicenseMinDays');
+        $after = (clone $d)->forceFill(array_intersect_key($data, array_flip(['license_expiry', 'iqama_expiry'])));
+        $docBlock = self::driverDocBlock($after, $minDaysLic);
+        if (array_key_exists('blocked', $dto)) {
+            if ($d->blocked && ! filter_var($dto['blocked'], FILTER_VALIDATE_BOOLEAN) && $docBlock) {
+                throw AppError::rule('DRIVER_DOCS_BLOCK', "لا يُرفع الإيقاف عن {$d->name_ar}: {$docBlock['ar']} — جدّد الوثيقة أولًا", "Cannot unblock {$d->code}: {$docBlock['en']} — renew the document first", ['doc' => $docBlock['doc']]);
+            }
+        } elseif ($d->blocked && ! $docBlock && array_intersect(['licenseExpiry', 'iqamaExpiry'], array_keys($changes))) {
+            $data['blocked'] = false; // renewed: the document block is lifted with it
+            $changes['blocked'] = [true, false];
         }
         if (! $changes) {
             return $this->getDriver($d->id);
@@ -441,6 +573,14 @@ class FleetService
             $d->update($data);
             foreach ($changes as $field => [$old, $new]) {
                 $this->audit->log($user, ['action' => 'DRIVER.UPDATE', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityNumber' => $d->code, 'field' => $field, 'oldValue' => $old, 'newValue' => $new]);
+            }
+            $renewed = array_values(array_intersect(self::DRIVER_DOC_FIELDS, array_keys($changes)));
+            if ($renewed) {
+                $labels = array_column(array_filter(U::docInfos($d, U::DRIVER_DOCS), fn ($doc) => in_array($doc['key'], $renewed, true)), 'labelAr');
+                $this->notify->activity($user, 'Driver', $d->id, $d->code, "حُدّثت وثائق السائق {$d->name_ar}: ".implode(' · ', $labels).(($changes['blocked'][1] ?? null) === false ? ' — رُفع إيقاف الإسناد' : ''), "Documents of driver {$d->code} updated: ".implode(', ', $renewed));
+                if ($d->active) {
+                    $this->refreshDriverAlerts($d, $user, $this->alertPolicy()); // alert + block state now, not at the next sweep
+                }
             }
         });
 
@@ -506,36 +646,163 @@ class FleetService
             $like = "%{$page->q}%";
             $query->where(fn ($w) => $w->where('number', 'like', $like)->orWhere('desc_ar', 'like', $like)->orWhere('shop', 'like', $like)->orWhereHas('vehicle', fn ($v) => $v->where('code', 'like', $like)));
         }
-        $query->orderBy('status')->orderByDesc('start_date')->orderByDesc('id');
+        $query->orderByRaw(self::MAINT_ORDER)->orderByDesc('start_date')->orderByDesc('id');
 
-        return $page->paginate($query, fn (MaintenanceOrder $m) => U::shape($m->toArray(), ['vehicle' => ['code', 'plateAr', 'state']]));
+        return $page->paginate($query, fn (MaintenanceOrder $m) => self::maintRow($m));
+    }
+
+    private static function maintRow(MaintenanceOrder $m): array
+    {
+        return U::shape($m->loadMissing('vehicle')->toArray(), ['vehicle' => ['code', 'plateAr', 'state']]);
+    }
+
+    private function lockMaintenance(string $number): MaintenanceOrder
+    {
+        return MaintenanceOrder::where(fn ($w) => $w->where('id', $number)->orWhere('number', $number))->lockForUpdate()->first()
+            ?? throw AppError::notFound('MAINT_NOT_FOUND', "أمر الصيانة {$number} غير موجود", 'Maintenance order not found');
+    }
+
+    /**
+     * The one path a maintenance order is opened through (the form, a processed driver request): number, labels, the
+     * optional move of the vehicle to «maintenance» and the audit row. Must run inside the caller's transaction.
+     *
+     * @param  array{kind:string, descAr:string, descEn?:?string, shop?:?string, startDate?:mixed, odometer?:?int, cost?:float|int|string|null,
+     *               downDays?:int|string|null, nextKm?:?int, block?:bool, from?:?string}  $in
+     */
+    private function openMaintenance(AuthUser $user, Vehicle $v, array $in): MaintenanceOrder
+    {
+        $kind = $in['kind'];
+        [$typeAr, $typeEn] = U::MAINT_KIND_LABEL[$kind] ?? [$kind, $kind];
+        $downDays = (int) ($in['downDays'] ?? 1);
+        $cost = (float) ($in['cost'] ?? 0);
+        $block = (bool) ($in['block'] ?? false);
+        $number = $this->numbering->next('MNT');
+        $mo = MaintenanceOrder::create([
+            'number' => $number, 'vehicle_id' => $v->id, 'kind' => $kind, 'type_ar' => $typeAr, 'type_en' => $typeEn, 'desc_ar' => $in['descAr'], 'desc_en' => ($in['descEn'] ?? null) ?: $in['descAr'],
+            'shop' => ($in['shop'] ?? null) ?: null, 'start_date' => $in['startDate'] ?? U::today(), 'odometer' => $in['odometer'] ?? null, 'cost' => $cost, 'down_days' => $downDays, 'down_label' => "{$downDays} يوم",
+            'next_km' => $in['nextKm'] ?? null, 'status' => 'open',
+        ]);
+        if ($block) {
+            $this->trips->transitionVehicle($user, $v, 'maintenance', "أمر صيانة {$number}");
+        }
+        $this->audit->log($user, ['action' => 'MAINT.CREATE', 'entityType' => 'MaintenanceOrder', 'entityId' => $mo->id, 'entityNumber' => $number,
+            'newValue' => ['vehicle' => $v->code, 'kind' => $kind, 'cost' => $cost, 'block' => $block] + (! empty($in['from']) ? ['from' => $in['from']] : [])]);
+
+        return $mo->refresh();
     }
 
     public function createMaintenance(AuthUser $user, array $dto): array
     {
         $v = $this->trips->vehicleByCode($dto['vehicleCode']);
-        $kind = $dto['kind'] ?? 'corrective';
-        [$typeAr, $typeEn] = U::MAINT_KIND_LABEL[$kind] ?? [$kind, $kind];
         $block = (bool) ($dto['block'] ?? false);
-        $downDays = (int) ($dto['downDays'] ?? 1);
-        $cost = (float) ($dto['cost'] ?? 0);
 
-        return DB::transaction(function () use ($user, $dto, $v, $kind, $typeAr, $typeEn, $block, $downDays, $cost) {
-            $number = $this->numbering->next('MNT');
+        return DB::transaction(function () use ($user, $dto, $v, $block) {
             $stateBefore = $v->state;
-            $mo = MaintenanceOrder::create([
-                'number' => $number, 'vehicle_id' => $v->id, 'kind' => $kind, 'type_ar' => $typeAr, 'type_en' => $typeEn, 'desc_ar' => $dto['desc'], 'desc_en' => $dto['desc'], 'shop' => $dto['shop'],
-                'start_date' => U::parseDate($dto['startDate']), 'odometer' => isset($dto['odometer']) ? (int) $dto['odometer'] : null, 'cost' => $cost, 'down_days' => $downDays, 'down_label' => "{$downDays} يوم",
-                'next_km' => isset($dto['nextKm']) ? (int) $dto['nextKm'] : null, 'status' => 'open',
+            $mo = $this->openMaintenance($user, $v, [
+                'kind' => $dto['kind'] ?? 'corrective', 'descAr' => $dto['desc'], 'shop' => $dto['shop'], 'startDate' => U::parseDate($dto['startDate']),
+                'odometer' => isset($dto['odometer']) ? (int) $dto['odometer'] : null, 'cost' => $dto['cost'] ?? 0, 'downDays' => $dto['downDays'] ?? 1,
+                'nextKm' => isset($dto['nextKm']) ? (int) $dto['nextKm'] : null, 'block' => $block,
             ]);
-            if ($block) {
-                $this->trips->transitionVehicle($user, $v, 'maintenance', "أمر صيانة {$number}");
-            }
-            $this->audit->log($user, ['action' => 'MAINT.CREATE', 'entityType' => 'MaintenanceOrder', 'entityId' => $mo->id, 'entityNumber' => $number, 'newValue' => ['vehicle' => $v->code, 'kind' => $kind, 'cost' => $cost, 'block' => $block]]);
-            $message = "أُنشئ {$number} لـ {$v->code}".($block ? ' — المركبة الآن «صيانة» وغير قابلة للإسناد' : '');
-            $this->notify->activity($user, 'MaintenanceOrder', $mo->id, $number, $message, "Maintenance {$number} for {$v->code}");
+            $message = "أُنشئ {$mo->number} لـ {$v->code}".($block ? ' — المركبة الآن «صيانة» وغير قابلة للإسناد' : '');
+            $this->notify->activity($user, 'MaintenanceOrder', $mo->id, $mo->number, $message, "Maintenance {$mo->number} for {$v->code}");
 
-            return $mo->refresh()->toArray() + ['vehicleState' => $block ? 'maintenance' : $stateBefore, 'message' => $message];
+            return $mo->toArray() + ['vehicleState' => $block ? 'maintenance' : $stateBefore, 'message' => $message];
+        });
+    }
+
+    /**
+     * Edit an OPEN maintenance order: kind, description, workshop, start date, odometer and the plan figures (estimated
+     * cost, expected downtime, next service km). A closed order has posted its cost and a cancelled one is final.
+     *
+     * @param  array{kind?:string, desc?:string, shop?:string, startDate?:string, odometer?:int|string|null, cost?:float|int|string|null, downDays?:int|string|null, nextKm?:int|string|null}  $dto
+     */
+    public function updateMaintenance(AuthUser $user, string $number, array $dto): array
+    {
+        return DB::transaction(function () use ($user, $number, $dto) {
+            $mo = $this->lockMaintenance($number);
+            if ($mo->status !== 'open') {
+                throw AppError::rule('MAINT_NOT_OPEN', "أمر الصيانة {$mo->number} ".($mo->status === 'cancelled' ? 'ملغى' : 'مقفل').' — التعديل متاح للأوامر المفتوحة فقط', "Maintenance order {$mo->number} is {$mo->status} — only an open order can be edited");
+            }
+            $data = [];
+            $changes = [];
+            if (! empty($dto['kind']) && $dto['kind'] !== $mo->kind) {
+                [$typeAr, $typeEn] = U::MAINT_KIND_LABEL[$dto['kind']] ?? [$dto['kind'], $dto['kind']];
+                $data += ['kind' => $dto['kind'], 'type_ar' => $typeAr, 'type_en' => $typeEn];
+                $changes['kind'] = [$mo->kind, $dto['kind']];
+            }
+            if (isset($dto['desc']) && trim($dto['desc']) !== '' && trim($dto['desc']) !== $mo->desc_ar) {
+                $data += ['desc_ar' => trim($dto['desc']), 'desc_en' => trim($dto['desc'])];
+                $changes['desc'] = [$mo->desc_ar, trim($dto['desc'])];
+            }
+            if (isset($dto['shop']) && trim($dto['shop']) !== '' && trim($dto['shop']) !== $mo->shop) {
+                $data['shop'] = trim($dto['shop']);
+                $changes['shop'] = [$mo->shop, $data['shop']];
+            }
+            if (isset($dto['startDate'])) {
+                $start = U::parseDate($dto['startDate']) ?? throw AppError::validation('BAD_DATE', 'تاريخ غير صالح', 'Invalid date');
+                if ($start->getTimestamp() !== $mo->start_date?->getTimestamp()) {
+                    $data['start_date'] = $start;
+                    $changes['startDate'] = [U::fmtDate($mo->start_date), U::fmtDate($start)];
+                }
+            }
+            foreach (['odometer' => 'odometer', 'nextKm' => 'next_km'] as $field => $column) {
+                if (array_key_exists($field, $dto)) {
+                    $new = $dto[$field] === null ? null : (int) $dto[$field];
+                    if ($new !== $mo->getAttribute($column)) {
+                        $data[$column] = $new;
+                        $changes[$field] = [$mo->getAttribute($column), $new];
+                    }
+                }
+            }
+            if (isset($dto['cost']) && (float) $dto['cost'] !== (float) $mo->cost) {
+                $data['cost'] = (float) $dto['cost'];
+                $changes['cost'] = [$mo->cost, $data['cost']];
+            }
+            if (isset($dto['downDays']) && (int) $dto['downDays'] !== $mo->down_days) {
+                $data += ['down_days' => (int) $dto['downDays'], 'down_label' => ((int) $dto['downDays']).' يوم'];
+                $changes['downDays'] = [$mo->down_days, (int) $dto['downDays']];
+            }
+            if (! $changes) {
+                return self::maintRow($mo) + ['message' => 'لا تغيير — الأمر كما هو', 'messageEn' => 'Nothing changed'];
+            }
+            $mo->update($data);
+            foreach ($changes as $field => [$old, $new]) {
+                $this->audit->log($user, ['action' => 'MAINT.UPDATE', 'entityType' => 'MaintenanceOrder', 'entityId' => $mo->id, 'entityNumber' => $mo->number, 'field' => $field, 'oldValue' => $old, 'newValue' => $new]);
+            }
+            $message = "عُدّل أمر الصيانة {$mo->number}";
+            $this->notify->activity($user, 'MaintenanceOrder', $mo->id, $mo->number, $message.' ('.implode('، ', array_keys($changes)).')', "Maintenance {$mo->number} edited (".implode(', ', array_keys($changes)).')');
+
+            return self::maintRow($mo->refresh()) + ['message' => $message, 'messageEn' => "Maintenance order {$mo->number} updated"];
+        });
+    }
+
+    /**
+     * Cancel an OPEN maintenance order (opened by mistake, or the work will not be done): status → cancelled, nothing is
+     * posted (cost is posted at close only), and the vehicle leaves «maintenance» through the state machine when no
+     * other order of it is open. The maintenance-due alert is NOT cleared: the service was not done.
+     */
+    public function cancelMaintenance(AuthUser $user, string $number, ?string $reasonIn): array
+    {
+        $reason = self::reason($reasonIn, 'سبب الإلغاء', 'cancellation');
+
+        return DB::transaction(function () use ($user, $number, $reason) {
+            $mo = $this->lockMaintenance($number);
+            if ($mo->status !== 'open') {
+                throw AppError::rule('MAINT_NOT_OPEN', "أمر الصيانة {$mo->number} ".($mo->status === 'cancelled' ? 'ملغى مسبقًا' : 'مقفل — تكلفته مرحَّلة').' — الإلغاء متاح للأوامر المفتوحة فقط', "Maintenance order {$mo->number} is {$mo->status} — only an open order can be cancelled");
+            }
+            $vehicle = Vehicle::whereKey($mo->vehicle_id)->lockForUpdate()->firstOrFail();
+            $mo->update(['status' => 'cancelled', 'cancelled_at' => now(), 'cancelled_by' => $user->username, 'cancel_reason' => $reason]);
+            $released = false;
+            if ($vehicle->state === 'maintenance' && ! MaintenanceOrder::where('vehicle_id', $vehicle->id)->where('status', 'open')->exists()) {
+                $this->trips->transitionVehicle($user, $vehicle, 'available', "إلغاء {$mo->number}");
+                $released = true;
+            }
+            $this->audit->status($user, 'MaintenanceOrder', $mo->id, $mo->number, 'open', 'cancelled', $reason);
+            $this->audit->log($user, ['action' => 'MAINT.CANCEL', 'entityType' => 'MaintenanceOrder', 'entityId' => $mo->id, 'entityNumber' => $mo->number, 'newValue' => ['reason' => $reason, 'vehicle' => $vehicle->code, 'vehicleReleased' => $released]]);
+            $message = "أُلغي أمر الصيانة {$mo->number} — {$reason}".($released ? " · المركبة {$vehicle->code} عادت «متاحة»" : '');
+            $this->notify->activity($user, 'MaintenanceOrder', $mo->id, $mo->number, $message, "Maintenance {$mo->number} cancelled — {$reason}", ['disp']);
+
+            return self::maintRow($mo->refresh()) + ['vehicleReleased' => $released, 'message' => $message, 'messageEn' => "Maintenance order {$mo->number} cancelled".($released ? " · {$vehicle->code} is available again" : '')];
         });
     }
 
@@ -545,6 +812,9 @@ class FleetService
             ?? throw AppError::notFound('MAINT_NOT_FOUND', "أمر الصيانة {$number} غير موجود", 'Maintenance order not found');
         if ($mo->status === 'closed') {
             throw AppError::rule('MAINT_CLOSED', 'أمر الصيانة مقفل مسبقًا', 'Already closed');
+        }
+        if ($mo->status === 'cancelled') {
+            throw AppError::rule('MAINT_CANCELLED', 'أمر الصيانة ملغى — لا يُقفل؛ أنشئ أمرًا جديدًا إن نُفذت الصيانة', 'A cancelled maintenance order cannot be closed');
         }
         $end = U::parseDate($dto['endDate']) ?? throw AppError::validation('BAD_DATE', 'تاريخ غير صالح', 'Invalid date');
         $parts = (float) ($dto['parts'] ?? 0);
@@ -566,7 +836,7 @@ class FleetService
                 $vData['odometer'] = $mo->odometer;
             }
             $vehicle->update($vData);
-            app(\App\Finance\Services\FleetPosting::class)->maintenance($user, $mo->refresh()); // finance: maintenance expense at close (final cost)
+            app(FleetPosting::class)->maintenance($user, $mo->refresh()); // finance: maintenance expense at close (final cost)
             $stillOpen = MaintenanceOrder::where('vehicle_id', $mo->vehicle_id)->where('status', 'open')->count();
             $released = false;
             if ($vehicle->state === 'maintenance' && ! $stillOpen) {
@@ -583,7 +853,7 @@ class FleetService
     }
 
     // ═══════════ fuel ═══════════
-    /** @param  array{vehicle?:?string, driver?:?string, anomaly?:?string}  $f */
+    /** @param  array{vehicle?:?string, driver?:?string, anomaly?:?string, status?:?string, trip?:?string}  $f */
     public function listFuel(Paging $page, array $f): array
     {
         $query = FuelRecord::query()->with(['vehicle', 'driver']);
@@ -594,64 +864,391 @@ class FleetService
             $query->whereHas('driver', fn ($w) => $w->where('code', $f['driver']));
         }
         if (($f['anomaly'] ?? null) === 'true') {
-            $query->where('anomaly', true);
+            $query->where('anomaly', true)->whereNull('voided_at'); // a voided fill is not an anomaly any more
+        }
+        if (($f['status'] ?? null) === 'voided') {
+            $query->whereNotNull('voided_at');
+        } elseif (($f['status'] ?? null) === 'active') {
+            $query->whereNull('voided_at');
+        }
+        if (! empty($f['trip'])) {
+            $query->where('trip_id', Trip::where('number', $f['trip'])->value('id') ?: '—');
         }
         if ($page->q) {
             $like = "%{$page->q}%";
             $query->where(fn ($w) => $w->where('number', 'like', $like)->orWhere('station', 'like', $like)->orWhereHas('vehicle', fn ($v) => $v->where('code', 'like', $like)));
         }
+        // the totals of the filter never count a voided fill (taken before ordering: an aggregate carries no ORDER BY)
+        $live = (clone $query)->whereNull('voided_at');
+        $totals = [
+            'records' => (clone $live)->count(), 'liters' => round((float) (clone $live)->sum('liters'), 2), 'cost' => round((float) (clone $live)->sum('cost'), 2),
+            'voided' => (clone $query)->whereNotNull('voided_at')->count(),
+        ];
         $query->orderByDesc('date')->orderByDesc('id');
+        $out = $page->paginate($query, fn (FuelRecord $r) => U::shape($r->toArray(), ['vehicle' => ['code', 'plateAr', 'avgKmL'], 'driver' => ['code', 'nameAr']]));
+        $trips = Trip::whereIn('id', array_values(array_filter(array_column($out['items'], 'tripId'))))->pluck('number', 'id');
+        foreach ($out['items'] as $i => $row) {
+            $out['items'][$i]['tripNumber'] = ! empty($row['tripId']) ? ($trips[$row['tripId']] ?? null) : null;
+        }
 
-        return $page->paginate($query, fn (FuelRecord $r) => U::shape($r->toArray(), ['vehicle' => ['code', 'plateAr', 'avgKmL'], 'driver' => ['code', 'nameAr']]));
+        return $out + ['totals' => $totals];
     }
 
-    /** Odometer ≥ last, price/L ≤ fleet.fuelMaxPricePerLiter, km/L below avg × fleet.fuelAnomalyRatio → alert; vehicle odometer updated. */
+    private function fuelRow(FuelRecord $rec): array
+    {
+        $rec->refresh()->load(['vehicle', 'driver']);
+
+        return U::shape($rec->toArray(), ['vehicle' => ['code', 'plateAr', 'avgKmL'], 'driver' => ['code', 'nameAr']])
+            + ['tripNumber' => $rec->trip_id ? Trip::where('id', $rec->trip_id)->value('number') : null];
+    }
+
+    private function findFuel(string $number): FuelRecord
+    {
+        return FuelRecord::where(fn ($w) => $w->where('id', $number)->orWhere('number', $number))->first()
+            ?? throw AppError::notFound('FUEL_NOT_FOUND', "سجل الوقود {$number} غير موجود", "Fuel record {$number} not found");
+    }
+
+    /** The trip a fuel record is charged to: it must exist and run on the same vehicle. Null when no trip is given. */
+    private function fuelTrip(?string $number, Vehicle $v): ?Trip
+    {
+        $number = trim((string) $number);
+        if ($number === '') {
+            return null;
+        }
+        $trip = Trip::where('number', $number)->orWhere('id', $number)->first()
+            ?? throw AppError::notFound('TRIP_NOT_FOUND', "الرحلة {$number} غير موجودة", "Trip {$number} not found");
+        if ($trip->vehicle_id !== $v->id) {
+            throw AppError::rule('FUEL_TRIP_VEHICLE', "الرحلة {$trip->number} ليست على المركبة {$v->code} — لا تُحمَّل تعبئتها عليها", "Trip {$trip->number} does not run on vehicle {$v->code}");
+        }
+
+        return $trip;
+    }
+
+    private function assertFuelPrice(float $liters, float $cost): void
+    {
+        $maxPrice = (float) $this->settings->get('fleet.fuelMaxPricePerLiter');
+        if ($liters > 0 && $cost / $liters > $maxPrice) {
+            throw AppError::rule('FUEL_PRICE', 'سعر اللتر غير منطقي (> '.U::num($maxPrice).' ر.س) — راجع المبلغ', 'Price per liter above '.U::num($maxPrice).' SAR');
+        }
+    }
+
+    /** A reason a person typed for a correction / void / cancellation. */
+    private static function reason(mixed $text, string $labelAr, string $labelEn): string
+    {
+        $reason = trim((string) ($text ?? ''));
+        if (mb_strlen($reason) < self::REASON_MIN) {
+            throw AppError::validation('REASON_REQUIRED', "{$labelAr} مطلوب (".self::REASON_MIN.' أحرف على الأقل)', "A {$labelEn} reason is required (at least ".self::REASON_MIN.' characters)');
+        }
+
+        return $reason;
+    }
+
+    /**
+     * The non-voided fills just before and just after $rec in its vehicle's chain. The chain is ordered by odometer
+     * reading, then by entry time — the order the readings were taken in. $rec itself may be voided (its old place).
+     *
+     * @return array{0: ?FuelRecord, 1: ?FuelRecord}
+     */
+    private function fuelNeighbours(FuelRecord $rec): array
+    {
+        $key = fn (FuelRecord $r) => [$r->odometer, $r->created_at?->getPreciseTimestamp(3) ?? 0, $r->id];
+        $mine = $key($rec);
+        $prev = null;
+        $next = null;
+        $chain = FuelRecord::where('vehicle_id', $rec->vehicle_id)->whereNull('voided_at')->where('id', '!=', $rec->id)->orderBy('odometer')->orderBy('created_at')->orderBy('id')->get();
+        foreach ($chain as $other) {
+            if (($key($other) <=> $mine) < 0) {
+                $prev = $other;
+            } else {
+                $next = $other;
+                break;
+            }
+        }
+
+        return [$prev, $next];
+    }
+
+    /** Distance a stored record measured, recovered from its own figures (records written before `prev_odometer` existed). */
+    private static function impliedKm(FuelRecord $r): int
+    {
+        if ($r->km_per_l > 0 && $r->liters > 0) {
+            return U::round($r->km_per_l * $r->liters);
+        }
+
+        return $r->cost_per_km > 0 && $r->cost > 0 ? U::round($r->cost / $r->cost_per_km) : 0;
+    }
+
+    /** The reading a record's distance starts from: the fill before it, else the reading the vehicle had before the record. */
+    private static function fuelBase(FuelRecord $r, ?FuelRecord $prev): int
+    {
+        return $prev ? $prev->odometer : ($r->prev_odometer ?? $r->odometer - self::impliedKm($r));
+    }
+
+    /** km/L, cost/km and the anomaly flag of a record against the fill before it; saves the record when anything changed. */
+    private function refigureFuel(FuelRecord $rec, ?FuelRecord $prev, Vehicle $v): void
+    {
+        $km = $rec->odometer - self::fuelBase($rec, $prev);
+        $kmPerL = $km > 0 && $rec->liters > 0 ? U::round(($km / $rec->liters) * 10) / 10 : null;
+        $costPerKm = $km > 0 ? U::round(($rec->cost / $km) * 100) / 100 : null;
+        $ratio = (float) $this->settings->get('fleet.fuelAnomalyRatio');
+        $rec->fill(['km_per_l' => $kmPerL, 'cost_per_km' => $costPerKm, 'anomaly' => $kmPerL !== null && $v->avg_km_l > 0 && $kmPerL < $v->avg_km_l * $ratio]);
+        if ($rec->isDirty()) {
+            $rec->save();
+        }
+    }
+
+    /** Moves the vehicle's reading because of a fuel record (entry, correction, void) and audits it. */
+    private function setOdometerFromFuel(AuthUser $user, Vehicle $v, int $to, FuelRecord $rec): void
+    {
+        if ($to === $v->odometer) {
+            return;
+        }
+        $old = $v->odometer;
+        $v->update(['odometer' => $to]);
+        $this->audit->log($user, ['action' => 'VEHICLE.ODOMETER', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityNumber' => $v->code, 'field' => 'odometer', 'oldValue' => $old, 'newValue' => $to, 'transactionId' => $rec->id]);
+    }
+
+    private function fuelAnomalyAlert(AuthUser $user, Vehicle $v, FuelRecord $rec): ?FleetAlert
+    {
+        $driver = $rec->driver_id ? Driver::find($rec->driver_id) : null;
+
+        return $this->upsertAlert([
+            'category' => 'fuel', 'severity' => 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code, 'dueDate' => U::fmtDate(U::today()), 'owner' => 'مدير الأسطول',
+            'textAr' => "انحراف استهلاك الوقود {$v->code}: ".U::num($rec->km_per_l).' كم/ل مقابل متوسط '.U::num($v->avg_km_l)." ({$rec->number}".($driver ? ' · '.$driver->name_ar : '').')',
+            'textEn' => "Fuel anomaly {$v->code}: ".U::num($rec->km_per_l).' km/L vs avg '.U::num($v->avg_km_l), 'recommendAr' => 'مراجعة الإيصال وأسلوب القيادة', 'recommendEn' => 'Review receipt and driving',
+        ], $user, true);
+    }
+
+    /**
+     * After a correction / void: raise the alert for a fill that became anomalous, and clear the vehicle's open fuel
+     * alert when none of its live fills is anomalous any more.
+     *
+     * @param  FuelRecord[]  $newlyAnomalous
+     */
+    private function syncFuelAlert(AuthUser $user, Vehicle $v, array $newlyAnomalous): ?FleetAlert
+    {
+        $alert = null;
+        foreach ($newlyAnomalous as $rec) {
+            $alert = $this->fuelAnomalyAlert($user, $v, $rec);
+        }
+        if (! FuelRecord::where('vehicle_id', $v->id)->whereNull('voided_at')->where('anomaly', true)->exists()) {
+            $this->upsertAlert(null, $user, false, ['entityCode' => $v->code, 'category' => 'fuel']);
+        }
+
+        return $alert;
+    }
+
+    /**
+     * The one path every fuel record takes (the form, a processed driver request): reading and price rules, the record,
+     * km/L against the fill before it, the vehicle odometer, the fuel expense in the ledger (FleetPosting::fuel, which
+     * also rebuilds the trip's cost sheet), audit and the anomaly alert. Must run inside the caller's transaction.
+     *
+     * @param  array{date?:mixed, odometer?:?int, liters:float, cost:float, station?:?string, full?:bool, receipt?:?string, from?:?string}  $in
+     * @return array{0: FuelRecord, 1: ?FleetAlert}
+     */
+    private function recordFuel(AuthUser $user, Vehicle $vehicle, ?Driver $d, array $in, ?Trip $trip): array
+    {
+        $v = Vehicle::whereKey($vehicle->id)->lockForUpdate()->firstOrFail(); // one fill at a time per vehicle
+        $odometer = isset($in['odometer']) ? (int) $in['odometer'] : $v->odometer; // no reading taken (driver request): the vehicle's reading stands
+        $liters = (float) $in['liters'];
+        $cost = (float) $in['cost'];
+        if ($odometer < $v->odometer) {
+            throw AppError::rule('FUEL_ODOMETER', 'قراءة العداد أقل من آخر قراءة مسجلة ('.U::fmt0($v->odometer).')', "Odometer below last reading ({$v->odometer})");
+        }
+        $this->assertFuelPrice($liters, $cost);
+        $number = $this->numbering->next('FL');
+        $rec = FuelRecord::create([
+            'number' => $number, 'vehicle_id' => $v->id, 'driver_id' => $d?->id, 'trip_id' => $trip?->id, 'date' => $in['date'] ?? U::today(), 'odometer' => $odometer, 'prev_odometer' => $v->odometer,
+            'liters' => $liters, 'cost' => $cost, 'station' => ($in['station'] ?? null) ?: null, 'full' => (bool) ($in['full'] ?? true), 'anomaly' => false, 'receipt' => ($in['receipt'] ?? null) ?: null,
+        ])->refresh();
+        [$prev, $next] = $this->fuelNeighbours($rec);
+        $this->refigureFuel($rec, $prev, $v);
+        if ($next) { // only after the vehicle's reading was lowered by hand: the new fill lands before an older, higher one
+            $this->refigureFuel($next, $rec, $v);
+        }
+        $this->setOdometerFromFuel($user, $v, $odometer, $rec);
+        app(FleetPosting::class)->fuel($user, $rec); // finance: fuel expense on the vehicle's cost center (+ the trip's cost sheet)
+        $this->audit->log($user, ['action' => 'FUEL.CREATE', 'entityType' => 'FuelRecord', 'entityId' => $rec->id, 'entityNumber' => $number,
+            'newValue' => ['vehicle' => $v->code, 'liters' => $liters, 'cost' => $cost, 'odometer' => $odometer, 'kmPerL' => $rec->km_per_l, 'anomaly' => $rec->anomaly, 'trip' => $trip?->number] + (! empty($in['from']) ? ['from' => $in['from']] : [])]);
+
+        return [$rec, $rec->anomaly ? $this->fuelAnomalyAlert($user, $v, $rec) : null];
+    }
+
+    /** Odometer ≥ last, price/L ≤ fleet.fuelMaxPricePerLiter, km/L below avg × fleet.fuelAnomalyRatio → alert; vehicle odometer updated; fuel expense posted. */
     public function createFuel(AuthUser $user, array $dto): array
     {
         $v = $this->trips->vehicleByCode($dto['vehicleCode']);
         $d = ! empty($dto['driverCode']) ? $this->trips->driverByCode($dto['driverCode']) : null;
-        $maxPrice = (float) $this->settings->get('fleet.fuelMaxPricePerLiter');
-        $ratio = (float) $this->settings->get('fleet.fuelAnomalyRatio');
-        $odometer = (int) $dto['odometer'];
-        $liters = (float) $dto['liters'];
-        $cost = (float) $dto['cost'];
-        if ($odometer < $v->odometer) {
-            throw AppError::rule('FUEL_ODOMETER', 'قراءة العداد أقل من آخر قراءة مسجلة ('.U::fmt0($v->odometer).')', "Odometer below last reading ({$v->odometer})");
-        }
-        if ($liters > 0 && $cost / $liters > $maxPrice) {
-            throw AppError::rule('FUEL_PRICE', 'سعر اللتر غير منطقي (> '.U::num($maxPrice).' ر.س) — راجع المبلغ', 'Price per liter above '.U::num($maxPrice).' SAR');
-        }
-        $km = $odometer - $v->odometer;
-        $kmPerL = $km > 0 && $liters > 0 ? U::round(($km / $liters) * 10) / 10 : null;
-        $costPerKm = $km > 0 ? U::round(($cost / $km) * 100) / 100 : null;
-        $anomaly = $kmPerL !== null && $v->avg_km_l > 0 && $kmPerL < $v->avg_km_l * $ratio;
+        $trip = $this->fuelTrip($dto['tripNumber'] ?? null, $v);
 
-        return DB::transaction(function () use ($user, $dto, $v, $d, $odometer, $liters, $cost, $kmPerL, $costPerKm, $anomaly) {
-            $number = $this->numbering->next('FL');
-            $oldOdometer = $v->odometer;
-            $rec = FuelRecord::create([
-                'number' => $number, 'vehicle_id' => $v->id, 'driver_id' => $d?->id, 'date' => U::parseDate($dto['date']) ?? U::today(), 'odometer' => $odometer, 'liters' => $liters, 'cost' => $cost,
-                'station' => $dto['station'] ?? null, 'full' => (bool) ($dto['full'] ?? true), 'km_per_l' => $kmPerL, 'cost_per_km' => $costPerKm, 'anomaly' => $anomaly, 'receipt' => $dto['receipt'] ?? null,
-            ]);
-            $v->update(['odometer' => $odometer]);
-            app(\App\Finance\Services\FleetPosting::class)->fuel($user, $rec, $dto['tripNumber'] ?? null); // finance: fuel expense on the vehicle's cost center
-            $this->audit->log($user, ['action' => 'FUEL.CREATE', 'entityType' => 'FuelRecord', 'entityId' => $rec->id, 'entityNumber' => $number,
-                'newValue' => ['vehicle' => $v->code, 'liters' => $liters, 'cost' => $cost, 'odometer' => $odometer, 'kmPerL' => $kmPerL, 'anomaly' => $anomaly]]);
-            if ($odometer !== $oldOdometer) {
-                $this->audit->log($user, ['action' => 'VEHICLE.ODOMETER', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityNumber' => $v->code, 'field' => 'odometer', 'oldValue' => $oldOdometer, 'newValue' => $odometer]);
-            }
-            $alert = null;
-            if ($anomaly) {
-                $alert = $this->upsertAlert([
-                    'category' => 'fuel', 'severity' => 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code, 'dueDate' => U::fmtDate(U::today()), 'owner' => 'مدير الأسطول',
-                    'textAr' => "انحراف استهلاك الوقود {$v->code}: ".U::num($kmPerL).' كم/ل مقابل متوسط '.U::num($v->avg_km_l)." ({$number}".($d ? ' · '.$d->name_ar : '').')',
-                    'textEn' => "Fuel anomaly {$v->code}: ".U::num($kmPerL).' km/L vs avg '.U::num($v->avg_km_l), 'recommendAr' => 'مراجعة الإيصال وأسلوب القيادة', 'recommendEn' => 'Review receipt and driving',
-                ], $user, true);
-            }
-            $message = 'سُجلت التعبئة — '.U::num($kmPerL).' كم/ل'.($anomaly ? ' ⚠ انحراف عن المتوسط — أُنشئ تنبيه' : '');
-            $this->notify->activity($user, 'FuelRecord', $rec->id, $number, $message, "Fuel {$number} recorded");
+        return DB::transaction(function () use ($user, $dto, $v, $d, $trip) {
+            [$rec, $alert] = $this->recordFuel($user, $v, $d, [
+                'date' => U::parseDate($dto['date']) ?? U::today(), 'odometer' => (int) $dto['odometer'], 'liters' => (float) $dto['liters'], 'cost' => (float) $dto['cost'],
+                'station' => $dto['station'] ?? null, 'full' => (bool) ($dto['full'] ?? true), 'receipt' => $dto['receipt'] ?? null,
+            ], $trip);
+            $message = 'سُجلت التعبئة — '.U::num($rec->km_per_l).' كم/ل'.($rec->anomaly ? ' ⚠ انحراف عن المتوسط — أُنشئ تنبيه' : '');
+            $this->notify->activity($user, 'FuelRecord', $rec->id, $rec->number, $message, "Fuel {$rec->number} recorded");
 
-            return $rec->refresh()->toArray() + ['alert' => $alert, 'message' => $message];
+            return $this->fuelRow($rec) + ['alert' => $alert, 'message' => $message];
+        });
+    }
+
+    /**
+     * Correct a posted fuel record — nothing is deleted and a reason is mandatory. km/L, cost/km and the anomaly flag
+     * are recomputed for this record and for the next fill of the vehicle; when the amount, the day or the trip changes
+     * the journal is reversed and posted again; the vehicle odometer follows when this record carried its reading; the
+     * cost sheets of the old and the new trip are rebuilt.
+     * Rule: the reading may not go below the fill before it nor above the fill after it.
+     *
+     * @param  array{liters?:float|int|string, cost?:float|int|string, odometer?:int|string, station?:?string, date?:string, tripNumber?:?string, reason?:?string}  $dto
+     */
+    public function updateFuel(AuthUser $user, string $number, array $dto): array
+    {
+        $reason = self::reason($dto['reason'] ?? null, 'سبب التصحيح', 'correction');
+        $found = $this->findFuel($number);
+
+        return DB::transaction(function () use ($user, $found, $dto, $reason) {
+            $v = Vehicle::whereKey($found->vehicle_id)->lockForUpdate()->firstOrFail();
+            $rec = FuelRecord::whereKey($found->id)->lockForUpdate()->firstOrFail();
+            if ($rec->voided_at) {
+                throw AppError::rule('FUEL_VOIDED', "سجل الوقود {$rec->number} ملغى — لا يُصحَّح", "Fuel record {$rec->number} is void and cannot be corrected");
+            }
+            [$prev, $next] = $this->fuelNeighbours($rec);
+            $before = $rec->prev_odometer ?? self::fuelBase($rec, $prev); // the vehicle's reading before this record
+            $data = [];
+            $changes = [];
+            if (isset($dto['odometer']) && (int) $dto['odometer'] !== $rec->odometer) {
+                $reading = (int) $dto['odometer'];
+                if ($prev && $reading < $prev->odometer) {
+                    throw AppError::rule('FUEL_ODOMETER_BELOW_PREVIOUS', 'قراءة العداد ('.U::fmt0($reading).") أقل من قراءة التعبئة السابقة {$prev->number} (".U::fmt0($prev->odometer).')', "Odometer {$reading} is below the previous fill {$prev->number} ({$prev->odometer})", ['min' => $prev->odometer]);
+                }
+                if ($next && $reading > $next->odometer) {
+                    throw AppError::rule('FUEL_ODOMETER_ABOVE_NEXT', 'قراءة العداد ('.U::fmt0($reading).") أعلى من قراءة التعبئة التالية {$next->number} (".U::fmt0($next->odometer).')', "Odometer {$reading} is above the next fill {$next->number} ({$next->odometer})", ['max' => $next->odometer]);
+                }
+                $data['odometer'] = $reading;
+                $changes['odometer'] = [$rec->odometer, $reading];
+            }
+            foreach (['liters', 'cost'] as $field) {
+                if (isset($dto[$field]) && (float) $dto[$field] !== (float) $rec->getAttribute($field)) {
+                    $data[$field] = (float) $dto[$field];
+                    $changes[$field] = [$rec->getAttribute($field), $data[$field]];
+                }
+            }
+            if (isset($data['liters']) || isset($data['cost'])) {
+                $this->assertFuelPrice($data['liters'] ?? $rec->liters, $data['cost'] ?? $rec->cost);
+            }
+            if (array_key_exists('station', $dto)) {
+                $station = trim((string) ($dto['station'] ?? '')) ?: null;
+                if ($station !== $rec->station) {
+                    $data['station'] = $station;
+                    $changes['station'] = [$rec->station, $station];
+                }
+            }
+            $oldDay = $rec->date?->format('Y-m-d');
+            if (isset($dto['date'])) {
+                $date = U::parseDate($dto['date']) ?? throw AppError::validation('BAD_DATE', 'تاريخ غير صالح', 'Invalid date');
+                if ($date->getTimestamp() !== $rec->date?->getTimestamp()) {
+                    $data['date'] = $date;
+                    $changes['date'] = [U::fmtDate($rec->date), U::fmtDate($date)];
+                }
+            }
+            $oldTripId = $rec->trip_id;
+            if (array_key_exists('tripNumber', $dto)) {
+                $given = trim((string) ($dto['tripNumber'] ?? ''));
+                $current = $oldTripId ? Trip::find($oldTripId) : null;
+                if (! ($current && in_array($given, [$current->number, $current->id], true))) { // the same trip is not re-validated
+                    $trip = $this->fuelTrip($given, $v);
+                    if ($trip?->id !== $oldTripId) {
+                        $data['trip_id'] = $trip?->id;
+                        $changes['trip'] = [$current?->number, $trip?->number];
+                    }
+                }
+            }
+            if (! $changes) {
+                return $this->fuelRow($rec) + ['alert' => null, 'reposted' => null, 'message' => 'لا تغيير — السجل كما هو', 'messageEn' => 'Nothing changed'];
+            }
+
+            $oldOdometer = $rec->odometer;
+            $wasAnomalous = [$rec->id => $rec->anomaly] + ($next ? [$next->id => $next->anomaly] : []);
+            if (! $prev && $rec->prev_odometer === null) {
+                $data['prev_odometer'] = $before; // written before the column existed: keep the distance it measured
+            }
+            $rec->update($data + ['corrected_at' => now(), 'corrected_by' => $user->username, 'correction_note' => $reason]);
+            $this->refigureFuel($rec, $prev, $v);
+            if (isset($data['odometer'])) {
+                if ($next) {
+                    if ($next->prev_odometer === $oldOdometer) {
+                        $next->prev_odometer = max($rec->odometer, $before);
+                    }
+                    $this->refigureFuel($next, $rec, $v);
+                }
+                if ($v->odometer === $oldOdometer) { // this record carried the vehicle's reading: back to the highest remaining one
+                    $others = FuelRecord::where('vehicle_id', $v->id)->whereNull('voided_at')->where('id', '!=', $rec->id)->max('odometer');
+                    $this->setOdometerFromFuel($user, $v, max($rec->odometer, $before, (int) ($others ?? 0)), $rec);
+                } elseif ($rec->odometer > $v->odometer) {
+                    $this->setOdometerFromFuel($user, $v, $rec->odometer, $rec);
+                }
+            }
+            $posting = app(FleetPosting::class);
+            $financial = isset($changes['cost']) || isset($changes['trip']) || (isset($data['date']) && $data['date']->format('Y-m-d') !== $oldDay);
+            $journal = $financial ? $posting->repostFuel($user, $rec, "تصحيح {$rec->number}: {$reason}") : null;
+            foreach (array_unique(array_filter([$oldTripId, $rec->trip_id])) as $tripId) {
+                $posting->rebuildTripCosts($tripId);
+            }
+            $this->audit->log($user, ['action' => 'FUEL.CORRECT', 'entityType' => 'FuelRecord', 'entityId' => $rec->id, 'entityNumber' => $rec->number,
+                'oldValue' => array_map(fn ($c) => $c[0], $changes), 'newValue' => array_map(fn ($c) => $c[1], $changes) + ['reason' => $reason, 'journal' => $journal?->number]]);
+            $message = "صُحّح سجل الوقود {$rec->number} (".implode('، ', array_keys($changes)).") — {$reason}".($journal ? " · أُعيد القيد {$journal->number}" : '');
+            $this->notify->activity($user, 'FuelRecord', $rec->id, $rec->number, $message, "Fuel {$rec->number} corrected (".implode(', ', array_keys($changes)).") — {$reason}", $financial ? ['finance'] : []);
+            $alert = $this->syncFuelAlert($user, $v, array_values(array_filter([$rec, $next], fn ($r) => $r && $r->anomaly && ! $wasAnomalous[$r->id])));
+
+            return $this->fuelRow($rec) + ['alert' => $alert, 'reposted' => $journal?->number, 'vehicleOdometer' => $v->odometer, 'message' => $message, 'messageEn' => "Fuel record {$rec->number} corrected"];
+        });
+    }
+
+    /**
+     * Void a fuel record (entered twice, wrong vehicle …): it is stamped, never deleted. The journal is reversed, the
+     * next fill is re-measured from the fill before this one, the vehicle odometer goes back to the highest remaining
+     * reading when this record carried it, and the trip's cost sheet is rebuilt. A voided record counts in no total,
+     * average or cost.
+     */
+    public function voidFuel(AuthUser $user, string $number, ?string $reasonIn): array
+    {
+        $reason = self::reason($reasonIn, 'سبب الإلغاء', 'void');
+        $found = $this->findFuel($number);
+
+        return DB::transaction(function () use ($user, $found, $reason) {
+            $v = Vehicle::whereKey($found->vehicle_id)->lockForUpdate()->firstOrFail();
+            $rec = FuelRecord::whereKey($found->id)->lockForUpdate()->firstOrFail();
+            if ($rec->voided_at) {
+                throw AppError::rule('FUEL_VOIDED', "سجل الوقود {$rec->number} ملغى مسبقًا", "Fuel record {$rec->number} is already void");
+            }
+            [$prev, $next] = $this->fuelNeighbours($rec);
+            $before = $rec->prev_odometer ?? self::fuelBase($rec, $prev); // the vehicle's reading before this record
+            $rec->update(['voided_at' => now(), 'voided_by' => $user->username, 'void_reason' => $reason]);
+            $posting = app(FleetPosting::class);
+            $reversal = $posting->reverseFuel($user, $rec, "إلغاء {$rec->number}: {$reason}");
+            $nextWasAnomalous = (bool) $next?->anomaly;
+            if ($next) {
+                if ($next->prev_odometer === $rec->odometer || ($next->prev_odometer === null && ! $prev)) {
+                    $next->prev_odometer = $before;
+                }
+                $this->refigureFuel($next, $prev, $v);
+            }
+            $odometerBefore = $v->odometer;
+            if ($v->odometer === $rec->odometer) { // this record carried the vehicle's reading: back to the highest remaining one
+                $others = FuelRecord::where('vehicle_id', $v->id)->whereNull('voided_at')->max('odometer');
+                $this->setOdometerFromFuel($user, $v, max($before, (int) ($others ?? 0)), $rec);
+            }
+            if ($rec->trip_id) {
+                $posting->rebuildTripCosts($rec->trip_id);
+            }
+            $this->audit->log($user, ['action' => 'FUEL.VOID', 'entityType' => 'FuelRecord', 'entityId' => $rec->id, 'entityNumber' => $rec->number,
+                'oldValue' => ['cost' => $rec->cost, 'liters' => $rec->liters, 'odometer' => $rec->odometer], 'newValue' => ['reason' => $reason, 'reversal' => $reversal?->number, 'vehicleOdometer' => $v->odometer]]);
+            $message = "أُلغي سجل الوقود {$rec->number} — {$reason}".($reversal ? " · عُكس القيد ({$reversal->number})" : '').($v->odometer !== $odometerBefore ? " · عداد {$v->code} عاد إلى ".U::fmt0($v->odometer) : '');
+            $this->notify->activity($user, 'FuelRecord', $rec->id, $rec->number, $message, "Fuel {$rec->number} voided — {$reason}", ['finance']);
+            $this->syncFuelAlert($user, $v, $next && $next->anomaly && ! $nextWasAnomalous ? [$next] : []);
+
+            return $this->fuelRow($rec) + ['reversal' => $reversal?->number, 'vehicleOdometer' => $v->odometer, 'message' => $message, 'messageEn' => "Fuel record {$rec->number} voided"];
         });
     }
 
@@ -709,76 +1306,131 @@ class FleetService
     /** Document / maintenance alerts for every active vehicle and driver. Idempotent; auto-resolves cleared ones. */
     public function refreshDocumentAlerts(?AuthUser $user = null): array
     {
-        $warnDays = (int) $this->settings->get('fleet.docExpiryWarnDays');
-        $soonKm = (float) $this->settings->get('fleet.maintenanceSoonKm');
-        $minDaysLic = (int) $this->settings->get('fleet.driverLicenseMinDays');
+        $policy = $this->alertPolicy();
         $vehicles = Vehicle::where('active', true)->get();
         $drivers = Driver::where('active', true)->get();
         $stats = ['created' => 0, 'updated' => 0, 'resolved' => 0];
-        $label = fn (int $days) => $days < 0 ? 'منتهية منذ '.abs($days).' يومًا' : ($days === 0 ? 'تنتهي اليوم' : "تنتهي خلال {$days} يومًا");
-        $due = function (array $docs) use ($warnDays) {
-            $docs = array_values(array_filter($docs, fn ($d) => $d['days'] !== null && $d['days'] <= $warnDays));
-            usort($docs, fn ($a, $b) => $a['days'] <=> $b['days']);
 
-            return $docs;
-        };
-
-        DB::transaction(function () use ($user, $vehicles, $drivers, $warnDays, $soonKm, $minDaysLic, $label, $due, &$stats) {
+        DB::transaction(function () use ($user, $vehicles, $drivers, $policy, &$stats) {
             $before = FleetAlert::count();
             foreach ($vehicles as $v) {
-                $docs = $due(U::docInfos($v, U::VEHICLE_DOCS));
-                if ($docs) {
-                    $min = $docs[0]['days'];
-                    $this->upsertAlert([
-                        'category' => 'vehdoc', 'severity' => $min <= 7 ? 'c' : 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code, 'dueDate' => U::fmtDate($docs[0]['date']), 'owner' => 'مدير الأسطول',
-                        'textAr' => "وثائق {$v->code}: ".implode(' · ', array_map(fn ($d) => "{$d['labelAr']} {$label($d['days'])} (".U::fmtDate($d['date']).')', $docs)),
-                        'textEn' => "{$v->code} documents: ".implode(', ', array_map(fn ($d) => "{$d['labelEn']} ".U::fmtDate($d['date']), $docs)),
-                        'recommendAr' => $min < 0 ? 'المركبة غير قابلة للإسناد حتى التجديد' : 'تجديد الوثائق قبل الإسناد', 'recommendEn' => $min < 0 ? 'Not assignable until renewed' : 'Renew before assignment',
-                    ]);
-                } else {
-                    $this->upsertAlert(null, $user, false, ['entityCode' => $v->code, 'category' => 'vehdoc']);
-                }
-                $dueKm = $v->next_maint_km !== null ? $v->next_maint_km - $v->odometer : null;
-                $dueDays = U::daysTo($v->next_maint_date);
-                $maintDue = $v->state !== 'maintenance' && (($dueKm !== null && $dueKm <= $soonKm) || ($dueDays !== null && $dueDays <= $warnDays));
-                if ($maintDue) {
-                    $overdue = ($dueKm !== null && $dueKm <= 0) || ($dueDays !== null && $dueDays < 0);
-                    $this->upsertAlert([
-                        'category' => 'maint', 'severity' => $overdue ? 'c' : 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code,
-                        'dueDate' => $v->next_maint_date ? U::fmtDate($v->next_maint_date) : ($dueKm !== null ? U::fmt0($v->next_maint_km).' كم' : null), 'owner' => 'مدير الأسطول',
-                        'textAr' => "صيانة {$v->code} ".($overdue ? 'متأخرة' : 'قريبة')
-                            .($dueKm !== null ? ' — '.($dueKm <= 0 ? 'تجاوزت' : 'بعد').' '.U::fmt0(abs($dueKm)).' كم' : '')
-                            .($dueDays !== null ? ' — '.($dueDays < 0 ? 'منذ' : 'خلال').' '.abs($dueDays).' يومًا' : ''),
-                        'textEn' => 'Maintenance '.($overdue ? 'overdue' : 'due')." {$v->code}", 'recommendAr' => 'جدولة أمر صيانة وقائية', 'recommendEn' => 'Schedule preventive maintenance',
-                    ]);
-                } else {
-                    $this->upsertAlert(null, $user, false, ['entityCode' => $v->code, 'category' => 'maint']);
-                }
+                $this->refreshVehicleAlerts($v, $user, $policy);
             }
             foreach ($drivers as $d) {
-                $docs = $due(U::docInfos($d, U::DRIVER_DOCS));
-                if ($docs) {
-                    $min = $docs[0]['days'];
-                    $this->upsertAlert([
-                        'category' => 'driverdoc', 'severity' => $min <= 7 ? 'c' : 'w', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityCode' => $d->code, 'dueDate' => U::fmtDate($docs[0]['date']), 'owner' => 'مدير الأسطول',
-                        'textAr' => implode(' · ', array_map(fn ($x) => ($x['labelAr'] === 'الرخصة' ? 'رخصة' : $x['labelAr'])." {$d->name_ar} {$label($x['days'])} (".U::fmtDate($x['date']).')', $docs)),
-                        'textEn' => ($d->name_en ?: $d->code).': '.implode(', ', array_map(fn ($x) => "{$x['labelEn']} ".U::fmtDate($x['date']), $docs)),
-                        'recommendAr' => 'تجديد الوثائق — الإسناد موقوف آليًا', 'recommendEn' => 'Renew — assignment auto-blocked',
-                    ]);
-                } else {
-                    $this->upsertAlert(null, $user, false, ['entityCode' => $d->code, 'category' => 'driverdoc']);
-                }
-                $lic = U::daysTo($d->license_expiry);
-                if ($lic !== null && $lic < $minDaysLic && ! $d->blocked) {
-                    $d->update(['blocked' => true]);
-                    $this->audit->log($user, ['action' => 'DRIVER.BLOCK', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityNumber' => $d->code, 'field' => 'blocked', 'oldValue' => false, 'newValue' => true]);
-                }
+                $this->refreshDriverAlerts($d, $user, $policy);
             }
             $stats['created'] = FleetAlert::count() - $before;
         });
         $this->markRefreshed();
 
         return $stats;
+    }
+
+    /** @return array{warnDays: int, soonKm: float, minDaysLic: int} */
+    private function alertPolicy(): array
+    {
+        return [
+            'warnDays' => (int) $this->settings->get('fleet.docExpiryWarnDays'), 'soonKm' => (float) $this->settings->get('fleet.maintenanceSoonKm'),
+            'minDaysLic' => (int) $this->settings->get('fleet.driverLicenseMinDays'),
+        ];
+    }
+
+    /** Documents with a date inside the warning window, the most urgent first. */
+    private static function dueDocs(array $docs, int $warnDays): array
+    {
+        $docs = array_values(array_filter($docs, fn ($d) => $d['days'] !== null && $d['days'] <= $warnDays));
+        usort($docs, fn ($a, $b) => $a['days'] <=> $b['days']);
+
+        return $docs;
+    }
+
+    private static function expiryLabel(int $days): string
+    {
+        return $days < 0 ? 'منتهية منذ '.abs($days).' يومًا' : ($days === 0 ? 'تنتهي اليوم' : "تنتهي خلال {$days} يومًا");
+    }
+
+    /**
+     * One vehicle: its documents alert (any of the four expired stops assignment) and its maintenance-due alert.
+     * Must run inside the caller's transaction.
+     *
+     * @param  array{warnDays: int, soonKm: float, minDaysLic: int}  $p
+     */
+    private function refreshVehicleAlerts(Vehicle $v, ?AuthUser $user, array $p): void
+    {
+        $docs = self::dueDocs(U::docInfos($v, U::VEHICLE_DOCS), $p['warnDays']);
+        if ($docs) {
+            $min = $docs[0]['days'];
+            $this->upsertAlert([
+                'category' => 'vehdoc', 'severity' => $min <= 7 ? 'c' : 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code, 'dueDate' => U::fmtDate($docs[0]['date']), 'owner' => 'مدير الأسطول',
+                'textAr' => "وثائق {$v->code}: ".implode(' · ', array_map(fn ($d) => "{$d['labelAr']} ".self::expiryLabel($d['days']).' ('.U::fmtDate($d['date']).')', $docs)),
+                'textEn' => "{$v->code} documents: ".implode(', ', array_map(fn ($d) => "{$d['labelEn']} ".U::fmtDate($d['date']), $docs)),
+                'recommendAr' => $min < 0 ? 'المركبة غير قابلة للإسناد حتى التجديد' : 'تجديد الوثائق قبل الإسناد', 'recommendEn' => $min < 0 ? 'Not assignable until renewed' : 'Renew before assignment',
+            ]);
+        } else {
+            $this->upsertAlert(null, $user, false, ['entityCode' => $v->code, 'category' => 'vehdoc']);
+        }
+        $dueKm = $v->next_maint_km !== null ? $v->next_maint_km - $v->odometer : null;
+        $dueDays = U::daysTo($v->next_maint_date);
+        $maintDue = $v->state !== 'maintenance' && (($dueKm !== null && $dueKm <= $p['soonKm']) || ($dueDays !== null && $dueDays <= $p['warnDays']));
+        if ($maintDue) {
+            $overdue = ($dueKm !== null && $dueKm <= 0) || ($dueDays !== null && $dueDays < 0);
+            $this->upsertAlert([
+                'category' => 'maint', 'severity' => $overdue ? 'c' : 'w', 'entityType' => 'Vehicle', 'entityId' => $v->id, 'entityCode' => $v->code,
+                'dueDate' => $v->next_maint_date ? U::fmtDate($v->next_maint_date) : ($dueKm !== null ? U::fmt0($v->next_maint_km).' كم' : null), 'owner' => 'مدير الأسطول',
+                'textAr' => "صيانة {$v->code} ".($overdue ? 'متأخرة' : 'قريبة')
+                    .($dueKm !== null ? ' — '.($dueKm <= 0 ? 'تجاوزت' : 'بعد').' '.U::fmt0(abs($dueKm)).' كم' : '')
+                    .($dueDays !== null ? ' — '.($dueDays < 0 ? 'منذ' : 'خلال').' '.abs($dueDays).' يومًا' : ''),
+                'textEn' => 'Maintenance '.($overdue ? 'overdue' : 'due')." {$v->code}", 'recommendAr' => 'جدولة أمر صيانة وقائية', 'recommendEn' => 'Schedule preventive maintenance',
+            ]);
+        } else {
+            $this->upsertAlert(null, $user, false, ['entityCode' => $v->code, 'category' => 'maint']);
+        }
+    }
+
+    /**
+     * One driver: the documents alert, worded as what really happens — a licence with fewer than
+     * `fleet.driverLicenseMinDays` days left and an expired iqama / ID stop assignment (the driver is blocked here), the
+     * medical certificate only warns. Must run inside the caller's transaction.
+     *
+     * @param  array{warnDays: int, soonKm: float, minDaysLic: int}  $p
+     */
+    private function refreshDriverAlerts(Driver $d, ?AuthUser $user, array $p): void
+    {
+        $min = $p['minDaysLic'];
+        $block = self::driverDocBlock($d, $min);
+        // the licence is due as soon as it is under the minimum days, even when that is earlier than the warning window
+        $docs = array_merge(
+            self::dueDocs(array_filter(U::docInfos($d, U::DRIVER_DOCS), fn ($x) => $x['key'] === 'licenseExpiry'), max($p['warnDays'], $min - 1)),
+            self::dueDocs(array_filter(U::docInfos($d, U::DRIVER_DOCS), fn ($x) => $x['key'] !== 'licenseExpiry'), $p['warnDays']),
+        );
+        usort($docs, fn ($a, $b) => $a['days'] <=> $b['days']);
+        if ($docs) {
+            $advice = array_map(fn ($x) => match ($x['key']) {
+                'licenseExpiry' => $x['days'] < $min
+                    ? ["الرخصة: الإسناد موقوف حتى التجديد (أقل من {$min} يومًا)", "License: assignment blocked until renewed (under {$min} days)"]
+                    : ["الرخصة: يتوقف الإسناد عند بقاء أقل من {$min} يومًا", "License: assignment stops under {$min} days"],
+                'iqamaExpiry' => $x['days'] < 0
+                    ? ['الإقامة / الهوية منتهية: الإسناد موقوف حتى التجديد', 'Iqama / ID expired: assignment blocked until renewed']
+                    : ['الإقامة / الهوية: يتوقف الإسناد عند انتهائها', 'Iqama / ID: assignment stops when it expires'],
+                default => ['الشهادة الصحية: تنبيه فقط — لا توقف الإسناد', 'Medical certificate: warning only — assignment is not blocked'],
+            }, $docs);
+            // critical only for the documents that stop assignment; the medical certificate never raises above a warning
+            $stopping = array_filter($docs, fn ($x) => $x['key'] !== 'medicalExpiry');
+            $critical = $block !== null || ($stopping && min(array_column($stopping, 'days')) <= 7);
+            $this->upsertAlert([
+                'category' => 'driverdoc', 'severity' => $critical ? 'c' : 'w', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityCode' => $d->code, 'dueDate' => U::fmtDate($docs[0]['date']), 'owner' => 'مدير الأسطول',
+                'textAr' => implode(' · ', array_map(fn ($x) => ($x['labelAr'] === 'الرخصة' ? 'رخصة' : $x['labelAr'])." {$d->name_ar} ".self::expiryLabel($x['days']).' ('.U::fmtDate($x['date']).')', $docs)),
+                'textEn' => ($d->name_en ?: $d->code).': '.implode(', ', array_map(fn ($x) => "{$x['labelEn']} ".U::fmtDate($x['date']), $docs)),
+                'recommendAr' => implode(' · ', array_column($advice, 0)), 'recommendEn' => implode(' · ', array_column($advice, 1)),
+            ]);
+        } else {
+            $this->upsertAlert(null, $user, false, ['entityCode' => $d->code, 'category' => 'driverdoc']);
+        }
+        if ($block && ! $d->blocked) {
+            $d->update(['blocked' => true]);
+            $this->audit->log($user, ['action' => 'DRIVER.BLOCK', 'entityType' => 'Driver', 'entityId' => $d->id, 'entityNumber' => $d->code, 'field' => 'blocked', 'oldValue' => false, 'newValue' => true]);
+            $this->notify->activity($user, 'Driver', $d->id, $d->code, "أُوقف إسناد السائق {$d->name_ar}: {$block['ar']}", "Driver {$d->code} blocked from assignment: {$block['en']}", ['disp']);
+        }
     }
 
     /** @param  array{status?:?string, category?:?string, severity?:?string, entity?:?string}  $f */
@@ -945,8 +1597,15 @@ class FleetService
         });
     }
 
-    /** Audited status change; processed fuel → FuelRecord; processed maint/tire/vehicle → MaintenanceOrder; the driver is notified. */
-    public function setOpsRequestStatus(AuthUser $user, string $number, string $to, ?string $note = null): array
+    /**
+     * Audited status change; the driver is notified. Processing a fuel request records the fill through the one fuel
+     * path (rules, ledger entry, trip cost sheet): the amount is the cost, and litres / the odometer reading only when
+     * the person processing typed them from the receipt — nothing is derived from a price. Processing a maint / tire /
+     * vehicle request opens a maintenance order through the one maintenance path.
+     *
+     * @param  array{liters?:float|int|string|null, odometer?:int|string|null, shop?:?string}  $extra  receipt details given while processing
+     */
+    public function setOpsRequestStatus(AuthUser $user, string $number, string $to, ?string $note = null, array $extra = []): array
     {
         $r = OpsRequest::with('driver')->where(fn ($w) => $w->where('id', $number)->orWhere('number', $number))->first()
             ?? throw AppError::notFound('OPREQ_NOT_FOUND', "الطلب {$number} غير موجود", 'Request not found');
@@ -958,7 +1617,7 @@ class FleetService
         }
         $vehicle = $r->vehicle_code ? Vehicle::where('code', $r->vehicle_code)->first() : null;
 
-        return DB::transaction(function () use ($user, $r, $to, $note, $vehicle) {
+        return DB::transaction(function () use ($user, $r, $to, $note, $vehicle, $extra) {
             $from = $r->status;
             $r->update(['status' => $to]);
             $this->audit->status($user, 'OpsRequest', $r->id, $r->number, $from, $to, $note);
@@ -969,21 +1628,27 @@ class FleetService
                 if (! $vehicle) {
                     throw AppError::rule('OPREQ_NO_VEHICLE', 'لا يمكن تسجيل الوقود — الطلب بلا مركبة محددة', 'No vehicle on the request');
                 }
-                $fn = $this->numbering->next('FL');
-                $fuelRecord = FuelRecord::create(['number' => $fn, 'vehicle_id' => $vehicle->id, 'driver_id' => $r->driver_id, 'date' => U::today(), 'odometer' => $vehicle->odometer, 'liters' => U::round($r->amount / 2.33), 'cost' => $r->amount, 'station' => $r->location, 'full' => false, 'receipt' => $r->attachment])->refresh();
-                $this->audit->log($user, ['action' => 'FUEL.CREATE', 'entityType' => 'FuelRecord', 'entityId' => $fuelRecord->id, 'entityNumber' => $fn, 'newValue' => ['from' => $r->number, 'cost' => $r->amount]]);
-                $suffix = ' · سُجل في سجل الوقود';
+                // the request's trip is charged only when it runs on this vehicle (a driver may name another vehicle)
+                $trip = $r->trip_number ? Trip::where('number', $r->trip_number)->first() : null;
+                $trip = $trip && $trip->vehicle_id === $vehicle->id ? $trip : null;
+                $liters = isset($extra['liters']) ? (float) $extra['liters'] : 0.0;
+                [$fuel] = $this->recordFuel($user, $vehicle, $r->driver, [
+                    'date' => U::today(), 'odometer' => isset($extra['odometer']) ? (int) $extra['odometer'] : null, 'liters' => $liters, 'cost' => (float) $r->amount,
+                    'station' => $r->location === '—' ? null : $r->location, 'full' => false, 'receipt' => $r->attachment, 'from' => $r->number,
+                ], $trip);
+                $fuelRecord = $this->fuelRow($fuel);
+                $suffix = ' · سُجل في سجل الوقود وقُيّد مصروفه'.($liters > 0 ? '' : ' (بلا لترات — لا يدخل في متوسط الاستهلاك)');
             }
             if ($to === 'processed' && in_array($r->type, ['maint', 'tire', 'vehicle'], true)) {
                 if (! $vehicle) {
                     throw AppError::rule('OPREQ_NO_VEHICLE', 'لا يمكن إنشاء أمر صيانة — الطلب بلا مركبة محددة', 'No vehicle on the request');
                 }
-                $kind = $r->type === 'tire' ? 'tire' : 'corrective';
-                [$typeAr, $typeEn] = U::MAINT_KIND_LABEL[$kind];
-                $mn = $this->numbering->next('MNT');
-                $maintenanceOrder = MaintenanceOrder::create(['number' => $mn, 'vehicle_id' => $vehicle->id, 'kind' => $kind, 'type_ar' => $typeAr, 'type_en' => $typeEn, 'desc_ar' => "من طلب السائق {$r->number}: {$r->desc}", 'desc_en' => "From driver request {$r->number}: {$r->desc}", 'shop' => '—', 'start_date' => U::today(), 'cost' => $r->amount ?: 0, 'down_days' => 1, 'down_label' => '1 يوم', 'status' => 'open'])->refresh();
-                $this->audit->log($user, ['action' => 'MAINT.CREATE', 'entityType' => 'MaintenanceOrder', 'entityId' => $maintenanceOrder->id, 'entityNumber' => $mn, 'newValue' => ['from' => $r->number, 'vehicle' => $vehicle->code, 'kind' => $kind]]);
-                $suffix = ' · أُنشئ أمر صيانة';
+                $shop = trim((string) ($extra['shop'] ?? ''));
+                $maintenanceOrder = $this->openMaintenance($user, $vehicle, [
+                    'kind' => $r->type === 'tire' ? 'tire' : 'corrective', 'descAr' => "من طلب السائق {$r->number}: {$r->desc}", 'descEn' => "From driver request {$r->number}: {$r->desc}",
+                    'shop' => $shop ?: null, 'startDate' => U::today(), 'cost' => $r->amount ?: 0, 'downDays' => 1, 'from' => $r->number,
+                ]);
+                $suffix = ' · أُنشئ أمر الصيانة '.$maintenanceOrder->number.($shop ? '' : ' (حدّد الورشة من «تعديل» الأمر)');
             }
             $label = U::OPREQ_STATE_LABEL[$to];
             $text = "الطلب التشغيلي {$r->number} → {$label}".($note ? ' — '.$note : '');
@@ -1093,7 +1758,7 @@ class FleetService
             'trips' => $d->trips, 'deliveries' => $d->deliveries, 'fails' => $d->fails, 'state' => $d->state, 'blocked' => $d->blocked,
             'score' => U::round(($d->rating / 5) * 40 + $d->ontime_pct * 0.3 + $d->safety * 0.3),
         ])->sortByDesc('score')->values()->all();
-        $fuel30 = FuelRecord::where('date', '>=', now()->subDays(30));
+        $fuel30 = FuelRecord::whereNull('voided_at')->where('date', '>=', now()->subDays(30)); // a voided fill counts nowhere
 
         return [
             'vehicles' => [
@@ -1106,7 +1771,7 @@ class FleetService
                 'blocked' => $drivers->filter(fn ($d) => $d->blocked)->count(), 'docsExpiring' => $drvDocs->count(), 'docsExpiringCodes' => $drvDocs->pluck('code')->all(),
             ],
             'maintenance' => ['open' => MaintenanceOrder::where('status', 'open')->count(), 'openCost' => (float) MaintenanceOrder::where('status', 'open')->sum('cost')],
-            'fuel' => ['anomalies' => FuelRecord::where('anomaly', true)->count(), 'cost30d' => (float) (clone $fuel30)->sum('cost'), 'liters30d' => (float) (clone $fuel30)->sum('liters')],
+            'fuel' => ['anomalies' => FuelRecord::whereNull('voided_at')->where('anomaly', true)->count(), 'cost30d' => (float) (clone $fuel30)->sum('cost'), 'liters30d' => (float) (clone $fuel30)->sum('liters')],
             'trips' => ['closed' => Trip::where('status', 'closed')->count(), 'kmTotal' => (float) Trip::where('status', 'closed')->sum('km')],
             'driverRanking' => $ranking,
         ];

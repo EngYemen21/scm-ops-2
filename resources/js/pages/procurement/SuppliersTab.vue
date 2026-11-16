@@ -11,13 +11,14 @@ import { useAuth } from '@/stores/auth';
 import { confirm } from '@/stores/ui';
 import FilterBar from './FilterBar.vue';
 import SupplierDrawer from './SupplierDrawer.vue';
-import { SUPPLIER_STATUS_LABELS, qs, scoreColor, sname } from './shared';
+import { SUPPLIER_STATUS_LABELS, qs, scoreColor, sname, usePolicy } from './shared';
 
 const emit = defineEmits(['newPo', 'edit', 'quote']);
 const auth = useAuth();
 const route = useRoute();
 const router = useRouter();
 const act = useAction({ invalidate: ['suppliers', 'procurement'] });
+const policy = usePolicy();
 
 /** Supplier code shown in the drawer lives in the query string. */
 const sel = computed(() => qs(route.query.supplier) || null);
@@ -75,7 +76,7 @@ const columns = [
       </template>
     </DataTable>
   </div>
-  <div class="hint">{{ t('Score = السعر 30% + الجودة 25% + OTIF 30% + Fill Rate 15%. المورد دون 65 يُحظر عليه أوامر الشراء الجديدة إلا باستثناء موثق من مدير المشتريات. OTIF/Fill تُحسب من الاستلامات الفعلية.', 'Score = price 30% + quality 25% + OTIF 30% + fill rate 15%. Suppliers below 65 are blocked for new POs unless a documented procurement-manager override is given. OTIF/fill are computed from actual receipts.') }}</div>
+  <div class="hint">{{ t(`Score = السعر 30% + الجودة 25% + OTIF 30% + Fill Rate 15%. المورد دون ${policy.minSupplierScore} يُحظر عليه أوامر الشراء الجديدة إلا باستثناء موثق من مدير المشتريات. OTIF/Fill تُحسب من الاستلامات الفعلية.`, `Score = price 30% + quality 25% + OTIF 30% + fill rate 15%. Suppliers below ${policy.minSupplierScore} are blocked for new POs unless a documented procurement-manager override is given. OTIF/fill are computed from actual receipts.`) }}</div>
 
   <SupplierDrawer :code="sel" @close="setSel(null)" @new-po="fromDrawer('newPo', $event)" @edit="fromDrawer('edit', $event)" @quote="fromDrawer('quote', $event)" />
 </template>

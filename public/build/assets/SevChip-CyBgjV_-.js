@@ -1,0 +1,1 @@
+import{Z as e,c as t,w as n}from"./runtime-core.esm-bundler-BLlu7XAr.js";import{it as r}from"./app-BsqI8w3u.js";import{i}from"./shared-BP1CaavN.js";var a={__name:`SevChip`,props:{k:{type:String,default:null},small:{type:Boolean,default:!1}},setup(a){return(o,s)=>(n(),t(e(r),{map:e(i),k:a.k||`i`,small:a.small,class:`flex-none`},null,8,[`map`,`k`,`small`]))}};export{a as default};

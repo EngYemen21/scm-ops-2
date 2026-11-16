@@ -17,6 +17,11 @@ class ProcurementController extends ProcurementBaseController
         return $this->procurement->dashboard();
     }
 
+    public function policy(): array
+    {
+        return $this->procurement->policy();
+    }
+
     public function suggestions(Request $request): array
     {
         $q = $request->validate(['warehouse' => 'nullable|string', 'urgent' => 'nullable', 'sku' => 'nullable|string', 'limit' => 'nullable|integer|min:1|max:1000']);

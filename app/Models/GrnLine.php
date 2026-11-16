@@ -28,6 +28,7 @@ class GrnLine extends BaseModel
             'mfg_date' => 'datetime',
             'expiry_date' => 'datetime',
             'qc_at' => 'datetime',
+            'split_no' => 'integer',
         ];
     }
 

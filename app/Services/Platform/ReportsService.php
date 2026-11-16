@@ -23,7 +23,7 @@ class ReportsService
     private const NOT_AVAILABLE_ZONES = "'quarantine','staging','returns','damaged'";
 
     /** Sub-aggregate of GRN lines: ordered (from the shipment line), received, accepted, damaged, rejected per GRN. */
-    private const GRN_AGG = '(SELECT gl.grn_id, COUNT(*) AS `lines`, SUM(COALESCE(sl.ordered_qty, gl.received_qty)) AS ordered, SUM(gl.received_qty) AS received,
+    private const GRN_AGG = '(SELECT gl.grn_id, COUNT(*) AS `lines`, SUM(CASE WHEN gl.split_no > 1 THEN 0 ELSE COALESCE(sl.ordered_qty, gl.received_qty) END) AS ordered, SUM(gl.received_qty) AS received,
         SUM(gl.accepted_qty) AS accepted, SUM(gl.damaged_qty) AS damaged, SUM(gl.rejected_qty) AS rejected
         FROM grn_lines gl LEFT JOIN shipment_lines sl ON sl.id = gl.shipment_line_id GROUP BY gl.grn_id)';
 
@@ -128,7 +128,7 @@ class ReportsService
     /** `AND (a LIKE %q% OR b LIKE %q% …)` over the given column expressions (the collation is case-insensitive). */
     private function whereQ(?string $q, array $columns): string
     {
-        return $q ? 'AND ('.implode(' OR ', array_map(fn ($col) => "{$col} ".Sql::like()." ".$this->p(R::like($q)), $columns)).')' : '';
+        return $q ? 'AND ('.implode(' OR ', array_map(fn ($col) => "{$col} ".Sql::like().' '.$this->p(R::like($q)), $columns)).')' : '';
     }
 
     private function whereStatus(string $expression, ?string $status): string
@@ -246,7 +246,7 @@ class ReportsService
                     CASE WHEN po.due_date IS NULL THEN NULL ELSE GREATEST('.Sql::days('g.posted_at', 'po.due_date').', 0) END AS `daysLate`, g.posted_by AS `postedBy`
                 FROM goods_receipts g JOIN purchase_orders po ON po.id = g.po_id JOIN suppliers s ON s.id = g.supplier_id JOIN warehouses w ON w.id = g.warehouse_id JOIN inbound_shipments sh ON sh.id = g.shipment_id
                 LEFT JOIN '.self::GRN_AGG." a ON a.grn_id = g.id
-                WHERE {$this->between('g.posted_at', $c)} {$this->whereWh('g.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['g.number', 'po.number', 's.name_ar', 's.name_en', 'sh.number'])}",
+                WHERE g.voided_at IS NULL AND {$this->between('g.posted_at', $c)} {$this->whereWh('g.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['g.number', 'po.number', 's.name_ar', 's.name_en', 'sh.number'])}",
             'order' => 't.`postedAt` DESC, t.`number` DESC', 'sums' => ['ordered', 'received', 'accepted', 'damaged', 'rejected'],
         ];
     }
@@ -260,7 +260,7 @@ class ReportsService
                     COALESCE(a.`lines`, 0) AS `lines`, COALESCE(a.received, 0) AS `received`, COALESCE(a.accepted, 0) AS `accepted`, COALESCE(a.damaged, 0) AS `damaged`, COALESCE(a.rejected, 0) AS `rejected`, g.posted_by AS `postedBy`, g.summary_ar AS `summaryAr`
                 FROM goods_receipts g JOIN purchase_orders po ON po.id = g.po_id JOIN suppliers s ON s.id = g.supplier_id JOIN warehouses w ON w.id = g.warehouse_id JOIN inbound_shipments sh ON sh.id = g.shipment_id
                 LEFT JOIN '.self::GRN_AGG." a ON a.grn_id = g.id
-                WHERE {$this->between('g.posted_at', $c)} {$this->whereWh('g.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['g.number', 'po.number', 's.name_ar', 's.name_en', 'sh.number', 'g.posted_by'])}",
+                WHERE g.voided_at IS NULL AND {$this->between('g.posted_at', $c)} {$this->whereWh('g.warehouse_id', $c->whId)} {$this->whereQ($c->q, ['g.number', 'po.number', 's.name_ar', 's.name_en', 'sh.number', 'g.posted_by'])}",
             'order' => 't.`postedAt` DESC, t.`number` DESC', 'sums' => ['lines', 'received', 'accepted', 'damaged', 'rejected'],
         ];
     }
@@ -274,7 +274,7 @@ class ReportsService
             'columns' => [R::col('code', 'الكود', 'Code'), ...self::supplierCols(), R::col('pos', 'أوامر الشراء', 'POs', 'number'), R::col('poValue', 'قيمة الأوامر (ر.س)', 'PO value (SAR)', 'money'), R::col('grns', 'الاستلامات', 'GRNs', 'number'), R::col('otifPct', 'OTIF %', 'OTIF %', 'pct'), R::col('fillPct', 'نسبة التعبئة %', 'Fill %', 'pct'), R::col('avgLeadDays', 'متوسط أيام التوريد', 'Avg lead days', 'number'), R::col('damagedPct', 'نسبة التالف %', 'Damaged %', 'pct'), R::col('score', 'التقييم', 'Score', 'number')],
             'body' => "WITH pos AS (SELECT x.* FROM purchase_orders x WHERE {$this->between('x.created_at', $c)} AND x.status NOT IN ('draft','cancelled') {$this->whereWh('x.warehouse_id', $c->whId)}),
                     g AS (SELECT gr.id, gr.supplier_id, gr.posted_at, pos.due_date, COALESCE(pos.sent_at, pos.approved_at, pos.created_at) AS sent_at, a.ordered, a.received, a.accepted, a.damaged
-                          FROM goods_receipts gr JOIN pos ON pos.id = gr.po_id LEFT JOIN ".self::GRN_AGG." a ON a.grn_id = gr.id)
+                          FROM goods_receipts gr JOIN pos ON pos.id = gr.po_id LEFT JOIN ".self::GRN_AGG." a ON a.grn_id = gr.id WHERE gr.voided_at IS NULL)
                 SELECT s.code AS `code`, s.name_ar AS `supplierAr`, s.name_en AS `supplierEn`,
                     (SELECT COUNT(*) FROM pos WHERE pos.supplier_id = s.id) AS `pos`, (SELECT COALESCE(SUM(pos.total), 0) FROM pos WHERE pos.supplier_id = s.id) AS `poValue`,
                     COUNT(g.id) AS `grns`,
@@ -322,9 +322,9 @@ class ReportsService
     {
         return [
             'columns' => [R::col('warehouse', 'المستودع', 'Warehouse'), R::col('status', 'الحالة', 'Status', 'status'), R::col('orders', 'الطلبات', 'Orders', 'number'), R::col('cartons', 'الكراتين', 'Cartons', 'number'), R::col('kg', 'الوزن (كجم)', 'Weight (kg)', 'number'), R::col('packed', 'معبأ', 'Packed', 'number'), R::col('avgHoursAllocToPacked', 'متوسط ساعات التخصيص→التعبئة', 'Avg hours alloc→packed', 'number'), R::col('avgHoursPackedToDispatch', 'متوسط ساعات التعبئة→الشحن', 'Avg hours packed→dispatch', 'number')],
-            'body' => "SELECT w.code AS `warehouse`, f.status AS `status`, COUNT(*) AS `orders`, SUM(f.cartons) AS `cartons`, ROUND(SUM(f.weight_kg), 1) AS `kg`, COUNT(f.packed_at) AS `packed`,
-                    ROUND(AVG(".Sql::seconds('f.created_at', 'f.packed_at')." / 3600), 2) AS `avgHoursAllocToPacked`,
-                    ROUND(AVG(".Sql::seconds('f.packed_at', 'f.dispatched_at')." / 3600), 2) AS `avgHoursPackedToDispatch`
+            'body' => 'SELECT w.code AS `warehouse`, f.status AS `status`, COUNT(*) AS `orders`, SUM(f.cartons) AS `cartons`, ROUND(SUM(f.weight_kg), 1) AS `kg`, COUNT(f.packed_at) AS `packed`,
+                    ROUND(AVG('.Sql::seconds('f.created_at', 'f.packed_at').' / 3600), 2) AS `avgHoursAllocToPacked`,
+                    ROUND(AVG('.Sql::seconds('f.packed_at', 'f.dispatched_at')." / 3600), 2) AS `avgHoursPackedToDispatch`
                 FROM fulfillment_orders f JOIN warehouses w ON w.id = f.warehouse_id
                 WHERE {$this->between('f.created_at', $c)} {$this->whereWh('f.warehouse_id', $c->whId)} {$this->whereStatus('f.status', $c->status)}
                 GROUP BY w.code, f.status",
@@ -359,9 +359,9 @@ class ReportsService
         // The three sub-aggregates come first in the SQL text, so their bound values are registered first, in order.
         $trips = "(SELECT tr.vehicle_id, COUNT(*) AS trips, SUM(tr.km) AS km, SUM(tr.kg) AS kg FROM trips tr
             WHERE {$this->between('COALESCE(tr.date, tr.created_at)', $c)} AND tr.status NOT IN ('draft','cancelled') {$this->whereWh('tr.warehouse_id', $c->whId)} GROUP BY tr.vehicle_id)";
-        $maintenance = "(SELECT mo.vehicle_id, SUM(COALESCE(mo.down_days, GREATEST(".Sql::days('mo.end_date', 'mo.start_date').", 0), 0)) AS days, SUM(mo.cost) AS cost FROM maintenance_orders mo
-            WHERE {$this->between('COALESCE(mo.start_date, mo.created_at)', $c)} GROUP BY mo.vehicle_id)";
-        $fuel = "(SELECT fr.vehicle_id, SUM(fr.liters) AS liters, SUM(fr.cost) AS cost FROM fuel_records fr WHERE {$this->between('fr.date', $c)} GROUP BY fr.vehicle_id)";
+        $maintenance = '(SELECT mo.vehicle_id, SUM(COALESCE(mo.down_days, GREATEST('.Sql::days('mo.end_date', 'mo.start_date').", 0), 0)) AS days, SUM(mo.cost) AS cost FROM maintenance_orders mo
+            WHERE mo.status <> 'cancelled' AND {$this->between('COALESCE(mo.start_date, mo.created_at)', $c)} GROUP BY mo.vehicle_id)";
+        $fuel = "(SELECT fr.vehicle_id, SUM(fr.liters) AS liters, SUM(fr.cost) AS cost FROM fuel_records fr WHERE fr.voided_at IS NULL AND {$this->between('fr.date', $c)} GROUP BY fr.vehicle_id)";
         $wh = $c->whId ? 'AND (v.warehouse_id = '.$this->p($c->whId).' OR tt.vehicle_id IS NOT NULL)' : '';
 
         return [

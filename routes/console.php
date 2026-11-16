@@ -180,3 +180,40 @@ Artisan::command('scm:import-snapshot {file} {--keep-passwords : keep imported p
 
     return 0;
 })->purpose('Load a snapshot produced by tools/snapshot-reference-db.mjs (data migration from the old system)');
+
+// ── Sales housekeeping (docs/ops-hardening/W4-sales.md) ──
+// customers.balance is the customer's exposure (unpaid invoices + accepted orders not yet delivered), kept by
+// CreditService::sync whenever one of its sources changes. This rewrites EVERY balance from those sources: run it once
+// when the 2026-11 hardening is deployed (the column used to be a counter that only grew), and nightly as a safety net.
+Artisan::command('scm:credit-sync', function (\App\Services\Sales\CreditService $credit) {
+    $r = $credit->syncAll(fn (string $code, float $before, float $after) => $this->line("{$code}: {$before} → {$after}"));
+    $this->info("{$r['checked']} customers checked, {$r['changed']} balances rewritten");
+
+    return 0;
+})->purpose('Rewrite every customer balance from its sources (unpaid invoices + open orders)');
+Schedule::command('scm:credit-sync')->dailyAt('02:30');
+
+// Quotations past their validity date → expired (send / approve / convert refuse them anyway; this keeps the lists honest).
+Artisan::command('scm:quotations-expire', function (\App\Services\Sales\SalesService $sales) {
+    $this->line(json_encode($sales->expireQuotations(), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Move open quotations whose validity date has passed to expired');
+Schedule::command('scm:quotations-expire')->dailyAt('00:10');
+
+// Orders of ours that wait for stock (backorders, orders accepted with nothing available, orders put back by the
+// warehouse) get it oldest first as soon as it is there. Orders of other systems: scm:integration-run (topUp).
+Artisan::command('scm:backorders-allocate {--limit=50}', function (\App\Services\Sales\SalesService $sales) {
+    $this->line(json_encode($sales->retryBackorders(max(1, (int) $this->option('limit'))), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Reserve stock for the OPS orders that wait for it (oldest first)');
+Schedule::command('scm:backorders-allocate')->everyTenMinutes()->withoutOverlapping();
+
+// Driver and vehicle documents: a licence or iqama that expired overnight blocks its driver before the first trip is planned.
+Artisan::command('scm:fleet-documents', function (\App\Services\Transport\FleetService $fleet) {
+    $this->line(json_encode($fleet->refreshDocumentAlerts(), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Refresh driver / vehicle document alerts and the blocks that follow from them');
+Schedule::command('scm:fleet-documents')->dailyAt('05:00');

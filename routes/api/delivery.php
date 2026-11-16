@@ -10,6 +10,8 @@ Route::prefix('delivery')->group(function () {
     Route::get('trips/{id}', [DeliveryController::class, 'trip']);
     Route::post('trips/{id}/start', [DeliveryController::class, 'start'])->middleware('perm:delivery.execute');
     Route::post('stops/{id}/arrive', [DeliveryController::class, 'arrive'])->middleware('perm:delivery.execute');
+    // one scanned code checked against the stop's order (right package / wrong package) before the POD is taken
+    Route::post('stops/{id}/scan', [DeliveryController::class, 'scan'])->middleware('perm:delivery.execute');
     Route::post('stops/{id}/deliver', [DeliveryController::class, 'deliver'])->middleware('perm:delivery.execute');
     Route::post('stops/{id}/partial', [DeliveryController::class, 'partial'])->middleware('perm:delivery.execute');
     Route::post('stops/{id}/fail', [DeliveryController::class, 'fail'])->middleware('perm:delivery.execute');

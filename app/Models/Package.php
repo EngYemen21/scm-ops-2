@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Package extends BaseModel
 {
@@ -22,11 +23,17 @@ class Package extends BaseModel
             'weight_kg' => 'float',
             'volume_m3' => 'float',
             'packed_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 
     public function fo(): BelongsTo
     {
         return $this->belongsTo(FulfillmentOrder::class, 'fo_id', 'id');
+    }
+
+    public function cartonRows(): HasMany
+    {
+        return $this->hasMany(Carton::class, 'package_id', 'id');
     }
 }

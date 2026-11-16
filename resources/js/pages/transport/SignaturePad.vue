@@ -1,6 +1,7 @@
 <script setup>
 // Signature canvas → base64 PNG. Pointer events cover mouse, touch and pen (`touch-action: none` keeps the page from
-// scrolling while signing). The PNG is sent with the POD; the server stores it as an attachment reference ("Integration Pending").
+// scrolling while signing). The PNG is sent with the POD and stored with it (object store, or the database); it can be
+// viewed again from the stop / the POD list.
 //   <SignaturePad v-model="signature" />
 import { onBeforeUnmount, ref } from 'vue';
 import { Btn } from '@/components';

@@ -1,5 +1,7 @@
 <script setup>
 // Sales › sales orders tab: search + stage filters, paged table scoped by the warehouse selector; a row opens the SO drawer.
+// "معلّقة" lists what still waits for stock (backorders, orders accepted with nothing available, orders put back by the
+// warehouse); "بها نقص" lists the orders that could not ship everything that was asked for.
 import { computed, ref, watch } from 'vue';
 import { useList } from '@/api/client';
 import { Chip, DataTable, ErrorBanner, Tabs, TextInput } from '@/components';
@@ -13,10 +15,11 @@ const props = defineProps({
 });
 const emit = defineEmits(['open-so']);
 
-/** Filter pill → query params (`waiting=allocation` is a server-side filter, the rest are plain statuses). */
+/** Filter pill → query params (`waiting`, `shortage` are server-side filters, the rest are plain statuses). */
 const SO_FILTERS = [
   { k: 'all', ar: 'الكل', en: 'All', params: {} },
-  { k: 'waiting', ar: 'بانتظار التخصيص', en: 'Waiting allocation', params: { waiting: 'allocation' } },
+  { k: 'waiting', ar: 'معلّقة — بانتظار المخزون', en: 'Waiting for stock', params: { waiting: 'allocation' } },
+  { k: 'shortage', ar: 'بها نقص', en: 'Shipped short', params: { shortage: 1 } },
   { k: 'allocated', ar: 'مخصص', en: 'Allocated', params: { status: 'allocated' } },
   { k: 'preparing', ar: 'قيد التحضير', en: 'Preparing', params: { status: 'preparing' } },
   { k: 'picking', ar: 'قيد التجهيز', en: 'Picking', params: { status: 'picking' } },
@@ -36,14 +39,21 @@ watch(() => props.initialQ, (v) => { q.value = v; page.value = 1; });
 const active = computed(() => SO_FILTERS.find((x) => x.k === filter.value) || SO_FILTERS[0]);
 const list = useList('/sales/orders', () => ({ q: q.value.trim() || undefined, ...active.value.params, ...wh.whParams, page: page.value, pageSize: 25 }));
 
+/** What a waiting order (status confirmed) is waiting with: part of its stock, or nothing yet. */
+function waitingNote(row) {
+  if (row.status !== 'confirmed') return null;
+  const some = row.fulfilStatus === 'partial' || (row.lines || []).some((l) => l.reservedQty > 0);
+  return some ? t('حجز جزئي — ينتظر الباقي', 'Partly reserved — waiting for the rest') : t('ينتظر المخزون', 'Waiting for stock');
+}
+
 const columns = [
-  { key: 'number', header: { ar: 'أمر البيع', en: 'Sales order' }, width: '130px' },
+  { key: 'number', header: { ar: 'أمر البيع', en: 'Sales order' }, width: '140px' },
   { key: 'customer', header: { ar: 'العميل', en: 'Customer' }, width: 'minmax(170px,1.4fr)' },
   { key: 'due', header: { ar: 'التسليم', en: 'Delivery' }, width: '150px', kind: 'date', value: (r) => `${fmtDateOnly(r.dueDate)}${r.window ? ` · ${r.window}` : ''}` },
   { key: 'wh', header: { ar: 'المستودع', en: 'Warehouse' }, width: '90px' },
   { key: 'total', header: { ar: 'الإجمالي', en: 'Total' }, width: '110px', kind: 'num', value: (r) => fmtMoney(r.totals?.total) },
   { key: 'oc', header: { ar: 'دفعة التجميع', en: 'Consolidation' }, width: '120px' },
-  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '170px' },
+  { key: 'status', header: { ar: 'الحالة', en: 'Status' }, width: '180px' },
 ];
 </script>
 
@@ -57,7 +67,11 @@ const columns = [
     <div class="card">
       <DataTable :columns="columns" :paged="list.data.value" :loading="list.isLoading.value" :min-width="960" :row-key="(r) => r.number" @page="page = $event" @row-click="(r) => emit('open-so', r.number)">
         <template #cell-number="{ row }">
-          <div><div class="cell-id">{{ row.number }}</div><div v-if="row.priority === 'high'" class="text-[8px] font-extrabold text-bad">{{ t('عالية', 'High') }}</div></div>
+          <div>
+            <div class="cell-id">{{ row.number }}</div>
+            <div v-if="row.priority === 'high'" class="text-[8px] font-extrabold text-bad">{{ t('عالية', 'High') }}</div>
+            <div v-if="row.backorderOf" class="text-[8.5px] font-extrabold text-warn">{{ t('معلّق من', 'Backorder of') }} <span class="num ltr inline-block">{{ row.backorderOf.number }}</span></div>
+          </div>
         </template>
         <template #cell-customer="{ row }">
           <div><div class="cell-name">{{ custName(row.customer) }}</div><div class="cell-sub !font-sans [direction:inherit]">{{ row.customer.zone || '' }}</div></div>
@@ -67,9 +81,15 @@ const columns = [
           <RouterLink v-if="row.consolidation" :to="{ path: '/consol', query: { q: row.consolidation.number } }" class="num text-[9.5px] !text-violet" @click.stop>{{ row.consolidation.number }}</RouterLink>
           <span v-else class="num text-[9.5px] text-faint">{{ ['confirmed', 'allocated'].includes(row.status) ? t('بانتظار التجميع', 'Awaiting') : '—' }}</span>
         </template>
-        <template #cell-status="{ row }"><Chip :map="SO_LABELS" :k="row.status" /></template>
+        <template #cell-status="{ row }">
+          <div>
+            <Chip :map="SO_LABELS" :k="row.status" />
+            <div v-if="waitingNote(row)" class="mt-0.5 text-[8.5px] font-extrabold text-warn">{{ waitingNote(row) }}</div>
+            <div v-if="row.hasShortage" class="mt-0.5 text-[8.5px] font-extrabold text-bad">{{ row.backorders?.length ? t(`نقص — الباقي في ${row.backorders.map((b) => b.number).join('، ')}`, `Short — the rest is on ${row.backorders.map((b) => b.number).join(', ')}`) : t('نقص في المشحون', 'Shipped short') }}</div>
+          </div>
+        </template>
       </DataTable>
     </div>
-    <div class="hint">{{ t('اضغط على الأمر لعرض الأسطر (محجوز / مخصص / مصروف) والتخصيص حسب الموقع والدفعة FEFO، وإجراءات التخصيص والتنفيذ والإلغاء، وروابط التتبع.', 'Click an order to see lines (reserved / allocated / picked), FEFO allocations by bin and batch, actions and traceability links.') }}</div>
+    <div class="hint">{{ t('اضغط على الأمر لعرض الأسطر (المطلوب / المحجوز / المصروف / المسلَّم) والتخصيص حسب الموقع والدفعة FEFO، والطلبات المعلّقة المرتبطة به، وإجراءات التخصيص والتنفيذ والإلغاء، وروابط التتبع.', 'Click an order to see its lines (ordered / reserved / picked / delivered), FEFO allocations by bin and batch, its linked backorders, actions and traceability links.') }}</div>
   </div>
 </template>

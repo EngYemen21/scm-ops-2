@@ -3,18 +3,22 @@
 namespace Tests\Feature\Sales;
 
 use App\Models\AuditLog;
+use App\Models\Carton;
 use App\Models\Customer;
 use App\Models\DispatchRecord;
 use App\Models\Driver;
 use App\Models\FulfillmentOrder;
 use App\Models\IntegrationEvent;
 use App\Models\InventoryAllocation;
+use App\Models\InventoryBalance;
 use App\Models\InventoryMovement;
+use App\Models\InventoryReservation;
 use App\Models\LoadingPlan;
 use App\Models\OpsException;
 use App\Models\PickList;
 use App\Models\ProductBarcode;
 use App\Models\SalesOrder;
+use App\Models\SalesOrderLine;
 use App\Models\StagingEntry;
 use App\Models\Trip;
 use App\Models\TripOrder;
@@ -24,7 +28,7 @@ use Tests\ApiTestCase;
 
 /**
  * The outbound story of the reference core-flow / acceptance suites on self-made data:
- * fulfill → pick (negatives, partial, short) → pack → loading plan → load (negatives) → dispatch.
+ * fulfill → pick (negatives, partial, short → backorder) → pack (cartons) → loading plan → load (negatives, scans) → dispatch.
  * The tests of this class run in order and share the documents created by the first one.
  */
 class FulfillmentFlowTest extends ApiTestCase
@@ -41,11 +45,11 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->stock($product, 'A-07-1-B1', 100);
         $this->stock($second, 'A-07-2-B1', 40);
         ProductBarcode::create(['product_id' => $product->id, 'barcode' => '628'.self::uid().'01', 'is_primary' => true]);
-        $first = $this->makeCustomer();   // stop 1 (delivered first → loaded last)
-        $last = $this->makeCustomer();    // stop 2 (delivered last → loaded first)
+        $first = $this->makeCustomer();   // stop 2 (delivered before the last one → loaded last)
+        $last = $this->makeCustomer();    // stop 3 (delivered last → loaded first)
         $soA = $this->expectOk($this->orderFor($first, [['sku' => $product->sku, 'qty' => 20, 'price' => 10], ['sku' => $second->sku, 'qty' => 10, 'price' => 5]]));
         $soB = $this->expectOk($this->orderFor($last, [['sku' => $product->sku, 'qty' => 10, 'price' => 10]]));
-        $soC = $this->expectOk($this->orderFor($this->makeCustomer(), [['sku' => $product->sku, 'qty' => 5, 'price' => 10]])); // never picked: leaves the trip at dispatch
+        $soC = $this->expectOk($this->orderFor($this->makeCustomer(), [['sku' => $product->sku, 'qty' => 5, 'price' => 10]])); // stop 1, never picked: leaves the trip at dispatch
         $foA = $this->expectOk($this->postAs('wm', "/api/sales/orders/{$soA['number']}/fulfill"))['number'];
         $foC = $this->expectOk($this->postAs('wm', "/api/sales/orders/{$soC['number']}/fulfill"))['number'];
         self::$s = compact('product', 'second', 'soA', 'soB', 'soC', 'foA', 'foC');
@@ -62,7 +66,12 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->assertSame(['sku', 'nameAr', 'nameEn', 'weightKg', 'storageClass', 'barcodes'], array_keys($doc['lines'][0]['product']));
         $this->assertCount(1, $doc['lines'][0]['product']['barcodes']);
         [$t, $t2] = $doc['pickLists'][0]['tasks'];
-        $this->assertSame(['code' => 'A-07-1-B1', 'zone' => ['code' => 'A']], $t['bin']);
+        $this->assertSame(['code', 'zone'], array_keys($t['bin']));
+        $this->assertSame(['A-07-1-B1', 'A'], [$t['bin']['code'], $t['bin']['zone']['code']]);
+        $this->assertSame(['code', 'nameAr', 'nameEn', 'type'], array_keys($t['bin']['zone']), 'the zone heads its group of tasks');
+        $this->assertSame(['batchNo', 'expiryDate'], array_keys($t['batch']), 'the batch and its expiry are on the task');
+        $this->assertNotNull($t['batch']['expiryDate']);
+        $this->assertFalse($t['batchScan'], 'one batch in the bin: no batch scan is asked for');
         $this->assertSame([20, 10], [$t['qty'], $t2['qty']]);
         $confirm = "/api/fulfillment/pick-tasks/{$t['id']}/confirm";
         $scan = ['scannedBin' => 'A-07-1-B1', 'scannedProduct' => $product->sku];
@@ -70,6 +79,7 @@ class FulfillmentFlowTest extends ApiTestCase
 
         $this->expectRejected($this->postAs('worker', $confirm, ['scannedBin' => 'Z-99', 'scannedProduct' => $product->sku]), 'WRONG_BIN', [422]);
         $this->expectRejected($this->postAs('worker', $confirm, ['scannedBin' => 'A-07-1-B1', 'scannedProduct' => 'P00000']), 'WRONG_PRODUCT', [422]);
+        $this->expectRejected($this->postAs('worker', $confirm, $scan + ['scannedBatch' => 'B-NOT-THIS']), 'WRONG_BATCH', [422]);
         $this->expectRejected($this->postAs('worker', $confirm, $scan + ['qty' => 25]), 'OVER_PICK', [422]);
         $this->expectRejected($this->postAs('worker', $confirm, ['scannedProduct' => $product->sku]), 'INVALID_INPUT', [400]);
         $this->expectRejected($this->postAs('worker', $confirm, $scan + ['qty' => 0]), 'INVALID_INPUT', [400]);
@@ -78,13 +88,15 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->expectRejected($this->postAs('worker', "/api/fulfillment/orders/{$foA}/pack", ['cartons' => 1]), 'PACK_STATE', [422]);
         $this->assertSame($movements, InventoryMovement::count(), 'rejected scans move nothing');
         $this->assertSame(100, $this->onHand($product, 'A-07-1-B1'));
+        $this->assertNull(PickList::where('fo_id', $doc['id'])->value('assigned_to'), 'a rejected scan does not take the list');
 
-        // partial pick (scanned by barcode, lower-case bin), then the rest
-        $p1 = $this->expectOk($this->postAs('worker', $confirm, ['scannedBin' => 'a-07-1-b1', 'scannedProduct' => ProductBarcode::where('product_id', $product->id)->value('barcode'), 'qty' => 19]));
+        // partial pick (scanned by barcode, lower-case bin, the batch scanned although not required), then the rest
+        $p1 = $this->expectOk($this->postAs('worker', $confirm, ['scannedBin' => 'a-07-1-b1', 'scannedProduct' => ProductBarcode::where('product_id', $product->id)->value('barcode'), 'scannedBatch' => strtolower($t['batch']['batchNo']), 'qty' => 19]));
         $this->assertSame([19, 1, false, false], [$p1['picked'], $p1['remaining'], $p1['lineDone'], $p1['orderDone']]);
         $this->assertStringStartsWith('TX-', $p1['movement']);
         $this->assertSame('picking', FulfillmentOrder::where('number', $foA)->value('status'));
         $this->assertSame('picking', SalesOrder::where('number', $soA['number'])->value('status'));
+        $this->assertSame('worker', PickList::where('fo_id', $doc['id'])->value('assigned_to'), 'the first confirmed scan takes the free list');
         $this->assertSame([81, 19], [$this->onHand($product, 'A-07-1-B1'), $this->onHand($product, 'PACK')]);
         $this->assertReconciles();
         $p2 = $this->expectOk($this->postAs('worker', $confirm, $scan + ['qty' => 1]));
@@ -92,22 +104,43 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->expectRejected($this->postAs('worker', $confirm, $scan), 'TASK_DONE', [409]);
         $this->assertSame('consumed', InventoryAllocation::where('so_line_id', $soA['lines'][0]['id'])->value('status'));
 
-        // short pick on the second line: 6 of 10 found, the rest is released and reported
+        // short pick on the second line: 6 of 10 found, the rest is not in the bin. The reason is structured.
+        $shortUrl = "/api/fulfillment/pick-tasks/{$t2['id']}/short";
         $this->expectOk($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t2['id']}/confirm", ['scannedBin' => 'A-07-2-B1', 'scannedProduct' => $second->sku, 'qty' => 6]));
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t2['id']}/short"), 'INVALID_INPUT', [400]);
-        $this->expectRejected($this->postAs('sales', "/api/fulfillment/pick-tasks/{$t2['id']}/short", ['reason' => 'x']), 'FORBIDDEN', [403]);
-        $short = $this->expectOk($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t2['id']}/short", ['reason' => 'الموقع فارغ']));
-        $this->assertSame(['ok' => true, 'shortQty' => 4], $short);
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t['id']}/short", ['reason' => 'x']), 'TASK_CLOSED', [409]);
+        $this->expectRejected($this->postAs('worker', $shortUrl), 'INVALID_INPUT', [400]);
+        $this->expectRejected($this->postAs('worker', $shortUrl, ['reason' => 'الموقع فارغ']), 'INVALID_INPUT', [400]);
+        $this->expectRejected($this->postAs('worker', $shortUrl, ['reason' => 'other']), 'INVALID_INPUT', [400]);
+        $this->expectRejected($this->postAs('sales', $shortUrl, ['reason' => 'notfound']), 'FORBIDDEN', [403]);
+        $short = $this->expectOk($this->postAs('worker', $shortUrl, ['reason' => 'notfound', 'note' => 'الموقع فارغ']));
+        $this->assertSame([true, 4, 'notfound', true, 'picked'], [$short['ok'], $short['shortQty'], $short['reason'], $short['binFrozen'], $short['orderStatus']]);
+        $this->expectRejected($this->postAs('worker', $shortUrl, ['reason' => 'notfound']), 'TASK_CLOSED', [409]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/pick-tasks/{$t['id']}/short", ['reason' => 'damaged']), 'TASK_CLOSED', [409]);
+
+        // stock: the missing units are no longer reserved, and the row is frozen until it is counted (not allocatable)
         $this->assertSame(0, $this->reserved($second), 'the unpicked reservation is released');
-        $this->assertSame(34, $this->inventory()->availability($second->id, $this->ryd()->id)['total']);
+        $row = InventoryBalance::where('product_id', $second->id)->where('on_hand', 34)->firstOrFail();
+        $this->assertTrue($row->blocked, 'the bin is frozen so the same empty bin is not allocated again');
+        $this->assertSame(0, $this->inventory()->availability($second->id, $this->ryd()->id)['total']);
         $exception = OpsException::where('kind', 'missing')->where('entity_number', $foA)->first();
         $this->assertSame(['w', 'wm', 'open'], [$exception->severity, $exception->owner_role, $exception->status]);
+        $this->assertStringContainsString('جُمّد', $exception->text_ar);
+
+        // the sales order: the line ships 6, remembers 10 were ordered, and the 4 are a linked backorder order
+        $line = SalesOrderLine::find($soA['lines'][1]['id']);
+        $this->assertSame([6, 4, 10, 6, 6, 6], [$line->qty, $line->short_qty, $line->ordered_qty, $line->reserved_qty, $line->allocated_qty, $line->picked_qty]);
+        $this->assertSame(6, InventoryReservation::where('so_line_id', $line->id)->value('qty'), 'the reservation follows the line');
+        $order = SalesOrder::where('number', $soA['number'])->first();
+        $this->assertSame(['picked', true], [$order->status, $order->has_shortage]);
+        $backorder = SalesOrder::with('lines')->where('backorder_of_id', $order->id)->firstOrFail();
+        $this->assertSame($backorder->number, $short['backorder']);
+        $this->assertSame(['confirmed', 'backordered', $order->customer_id], [$backorder->status, $backorder->fulfil_status, $backorder->customer_id]);
+        $this->assertSame([[$second->id, 4, 0]], $backorder->lines->map(fn ($l) => [$l->product_id, $l->qty, $l->reserved_qty])->all());
 
         $after = $this->expectOk($this->getAs('worker', "/api/fulfillment/orders/{$foA}"));
         $this->assertSame('picked', $after['status']);
-        $this->assertSame([[20, 20], [6, 6]], array_map(fn ($l) => [$l['qty'], $l['pickedQty']], $after['lines']));
+        $this->assertSame([[20, 20, 0], [6, 6, 4]], array_map(fn ($l) => [$l['qty'], $l['pickedQty'], $l['shortQty']], $after['lines']));
         $this->assertSame(['done', 'short'], array_column($after['pickLists'][0]['tasks'], 'status'));
+        $this->assertSame(['notfound', 'worker'], [$after['pickLists'][0]['tasks'][1]['shortReason'], $after['pickLists'][0]['tasks'][1]['pickedBy']]);
         $this->assertSame('done', $after['pickLists'][0]['status']);
         $this->assertSame(['picking', 'picked'], array_column($after['history'], 'toStatus'));
         $this->assertSame(['pick', 'pick', 'pick'], array_column($after['movements'], 'type'));
@@ -115,6 +148,7 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->assertSame([['code' => 'A-07-1-B1'], ['code' => 'PACK']], [$after['movements'][0]['srcBin'], $after['movements'][0]['dstBin']]);
         $this->assertTrue(AuditLog::where('action', 'PICK.CONFIRM')->where('entity_id', $t['id'])->exists());
         $this->assertTrue(AuditLog::where('action', 'PICK.SHORT')->where('entity_id', $t2['id'])->exists());
+        $this->assertTrue(AuditLog::where('action', 'SO.BACKORDER')->where('entity_number', $soA['number'])->exists());
         $this->assertSame(0, PickList::where('fo_id', $after['id'])->where('status', 'open')->count());
         $this->assertReconciles();
     }
@@ -124,11 +158,14 @@ class FulfillmentFlowTest extends ApiTestCase
         ['product' => $product, 'second' => $second, 'foA' => $foA, 'soA' => $soA, 'soB' => $soB] = self::$s;
         $this->expectRejected($this->postAs('sales', "/api/fulfillment/orders/{$foA}/pack", ['cartons' => 3]), 'FORBIDDEN', [403]);
         $this->expectRejected($this->postAs('worker', "/api/fulfillment/orders/{$foA}/pack", ['cartons' => 0]), 'INVALID_INPUT', [400]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/orders/{$foA}/pack", ['cartons' => 2, 'cartonWeights' => [10, 20, 30]]), 'CARTON_WEIGHTS', [400]);
         $this->expectRejected($this->postAs('worker', '/api/fulfillment/orders/FO-NOPE/pack'), 'FO_NOT_FOUND', [404]);
+        $this->assertSame(0, Carton::whereIn('fo_id', FulfillmentOrder::where('number', $foA)->select('id'))->count(), 'rejections create nothing');
 
         $packed = $this->expectOk($this->postAs('worker', "/api/fulfillment/orders/{$foA}/pack", ['cartons' => 9, 'weightKg' => 212, 'volumeM3' => 0.9]));
-        $this->assertSame('packed', $packed['status']);
+        $this->assertSame(['packed', 9], [$packed['status'], $packed['cartons']]);
         $this->assertStringStartsWith('PKG-', $packed['package']);
+        $this->assertSame(["{$foA}-C01", "{$foA}-C09"], [$packed['cartonList'][0]['code'], $packed['cartonList'][8]['code']]);
         $this->assertSame([0, 20], [$this->onHand($product, 'PACK'), $this->onHand($product, 'STG-OUT')]);
         $this->assertSame([0, 6], [$this->onHand($second, 'PACK'), $this->onHand($second, 'STG-OUT')]);
         $this->expectRejected($this->postAs('worker', "/api/fulfillment/orders/{$foA}/pack"), 'PACK_STATE', [422]);
@@ -136,7 +173,12 @@ class FulfillmentFlowTest extends ApiTestCase
         $doc = $this->expectOk($this->getAs('disp', "/api/fulfillment/orders/{$foA}"));
         $this->assertSame(['packed', 9, 212, 0.9], [$doc['status'], $doc['cartons'], (int) $doc['weightKg'], $doc['cbm']]);
         $this->assertSame([20, 6], array_column($doc['lines'], 'packedQty'));
-        $this->assertSame([[$packed['package'], 9, "LBL-{$foA}", 'worker']], array_map(fn ($p) => [$p['number'], $p['cartons'], $p['labelRef'], $p['packedBy']], $doc['packages']));
+        $this->assertSame([[$packed['package'], 9, "LBL-{$foA}", 'worker', 'packed']], array_map(fn ($p) => [$p['number'], $p['cartons'], $p['labelRef'], $p['packedBy'], $p['status']], $doc['packages']));
+        // one row and one label per carton ("1 / 9"), the total weight spread evenly
+        $this->assertCount(9, $doc['cartonList']);
+        $this->assertSame(['code', 'seq', 'weightKg', 'status', 'loadedAt', 'deliveredAt'], array_keys($doc['cartonList'][0]));
+        $this->assertSame([range(1, 9), ['packed']], [array_column($doc['cartonList'], 'seq'), array_values(array_unique(array_column($doc['cartonList'], 'status')))]);
+        $this->assertEqualsWithDelta(212, array_sum(array_column($doc['cartonList'], 'weightKg')), 0.01);
         $this->assertSame('packed', SalesOrder::where('number', $soA['number'])->value('status'));
         $this->assertSame(26, StagingEntry::where('reference_id', $doc['id'])->where('direction', 'out')->where('status', 'waiting')->value('qty'));
         $this->assertTrue(IntegrationEvent::where('type', 'OrderPacked')->where('payload->fo', $foA)->exists());
@@ -149,6 +191,7 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->expectOk($this->postAs('worker', "/api/fulfillment/orders/{$foB}/pack"));
         $foBRow = FulfillmentOrder::where('number', $foB)->first();
         $this->assertSame(['packed', 1, 20.0], [$foBRow->status, $foBRow->cartons, $foBRow->weight_kg]);
+        $this->assertSame(["{$foB}-C01"], Carton::where('fo_id', $foBRow->id)->pluck('code')->all());
         $this->assertSame(30, $this->onHand($product, 'STG-OUT'));
         $this->assertSame([[$foB, 'packed']], array_map(fn ($f) => [$f['number'], $f['status']], $this->expectOk($this->getAs('wm', "/api/fulfillment/orders?status=active&warehouse=RYD&q={$foB}"))['items']));
         $this->assertSame(0, $this->expectOk($this->getAs('wm', "/api/fulfillment/orders?status=alloc&q={$foB}"))['total']);
@@ -160,27 +203,35 @@ class FulfillmentFlowTest extends ApiTestCase
         ['foA' => $foA, 'foB' => $foB, 'foC' => $foC, 'product' => $product] = self::$s;
         $vehicle = $this->makeVehicle('dry', 3000, 16);
         $driver = $this->makeDriver();
-        $trip = $this->makeTrip([$foA, $foB, $foC], $vehicle, $driver);
+        // the order that is still being prepared is the FIRST stop: it holds nothing back (a later stop would — LoadingTest)
+        $trip = $this->makeTrip([$foC, $foA, $foB], $vehicle, $driver);
         self::$s += ['trip' => $trip->number, 'vehicle' => $vehicle->code, 'driver' => $driver->code];
         $load = "/api/fulfillment/trips/{$trip->number}/load";
 
         $plan = $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip->number}/loading"));
-        $this->assertSame([$foC, $foB, $foA], array_column($plan['rows'], 'fo'), 'reverse delivery order: the last stop loads first');
-        $this->assertSame($foB, $plan['nextToLoad'], 'the highest stop that is packed');
-        $this->assertSame([false, true, true], array_column($plan['rows'], 'ready'));
+        $this->assertSame([$foB, $foA, $foC], array_column($plan['rows'], 'fo'), 'reverse delivery order: the last stop loads first');
+        $this->assertSame($foB, $plan['nextToLoad'], 'the last stop, and it is packed');
+        $this->assertSame([true, true, false], array_column($plan['rows'], 'ready'));
+        $this->assertSame([null, null, null], array_column($plan['rows'], 'loadSeq'), 'the load sequence is the real one: empty until loaded');
+        $this->assertSame([[], [$foB], [$foB, $foA]], array_column($plan['rows'], 'loadFirst'));
         $this->assertSame(['code' => $vehicle->code, 'plateAr' => $vehicle->plate_ar, 'plateEn' => $vehicle->plate_en, 'state' => 'available', 'maxKg' => 3000, 'maxCbm' => 16, 'pallets' => 8, 'kind' => 'dry'], array_map(fn ($v) => is_float($v) ? (int) $v : $v, $plan['trip']['vehicle']));
         $this->assertSame(['code' => $driver->code, 'nameAr' => $driver->name_ar], $plan['trip']['driver']);
         $this->assertEquals([0, 0, 0, 0], [$plan['totals']['loadedKg'], $plan['totals']['loadedCbm'], $plan['totals']['utilKg'], $plan['totals']['utilCbm']]);
+        $this->assertNull($plan['loadGate']);
+        $this->assertSame([false, 'TRIP_STATE'], [$plan['dispatch']['allowed'], $plan['dispatch']['code']]);
         $this->expectRejected($this->getAs('disp', '/api/fulfillment/trips/TRP-NOPE/loading'), 'TRIP_NOT_FOUND', [404]);
 
         $this->expectRejected($this->postAs('sales', $load, ['foNumber' => $foB]), 'FORBIDDEN', [403]);
         $this->expectRejected($this->postAs('worker', $load), 'INVALID_INPUT', [400]);
-        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foA]), 'LOAD_ORDER', [422]);
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foA, 'scannedOrder' => $foA]), 'LOAD_ORDER', [422]);
         $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB, 'scannedVehicle' => 'XYZ 9999']), 'WRONG_VEHICLE', [422]);
         $wrongVehicle = OpsException::where('kind', 'wrongveh')->where('entity_number', $trip->number)->get();
         $this->assertCount(1, $wrongVehicle, 'the exception survives the rejection');
         $this->assertSame(['c', 'disp', $foB], [$wrongVehicle[0]->severity, $wrongVehicle[0]->owner_role, $wrongVehicle[0]->document_number]);
         $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB, 'scannedOrder' => 'FO-0000']), 'WRONG_ORDER', [422]); // wrong-order loading
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB, 'scannedOrder' => "{$foA}-C01"]), 'WRONG_ORDER', [422]); // a carton of another order
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB]), 'SCAN_REQUIRED', [422]); // the order must be scanned
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB, 'reason' => 'ملصق تالف']), 'SCAN_REQUIRED', [422]); // a reason is a supervisor's to give
         $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foC]), 'NOT_PACKED', [422]);
         $this->expectRejected($this->postAs('worker', $load, ['foNumber' => 'FO-NOT-HERE']), 'FO_NOT_ON_TRIP', [422]);
 
@@ -188,33 +239,37 @@ class FulfillmentFlowTest extends ApiTestCase
         $heavy = FulfillmentOrder::create(['number' => self::code('FO-T-HEAVY'), 'customer_id' => Customer::firstOrFail()->id, 'warehouse_id' => $this->ryd()->id, 'status' => 'packed', 'seq' => 9, 'cartons' => 10, 'weight_kg' => 3600, 'cbm' => 1, 'trip_id' => $trip->id]);
         TripStop::create(['trip_id' => $trip->id, 'seq' => 9, 'customer_id' => $heavy->customer_id, 'customer_ar' => 'اختبار وزن', 'fo_id' => $heavy->id]);
         TripOrder::create(['trip_id' => $trip->id, 'fo_id' => $heavy->id]);
-        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $heavy->number, 'scannedVehicle' => $vehicle->code]), 'OVER_WEIGHT', [422]);
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $heavy->number, 'scannedVehicle' => $vehicle->code, 'scannedOrder' => $heavy->number]), 'OVER_WEIGHT', [422]);
         $this->assertSame(1, OpsException::where('kind', 'capacity')->where('entity_number', $trip->number)->count());
         $heavy->update(['weight_kg' => 10, 'cbm' => 40]);
-        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $heavy->number]), 'OVER_VOLUME', [422]);
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $heavy->number, 'scannedOrder' => $heavy->number]), 'OVER_VOLUME', [422]);
         TripOrder::where('fo_id', $heavy->id)->delete();
         TripStop::where('fo_id', $heavy->id)->delete();
         $heavy->delete();
 
         // a vehicle that went to maintenance cannot be loaded
         $vehicle->update(['state' => 'maintenance']);
-        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB]), 'VEHICLE_STATE', [422]);
+        $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB, 'scannedOrder' => $foB]), 'VEHICLE_STATE', [422]);
+        $this->assertSame('VEHICLE_STATE', $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip->number}/loading"))['loadGate']['code']);
         $vehicle->update(['state' => 'available']);
         $this->assertSame('dassigned', Trip::find($trip->id)->status, 'rejections change nothing');
         $this->assertSame(30, $this->onHand($product, 'STG-OUT'));
 
         $l1 = $this->expectOk($this->postAs('worker', $load, ['foNumber' => $foB, 'scannedVehicle' => strtolower($vehicle->plate_en), 'scannedOrder' => $foB]));
-        $this->assertSame([$foB, $vehicle->code, 1], [$l1['fo'], $l1['vehicle'], $l1['seq']]);
+        $this->assertSame([$foB, $vehicle->code, 1, []], [$l1['fo'], $l1['vehicle'], $l1['seq'], $l1['overrides']]);
         $this->assertEquals([20, 0.1], [$l1['loadedKg'], $l1['loadedCbm']]);
         $this->expectRejected($this->postAs('worker', $load, ['foNumber' => $foB]), 'ALREADY_LOADED', [409]); // duplicate loading
         $this->assertSame(20, $this->onHand($product, 'STG-OUT'), 'the goods left warehouse stock once');
         $this->assertSame(['loading', 'loading'], [Trip::find($trip->id)->status, Vehicle::find($vehicle->id)->state]);
         $this->assertSame(['loaded', 'loaded'], [FulfillmentOrder::where('number', $foB)->value('status'), SalesOrder::where('number', self::$s['soB']['number'])->value('status')]);
+        $this->assertSame('loaded', Carton::where('code', "{$foB}-C01")->value('status'), 'cartons follow their order');
 
         $next = $this->expectOk($this->getAs('worker', "/api/fulfillment/trips/{$trip->number}/loading"));
         $this->assertSame($foA, $next['nextToLoad']);
+        $this->assertSame([1, null, null], array_column($next['rows'], 'loadSeq'));
         $this->assertEquals([20, 1], [$next['totals']['loadedKg'], $next['totals']['utilKg']]);
-        $l2 = $this->expectOk($this->postAs('worker', $load, ['foNumber' => strtolower($foA), 'scannedVehicle' => $vehicle->code]));
+        // the order is named and proved by one of its cartons — any code a scanner reads off it will do
+        $l2 = $this->expectOk($this->postAs('worker', $load, ['foNumber' => strtolower($foA), 'scannedVehicle' => $vehicle->code, 'scannedOrder' => strtolower("{$foA}-C03")]));
         $this->assertSame(2, $l2['seq']);
         $this->assertEquals([232, 1.0], [$l2['loadedKg'], $l2['loadedCbm']]);
         $this->assertSame([0, 0], [$this->onHand($product, 'STG-OUT'), $this->onHand(self::$s['second'], 'STG-OUT')]);
@@ -235,8 +290,10 @@ class FulfillmentFlowTest extends ApiTestCase
         $this->assertSame('loading', Trip::find($tripId)->status);
         $this->assertSame(0, DispatchRecord::where('trip_id', $tripId)->count());
 
-        // open critical exceptions of the loading attempts block dispatch until the dispatcher handles them
+        // open critical exceptions of the loading attempts block dispatch until the dispatcher handles them — and the plan says so
         $this->expectRejected($this->postAs('disp', $dispatch), 'BLOCKING_EXCEPTIONS', [422]);
+        $state = $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip}/loading"))['dispatch'];
+        $this->assertSame([false, 'BLOCKING_EXCEPTIONS', [], [$foC]], [$state['allowed'], $state['code'], $state['packedNotLoaded'], $state['notPacked']]);
         foreach (OpsException::where('entity_number', $trip)->where('status', '!=', 'resolved')->where('severity', 'c')->get() as $e) {
             $this->expectOk($this->postAs('disp', "/api/exceptions/{$e->number}/resolve", ['note' => 'تمت المعالجة — تحميل صحيح']));
         }
@@ -245,7 +302,15 @@ class FulfillmentFlowTest extends ApiTestCase
         Driver::where('code', $driver)->update(['license_expiry' => now()->subDay()]);
         $this->expectRejected($this->postAs('disp', $dispatch), 'DRIVER_STATE', [422]);
         Driver::where('code', $driver)->update(['license_expiry' => now()->addYear()]);
+        // … or whose iqama expired: the same rule the Trip Room's dispatch gate shows
+        Driver::where('code', $driver)->update(['iqama_expiry' => now()->subDays(2)]);
+        $this->expectRejected($this->postAs('disp', $dispatch), 'DRIVER_STATE', [422]);
+        Driver::where('code', $driver)->update(['iqama_expiry' => null]);
 
+        // the plan promises exactly what the endpoint does: two orders leave with the truck, the unpacked one leaves the trip
+        $state = $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip}/loading"))['dispatch'];
+        $this->assertSame([true, null, [], [$foC]], [$state['allowed'], $state['code'], $state['packedNotLoaded'], $state['notPacked']]);
+        $this->assertEqualsCanonicalizing([$foA, $foB], $state['loaded']);
         $events = IntegrationEvent::where('type', 'ShipmentDispatched')->count();
         $d = $this->expectOk($this->postAs('disp', $dispatch)); // action button: no body
         $this->assertSame([$trip, 'onroute', 2], [$d['trip'], $d['status'], $d['orders']]);
@@ -278,8 +343,9 @@ class FulfillmentFlowTest extends ApiTestCase
             $this->assertContains($expected, $trail);
         }
         $doc = $this->expectOk($this->getAs('sales', "/api/fulfillment/orders/{$foA}"));
-        $this->assertSame(['number' => $trip, 'status' => 'onroute', 'vehicle' => ['code' => $vehicle, 'plateAr' => Vehicle::where('code', $vehicle)->value('plate_ar'), 'plateEn' => Vehicle::where('code', $vehicle)->value('plate_en')], 'driver' => ['code' => $driver, 'nameAr' => Driver::where('code', $driver)->value('name_ar')]], $doc['trip']);
+        $this->assertSame(['number' => $trip, 'status' => 'onroute', 'dockCode' => null, 'vehicle' => ['code' => $vehicle, 'plateAr' => Vehicle::where('code', $vehicle)->value('plate_ar'), 'plateEn' => Vehicle::where('code', $vehicle)->value('plate_en')], 'driver' => ['code' => $driver, 'nameAr' => Driver::where('code', $driver)->value('name_ar')]], $doc['trip']);
         $this->assertSame(['pick', 'pick', 'pick', 'pack', 'pack', 'load', 'load'], array_column($doc['movements'], 'type'));
+        $this->assertSame(['loaded'], array_values(array_unique(array_column($doc['cartonList'], 'status'))), 'on the road the cartons are still on the truck');
         $this->assertSame([$foA], array_column($this->expectOk($this->getAs('disp', "/api/fulfillment/orders?trip={$trip}&status=onroute&customer=".Customer::find($doc['customerId'])->code))['items'], 'number'));
         $this->assertReconciles();
     }
@@ -291,14 +357,18 @@ class FulfillmentFlowTest extends ApiTestCase
         $so = $this->expectOk($this->orderFor($this->makeCustomer(), [['sku' => $product->sku, 'qty' => 5, 'price' => 10]]));
         $fo = $this->packedOrder($so['number']);
 
-        // no vehicle: nothing can be loaded
+        // no vehicle: nothing can be loaded — and the plan says why before anyone presses the button
         $trip = $this->makeTrip([$fo], null, null, 'planned');
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]), 'NO_VEHICLE', [422]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedOrder' => $fo]), 'NO_VEHICLE', [422]);
+        $this->assertSame('NO_VEHICLE', $this->expectOk($this->getAs('worker', "/api/fulfillment/trips/{$trip->number}/loading"))['loadGate']['code']);
         $this->expectRejected($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"), 'TRIP_STATE', [422]);
 
+        // the order is proved by its sales-order number (what the SO QR carries)
         $trip->update(['vehicle_id' => $this->makeVehicle()->id]);
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->id}/load", ['foNumber' => $fo]));
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->id}/load", ['foNumber' => $fo]), 'SCAN_REQUIRED', [422]);
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->id}/load", ['foNumber' => $fo, 'scannedOrder' => "https://ops.example/so/{$so['number']}"]));
         $this->expectRejected($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"), 'NO_DRIVER', [422]);
+        $this->assertSame('NO_DRIVER', $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip->number}/loading"))['dispatch']['code']);
         $trip->update(['driver_id' => $this->makeDriver(['blocked' => true])->id]);
         $this->expectRejected($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"), 'DRIVER_STATE', [422]);
 
@@ -310,10 +380,16 @@ class FulfillmentFlowTest extends ApiTestCase
         $fo2->update(['trip_id' => $trip->id]);
         $trip->update(['driver_id' => $this->makeDriver()->id]);
         $this->expectRejected($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"), 'INCOMPLETE_LOADING', [422]);
+        $state = $this->expectOk($this->getAs('disp', "/api/fulfillment/trips/{$trip->number}/loading"))['dispatch'];
+        $this->assertSame([false, 'INCOMPLETE_LOADING', [$fo2->number], []], [$state['allowed'], $state['code'], $state['packedNotLoaded'], $state['notPacked']]);
         $this->assertSame('loading', Trip::find($trip->id)->status);
 
+        // a damaged label: a supervisor loads without the scan, with a reason, and it is on record
+        $override = $this->expectOk($this->postAs('wm', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo2->number, 'reason' => 'ملصق الطلب تالف']));
+        $this->assertSame(['scan'], $override['overrides']);
+        $audit = AuditLog::where('action', 'LOAD.OVERRIDE')->where('entity_number', $fo2->number)->firstOrFail();
+        $this->assertSame(['wm', 'scan'], [$audit->username, $audit->field]);
         // a trip already on the road cannot be loaded
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo2->number]));
         $this->expectOk($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"));
         $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]), 'TRIP_STATE', [422]);
         $this->assertSame(0, $this->onHand($product, 'STG-OUT'));

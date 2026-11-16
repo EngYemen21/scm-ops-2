@@ -5,7 +5,9 @@ namespace Tests\Feature\Integration;
 use App\Integration\Models\IntDelivery;
 use App\Integration\Models\IntException;
 use App\Integration\Models\IntInbox;
+use App\Integration\Services\Dispatcher;
 use App\Integration\Services\EventPublisher;
+use App\Integration\Services\IntegrationRunner;
 use App\Integration\Services\ReconciliationService;
 use App\Models\AuditLog;
 use App\Models\Driver;
@@ -129,7 +131,7 @@ class ControlTowerTest extends ApiTestCase
         $this->reply = 503;
         $e = app(EventPublisher::class)->publish('order.packed', 'ORD-D'.self::uid(), ['opsOrder' => 'SO-X']);
         $d = IntDelivery::where('event_id', $e->id)->firstOrFail();
-        app(\App\Integration\Services\Dispatcher::class)->attempt($d);
+        app(Dispatcher::class)->attempt($d);
         $this->assertSame('dead', $d->refresh()->status);
         $dead = $this->expectOk($this->getAs('admin', '/api/integration/deliveries?status=dead'));
         $this->assertContains($d->id, array_column($dead['items'], 'id'));
@@ -191,8 +193,8 @@ class ControlTowerTest extends ApiTestCase
     public function test_without_a_scheduler_a_cycle_rides_on_the_background_notification_poll_at_most_once_per_window(): void
     {
         Cache::forget('int:opportunistic');
-        Cache::forget(\App\Integration\Services\IntegrationRunner::LAST_KEY);
-        $last = fn () => Cache::get(\App\Integration\Services\IntegrationRunner::LAST_KEY);
+        Cache::forget(IntegrationRunner::LAST_KEY);
+        $last = fn () => Cache::get(IntegrationRunner::LAST_KEY);
 
         // off (the default in tests): nothing runs by itself
         $this->getAs('admin', '/api/notifications?limit=30')->assertOk();
@@ -225,12 +227,12 @@ class ControlTowerTest extends ApiTestCase
         $so = $this->order($ref, 10);
         $fo = $this->packedOrder($so->number);
         $trip = $this->makeTrip([$fo], $this->makeVehicle(), Driver::where('code', 'DRV-04')->firstOrFail());
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]));
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedOrder' => $fo]));
         $this->expectOk($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"));
         $stop = TripStop::where('trip_id', $trip->id)->firstOrFail();
         $this->expectOk($this->postAs('driver', "/api/delivery/trips/{$trip->number}/start"));
         $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/arrive"));
-        $pod = $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/partial", ['receiverName' => 'أمين المستودع', 'deliveredQty' => 7]));
+        $pod = $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/partial", ['receiverName' => 'أمين المستودع', 'deliveredQty' => 7, 'signature' => self::proofImage(), 'scans' => [$fo]]));
         $rtn = $pod['return'];
         $mine = fn () => array_values(array_filter($this->sent, fn ($e) => $e['subject'] === $ref));
         $types = array_column($mine(), 'type');
@@ -261,7 +263,7 @@ class ControlTowerTest extends ApiTestCase
         $so = $this->order($ref, 4);
         $fo = $this->packedOrder($so->number);
         $trip = $this->makeTrip([$fo], $this->makeVehicle(), Driver::where('code', 'DRV-04')->firstOrFail());
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]));
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedOrder' => $fo]));
         $this->expectOk($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"));
         $stop = TripStop::where('trip_id', $trip->id)->firstOrFail();
         $this->expectOk($this->postAs('driver', "/api/delivery/trips/{$trip->number}/start"));

@@ -26,6 +26,7 @@ class MaintenanceOrder extends BaseModel
             'labor' => 'float',
             'down_days' => 'integer',
             'next_km' => 'integer',
+            'cancelled_at' => 'datetime',
         ];
     }
 

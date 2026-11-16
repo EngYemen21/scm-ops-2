@@ -31,6 +31,7 @@ class PurchaseOrder extends BaseModel
             'sent_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'closed_at' => 'datetime',
+            'price_changed' => 'boolean',
         ];
     }
 

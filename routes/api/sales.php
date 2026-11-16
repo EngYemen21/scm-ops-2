@@ -8,12 +8,17 @@ use Illuminate\Support\Facades\Route;
 // Sales: quotations → sales orders (reserve / allocate FEFO) → fulfillment order, and order consolidation batches.
 // Reads are open to every signed-in user; every change declares its permission.
 Route::prefix('sales')->group(function () {
+    // the configurable rules the forms show: { maxDiscountPct, vatPct, allowBackorder, zeroCreditLimitUnlimited }
+    Route::get('policy', [QuotationsController::class, 'policy']);
+
     Route::get('quotations', [QuotationsController::class, 'index']);
     Route::get('quotations/{id}', [QuotationsController::class, 'show']);
     Route::post('quotations', [QuotationsController::class, 'store'])->middleware('perm:sales.manage');
     Route::post('quotations/{id}/send', [QuotationsController::class, 'send'])->middleware('perm:sales.manage');
     Route::post('quotations/{id}/approve', [QuotationsController::class, 'approve'])->middleware('perm:sales.manage');
     Route::post('quotations/{id}/reject', [QuotationsController::class, 'reject'])->middleware('perm:sales.manage');
+    Route::post('quotations/{id}/approve-discount', [QuotationsController::class, 'approveDiscount'])->middleware('perm:discount.approve');
+    Route::post('quotations/{id}/extend', [QuotationsController::class, 'extend'])->middleware('perm:sales.manage');
     Route::post('quotations/{id}/duplicate', [QuotationsController::class, 'duplicate'])->middleware('perm:sales.manage');
     Route::post('quotations/{id}/convert', [QuotationsController::class, 'convert'])->middleware('perm:so.reserve');
 
@@ -28,6 +33,8 @@ Route::prefix('sales')->group(function () {
     Route::get('consolidations/{id}', [ConsolidationsController::class, 'show']);
     Route::post('consolidations', [ConsolidationsController::class, 'store'])->middleware('perm:consol.manage');
     Route::post('consolidations/{id}/advance', [ConsolidationsController::class, 'advance'])->middleware('perm:consol.manage');
+    Route::post('consolidations/{id}/cancel', [ConsolidationsController::class, 'cancel'])->middleware('perm:consol.manage');
     Route::post('consolidations/{id}/add', [ConsolidationsController::class, 'add'])->middleware('perm:consol.manage');
     Route::post('consolidations/{id}/remove', [ConsolidationsController::class, 'remove'])->middleware('perm:consol.manage');
+    Route::post('consolidations/{id}/orders/{so}/remove', [ConsolidationsController::class, 'removeOrder'])->middleware('perm:consol.manage');
 });

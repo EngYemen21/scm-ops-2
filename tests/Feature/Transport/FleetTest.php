@@ -470,8 +470,11 @@ class FleetTest extends ApiTestCase
         $this->assertSame('approved', $this->expectOk($this->postAs('disp', $url, ['to' => 'approved']))['status']);
         $p = $this->expectOk($this->postAs('disp', $url, ['to' => 'processed']));
         $this->assertSame(['processed', 'تمت المعالجة'], [$p['status'], $p['statusLabel']]);
-        $this->assertEquals(100, $p['fuelRecord']['liters'], '233 SAR ÷ 2.33');
+        // the amount is the cost; litres are never derived from a price — without them the fill is partial and has no km/L
+        $this->assertEquals(0, $p['fuelRecord']['liters']);
+        $this->assertSame([false, null, false], [$p['fuelRecord']['full'], $p['fuelRecord']['kmPerL'], $p['fuelRecord']['anomaly']]);
         $this->assertEquals(233, $p['fuelRecord']['cost']);
+        $this->assertNotNull($p['fuelRecord']['journalId'], 'the fuel expense reaches the ledger like any fuel record');
         $this->assertNull($p['maintenanceOrder']);
         $this->assertStringContainsString('سُجل في سجل الوقود', $p['message']);
         $this->expectOk($this->postAs('disp', $url, ['to' => 'closed']));
@@ -486,7 +489,7 @@ class FleetTest extends ApiTestCase
         $tire = $this->expectOk($this->postAs('admin', '/api/transport/ops-requests', ['type' => 'tire', 'desc' => 'إطار تالف', 'driverCode' => $d['code'], 'vehicleCode' => $v['code']]));
         $this->expectOk($this->postAs('disp', "/api/transport/ops-requests/{$tire['number']}/status", ['to' => 'approved']));
         $done = $this->expectOk($this->postAs('disp', "/api/transport/ops-requests/{$tire['number']}/status", ['to' => 'processed']));
-        $this->assertSame(['tire', 'open'], [$done['maintenanceOrder']['kind'], $done['maintenanceOrder']['status']]);
+        $this->assertSame(['tire', 'open', null], [$done['maintenanceOrder']['kind'], $done['maintenanceOrder']['status'], $done['maintenanceOrder']['shop']], 'no workshop is invented — it is set by editing the order');
         $other = $this->expectOk($this->postAs('admin', '/api/transport/ops-requests', ['type' => 'other', 'desc' => 'استفسار']));
         $rejected = $this->expectOk($this->postAs('disp', "/api/transport/ops-requests/{$other['number']}/status", ['to' => 'rejected', 'note' => 'غير مبرر']));
         $this->assertSame('rejected', $rejected['status']);
@@ -584,6 +587,12 @@ class FleetTest extends ApiTestCase
             ['sales', 'post', '/api/transport/drivers/DRV-07/incidents', ['type' => 'late', 'desc' => 'x']],
             ['wm', 'post', '/api/transport/maintenance', ['vehicleCode' => 'V-08', 'desc' => 'x', 'shop' => 'x', 'startDate' => '2026-09-15', 'block' => true]],
             ['driver', 'post', '/api/transport/fuel', ['vehicleCode' => 'V-08', 'date' => '2026-09-15', 'odometer' => 999999, 'liters' => 10, 'cost' => 20]],
+            // corrections: the permission is checked before the document is even looked up
+            ['driver', 'patch', '/api/transport/fuel/FL-ANY', ['cost' => 1, 'reason' => 'اختبار']],
+            ['driver', 'post', '/api/transport/fuel/FL-ANY/void', ['reason' => 'اختبار']],
+            ['wm', 'patch', '/api/transport/maintenance/MNT-ANY', ['shop' => 'x']],
+            ['wm', 'post', '/api/transport/maintenance/MNT-ANY/cancel', ['reason' => 'اختبار']],
+            ['sales', 'post', '/api/transport/trips/TRP-ANY/cost/recompute', []],
             ['sales', 'post', '/api/transport/alerts/generate', []],
             ['sales', 'post', "/api/transport/alerts/{$alert->code}/resolve", []],
             ['worker', 'post', '/api/transport/routes', ['name' => 'x', 'zones' => 'x']],

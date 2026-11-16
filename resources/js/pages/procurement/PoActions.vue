@@ -1,7 +1,8 @@
 <script setup>
 // PO action buttons, shown only in the right state and with the right permission:
 //   draft → submit · pending → approve current tier / reject (reason) · approved → send to supplier · sent → supplier confirmed ·
-//   draft|pending|approved → cancel (reason) · sent|confirmed|partial → open the expected shipment.
+//   draft|pending|approved → cancel (reason) · sent|confirmed|partial → open the expected shipment ·
+//   partial → close the order short (reason): the supplier will not deliver the rest, what is open is waived.
 //   <PoActions :po="po" size="md" @changed="(po) => …" />
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -22,13 +23,16 @@ const emit = defineEmits(['changed']);
 const auth = useAuth();
 const router = useRouter();
 const act = useAction({ invalidate: ['procurement', 'inbound', 'dashboard'] });
-/** null | 'reject' | 'cancel' | 'followUp' */
+/** null | 'reject' | 'cancel' | 'followUp' | 'close' */
 const reasonFor = ref(null);
 
 const S = computed(() => props.po.status);
 /** Current approval tier (the step the next approval applies to). */
 const step = computed(() => props.po.currentStep || props.po.approvals?.find((a) => a.decision === 'pending'));
-const shipment = computed(() => props.po.shipments?.[0]);
+/** The shipment to open: the latest one that is not cancelled (a partially received order has follow-up shipments). */
+const shipment = computed(() => { const all = props.po.shipments || []; return [...all].reverse().find((s) => s.status !== 'cancelled') || all[0]; });
+/** Still owed by the supplier — what closing the order short would waive. */
+const owed = computed(() => props.po.receipt?.open ?? props.po.openQty ?? 0);
 
 async function run(path, body, success) {
   const r = await act.run(() => api.postIdempotent(`/procurement/po/${props.po.number}/${path}`, body), { success });
@@ -52,11 +56,13 @@ const supplierConfirmed = () => run('confirm', {}, t(`أكّد المورد ${pr
 function withReason(reason) {
   const n = props.po.number;
   if (reasonFor.value === 'followUp') return run('follow-up', { note: reason }, t(`سُجلت متابعة ${n}`, `Follow-up on ${n} recorded`));
+  if (reasonFor.value === 'close') return run('close', { reason }, t(`أُقفل ${n} على ما استُلم — أُسقط المتبقي`, `${n} closed short — the remainder is waived`));
   return reasonFor.value === 'reject' ? run('reject', { reason }, t(`رُفض ${n}`, `${n} rejected`)) : run('cancel', { reason }, t(`أُلغي ${n}`, `${n} cancelled`));
 }
 const PROMPT = {
   reject: { title: (n) => ({ ar: `رفض ${n}`, en: `Reject ${n}` }), sub: { ar: 'الرفض يُلغي أمر الشراء ويُسجَّل السبب في سلسلة الاعتماد', en: 'Rejection cancels the PO; the reason is recorded on the approval chain' }, ok: { ar: 'رفض', en: 'Reject' }, label: { ar: 'السبب', en: 'Reason' } },
   cancel: { title: (n) => ({ ar: `إلغاء أمر الشراء ${n}`, en: `Cancel ${n}` }), sub: { ar: 'لا يمكن الإلغاء بعد الإرسال للمورد', en: 'Cannot cancel after sending to the supplier' }, ok: { ar: 'إلغاء أمر الشراء', en: 'Cancel PO' }, label: { ar: 'السبب', en: 'Reason' } },
+  close: { title: (n) => ({ ar: `إقفال ${n} على ما استُلم`, en: `Close ${n} short` }), sub: { ar: 'المورد لن يورّد المتبقي: تُسقط الكمية المفتوحة نهائيًا، تُلغى الشحنة المتوقعة إن وُجدت، ويُبلَّغ المشتريات والمالية. لا يمكن التراجع — شحنة عند البوابة تُستلم أو تُرفض أولًا.', en: 'The supplier will not deliver the rest: the open quantity is waived for good, an expected shipment is cancelled, procurement and finance are told. This cannot be undone — a shipment at the gate must be received or refused first.' }, ok: { ar: 'إقفال الأمر', en: 'Close order' }, label: { ar: 'سبب الإقفال', en: 'Reason' } },
   followUp: { title: (n) => ({ ar: `متابعة توريد ${n}`, en: `Follow up ${n}` }), sub: { ar: 'ماذا قال المورد ومتى يصل؟ تُسجَّل الملاحظة على الأمر وفي سجل النشاط', en: 'What did the supplier say and when will it arrive? Recorded on the order and in the activity log' }, ok: { ar: 'تسجيل المتابعة', en: 'Record follow-up' }, label: { ar: 'ملاحظة المتابعة', en: 'Follow-up note' } },
 };
 function closeReason() { reasonFor.value = null; act.clearError(); }
@@ -73,6 +79,7 @@ function closeReason() { reasonFor.value = null; act.clearError(); }
     <Btn v-if="S === 'sent' && auth.can('po.send')" tone="purple" :size="size" :loading="act.pending.value" :label="{ ar: 'تأكيد المورد', en: 'Supplier confirmed' }" @click="supplierConfirmed" />
     <Btn v-if="['approved', 'sent', 'confirmed', 'partial'].includes(S) && auth.can('po.send')" :tone="po.late ? 'danger' : 'soft'" :size="size" :label="po.late ? { ar: 'متأخر — متابعة', en: 'Late — follow up' } : { ar: 'متابعة', en: 'Follow up' }" @click="reasonFor = 'followUp'" />
     <Btn v-if="['draft', 'pending', 'approved'].includes(S) && auth.can('po.cancel')" tone="dangerOutline" :size="size" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="reasonFor = 'cancel'" />
+    <Btn v-if="S === 'partial' && auth.can('po.cancel')" tone="dangerOutline" :size="size" :title="t(`إسقاط المتبقي على المورد (${owed}) وإقفال الأمر`, `Waive what the supplier still owes (${owed}) and close the order`)" :label="{ ar: 'إقفال على المستلم', en: 'Close short' }" @click="reasonFor = 'close'" />
     <Btn v-if="['sent', 'confirmed', 'partial'].includes(S) && shipment" tone="softBlue" :size="size" :label="{ ar: `الشحنة ${shipment.number}`, en: `Shipment ${shipment.number}` }" @click="router.push(`/shipments/${encodeURIComponent(shipment.number)}`)" />
 
     <!-- Teleported: this component also lives inside clickable table rows; the drawer must not inherit their click / hover. -->

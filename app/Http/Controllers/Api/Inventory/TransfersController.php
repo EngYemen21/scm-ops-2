@@ -20,22 +20,23 @@ class TransfersController extends Controller
     {
         $f = $request->validate(['status' => 'nullable|string', 'warehouse' => 'nullable|string', 'from' => 'nullable|string', 'to' => 'nullable|string']);
 
-        return $this->transfers->list(Paging::from($request), $f);
+        return $this->transfers->list(Paging::from($request), $f, AuthUser::current());
     }
 
     public function show(string $id): array
     {
-        return $this->transfers->get($id);
+        return $this->transfers->get($id, AuthUser::current());
     }
 
     public function store(Request $request): JsonResponse
     {
+        // `toBin` is optional: the destination bin is chosen (or confirmed) by whoever receives the goods
         $data = $request->validate([
             'fromWarehouseCode' => 'required|string|min:1', 'toWarehouseCode' => 'required|string|min:1',
             'date' => ['required', 'string', 'regex:/^\d{4}-\d{2}-\d{2}/', 'date'], 'eta' => ['sometimes', 'string', 'regex:/^\d{4}-\d{2}-\d{2}/', 'date'],
             'reasonCode' => 'sometimes|in:shortage,rebalance,season,surplus,other', 'notes' => 'nullable|string', 'submit' => 'sometimes|boolean',
             'lines' => 'required|array|min:1', 'lines.*.sku' => 'required|string|min:1', 'lines.*.qty' => 'required|integer|min:1',
-            'lines.*.batchNo' => 'nullable|string', 'lines.*.fromBin' => 'required|string|min:1', 'lines.*.toBin' => 'required|string|min:1',
+            'lines.*.batchNo' => 'nullable|string', 'lines.*.fromBin' => 'required|string|min:1', 'lines.*.toBin' => 'nullable|string',
         ]);
         if ($data['fromWarehouseCode'] === $data['toWarehouseCode']) {
             throw ValidationException::withMessages(['toWarehouseCode' => 'المصدر والوجهة لا يمكن أن يتطابقا']);
@@ -55,17 +56,44 @@ class TransfersController extends Controller
         return $this->transfers->act(AuthUser::current(), $id, 'reject', $this->note($request));
     }
 
+    /** ready → transit. Every field is optional (the button may post no body); the policy transfers.requireCarrier decides what is needed. */
+    public function ship(Request $request, string $id): array
+    {
+        $data = $request->validate([
+            'note' => 'nullable|string', 'carrier' => 'nullable|string|max:120', 'waybill' => 'nullable|string|max:120',
+            'vehicleCode' => 'nullable|string|max:60', 'driverCode' => 'nullable|string|max:60', 'tripId' => 'nullable|string|max:60',
+        ]);
+
+        return $this->transfers->ship(AuthUser::current(), $id, $data['note'] ?? null, [
+            'carrier' => $data['carrier'] ?? null, 'waybill' => $data['waybill'] ?? null, 'vehicleCode' => $data['vehicleCode'] ?? null, 'driverCode' => $data['driverCode'] ?? null,
+            'tripId' => $data['tripId'] ?? null, // a transfer trip still on the road (same vehicle and driver) takes this transfer as another stop
+        ]);
+    }
+
     public function receive(Request $request, string $id): array
     {
-        // `lines` may be empty or absent: every line that is not listed is received in full
+        // `lines` may be empty or absent: every line that is not listed is received in full (what is still on the road).
+        // `receivedQty` is what arrived NOW; `toBin` names the receiving bin when the line has none or another one is used.
         $data = $request->validate([
-            'lines' => 'sometimes|array', 'lines.*.lineNo' => 'required|integer|min:1', 'lines.*.receivedQty' => 'required|integer|min:0', 'note' => 'nullable|string',
+            'lines' => 'sometimes|array', 'lines.*.lineNo' => 'required|integer|min:1', 'lines.*.receivedQty' => 'required|integer|min:0',
+            'lines.*.toBin' => 'nullable|string', 'note' => 'nullable|string',
         ]);
 
         return $this->transfers->receive(AuthUser::current(), $id, $data['lines'] ?? [], $data['note'] ?? null);
     }
 
-    /** submit | cancel | start-picking | picking-done | ship | close */
+    /** partial → received: what happened to the quantity that never arrived (loss | returned to the source). */
+    public function resolveVariance(Request $request, string $id): array
+    {
+        $data = $request->validate([
+            'resolution' => 'required|in:'.implode(',', TransfersService::RESOLUTIONS), 'note' => 'required|string|min:3|max:500',
+            'lines' => 'sometimes|array', 'lines.*.lineNo' => 'required|integer|min:1', 'lines.*.toBin' => 'nullable|string',
+        ]);
+
+        return $this->transfers->resolveVariance(AuthUser::current(), $id, $data);
+    }
+
+    /** submit | cancel | start-picking | picking-done | close (ship has its own route; it still works here with no carrier) */
     public function action(Request $request, string $id, string $action): array
     {
         if (! isset(TransfersService::ACTIONS[$action]) || in_array($action, ['approve', 'reject'], true)) {

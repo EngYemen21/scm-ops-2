@@ -9,7 +9,7 @@ import { DateInput, SelectInput, TextArea, TextInput, optV } from '@/components'
 import { fmtMoney, fmtNum, lang, t } from '@/i18n';
 import ActionDrawer from './ActionDrawer.vue';
 import ScoreOverrideField from './ScoreOverrideField.vue';
-import { SELECT_PLACEHOLDER, TERMS_OPTIONS, plusDays, useWarehouseOptions } from './shared';
+import { SELECT_PLACEHOLDER, TERMS_OPTIONS, plusDays, usePolicy, useWarehouseOptions } from './shared';
 
 const props = defineProps({
   rfqNumber: { type: String, required: true },
@@ -42,6 +42,9 @@ const termOptions = computed(() => {
 const reasons = computed(() => (props.quote ? (lang.value === 'ar' ? props.quote.reasons : props.quote.reasonsEn) || [] : []));
 const notRecommended = computed(() => !!props.quote && !!props.recommended && props.quote.quotationId !== props.recommended);
 const belowPolicy = computed(() => !!props.policy && props.policy.received < props.policy.minQuotes);
+/** The supplier-score limit is the policy (procurement.minSupplierScore), not a constant. */
+const procurementPolicy = usePolicy();
+const minScore = computed(() => Number(procurementPolicy.value.minSupplierScore));
 const blocked = computed(() => !f.value.warehouseCode || !f.value.dueDate || (f.value.overrideSupplierScore && f.value.overrideReason.trim().length < 3)
   || (notRecommended.value && f.value.awardReason.trim().length < 5) || (belowPolicy.value && f.value.quotesException.trim().length < 5));
 
@@ -64,7 +67,7 @@ function close() { act.clearError(); emit('close'); }
       <DateInput v-model="f.dueDate" :label="{ ar: 'تاريخ التوريد', en: 'Delivery date' }" required />
       <SelectInput v-model="f.paymentTerms" :label="{ ar: 'شروط الدفع', en: 'Payment terms' }" :options="termOptions" :placeholder="{ ar: 'حسب العرض', en: 'As quoted' }" />
       <TextInput v-model="f.notes" :label="{ ar: 'ملاحظات', en: 'Notes' }" />
-      <ScoreOverrideField v-if="quote.score < 65" v-model:checked="f.overrideSupplierScore" v-model:reason="f.overrideReason" :label="t(`تقييم المورد ${fmtNum(quote.score)} دون 65 — استثناء موثق`, `Score ${fmtNum(quote.score)} < 65 — documented override`)" />
+      <ScoreOverrideField v-if="quote.score < minScore" v-model:checked="f.overrideSupplierScore" v-model:reason="f.overrideReason" :label="t(`تقييم المورد ${fmtNum(quote.score)} دون ${fmtNum(minScore)} — استثناء موثق`, `Score ${fmtNum(quote.score)} < ${fmtNum(minScore)} — documented override`)" />
       <TextArea v-if="notRecommended" v-model="f.awardReason" :label="{ ar: 'سبب اختيار عرض غير الموصى به', en: 'Why this quote and not the recommended one' }" required :rows="2" full :hint="{ ar: 'يُسجَّل على طلب العروض وفي Audit Trail (5 أحرف على الأقل)', en: 'Recorded on the RFQ and in the audit trail (at least 5 characters)' }" />
       <TextArea v-if="belowPolicy" v-model="f.quotesException" :label="{ ar: `مبرّر الترسية بأقل من ${policy.minQuotes} عروض (المستلم ${policy.received})`, en: `Exception: fewer than ${policy.minQuotes} quotes (${policy.received} received)` }" required :rows="2" full :hint="{ ar: 'مورد وحيد، حالة طارئة، عقد إطاري… — يُسجَّل ويُدقَّق', en: 'Sole source, emergency, framework agreement… — recorded and audited' }" />
     </div>

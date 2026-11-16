@@ -21,7 +21,7 @@
 //   Suggestion { sku, nameAr, nameEn, storageClass, warehouse, avail, reserved, adc, lead, safety, incoming, sug, urgent, supplier?, price, why[], whyE[] }
 //   LineDraft  { sku, name?, qty: number|null, price?: number|null, tracksExpiry?, packQty?, packUom? }   (line editor rows; qty is always in the base unit)
 import { computed } from 'vue';
-import { useList } from '@/api/client';
+import { useGet, useList } from '@/api/client';
 import { fmtNum, lang } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 
@@ -97,6 +97,17 @@ export function useWarehouseOptions() {
   const auth = useAuth();
   return computed(() => (auth.user?.warehouses || []).map((w) => ({ v: w.code, l: `${w.code} · ${pname(w)}` })));
 }
+/**
+ * The procurement policies the screens act on — GET /procurement/policy (cached; the server enforces every one of them).
+ * Until the answer arrives the documented defaults apply, so a form never shows a wrong "no limit".
+ * @returns {import('vue').ComputedRef<{ minSupplierScore: number, prPriceTolerancePct: number, invoiceTolerancePct: number, rejectedStaysOpen: boolean }>}
+ */
+export function usePolicy() {
+  const q = useGet('/procurement/policy', undefined, { staleTime: 5 * 60_000 });
+  return computed(() => ({ minSupplierScore: 65, prPriceTolerancePct: 10, invoiceTolerancePct: 2, rejectedStaysOpen: true, ...(q.data.value || {}) }));
+}
+/** % a price is above (+) or below (−) its reference; null when there is no reference. */
+export const pctChange = (price, reference) => (Number(reference) > 0 && Number(price) > 0 ? Math.round(((Number(price) - Number(reference)) / Number(reference)) * 1000) / 10 : null);
 /** Supplier select options (`name · Score n`) + the raw supplier records. Both are computed refs. */
 export function useSupplierOptions(activeOnly = true) {
   const list = useList('/suppliers', { pageSize: 200, ...(activeOnly ? { active: 'true' } : {}) });

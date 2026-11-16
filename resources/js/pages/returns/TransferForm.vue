@@ -1,6 +1,7 @@
 <script setup>
 // New warehouse transfer (POST /api/inventory/transfers): source → destination, dates, reason, submit-for-approval flag
-// and the lines picked from the available stock of the source warehouse.
+// and the lines picked from the available stock of the source warehouse. The destination bin of a line is optional —
+// it is chosen (or confirmed) at receipt; the quantities are held at the source when the transfer is approved.
 import { computed } from 'vue';
 import { api } from '@/api/client';
 import { FormDrawer } from '@/components';
@@ -30,21 +31,20 @@ const fields = computed(() => [
       const rows = v || [];
       if (!rows.length) return t('اختر صنفًا واحدًا على الأقل', 'Pick at least one line');
       if (rows.some((r) => !(Number(r.qty) > 0) || Number(r.qty) > r.available)) return t('تحقق من الكميات (أكبر من صفر وضمن المتاح)', 'Check quantities (> 0 and within available)');
-      if (rows.some((r) => !r.toBin?.trim())) return t('موقع الوجهة مطلوب لكل سطر', 'Destination bin is required per line');
-      return null;
+      return null; // the destination bin is optional: whoever receives the goods chooses (or confirms) it
     },
   },
 ]);
 
 const submit = (v) => api.postIdempotent('/inventory/transfers', {
   fromWarehouseCode: v.fromWarehouseCode, toWarehouseCode: v.toWarehouseCode, date: v.date, eta: v.eta || undefined, reasonCode: v.reasonCode, notes: v.notes || undefined, submit: v.submit !== 'no',
-  lines: (v.lines || []).map((l) => ({ sku: l.sku, qty: Number(l.qty), batchNo: l.batchNo || undefined, fromBin: l.fromBin, toBin: String(l.toBin).trim() })),
+  lines: (v.lines || []).map((l) => ({ sku: l.sku, qty: Number(l.qty), batchNo: l.batchNo || undefined, fromBin: l.fromBin, toBin: String(l.toBin || '').trim() || undefined })),
 });
 const action = { success: (r) => r?.message || t(`أُنشئ التحويل ${r?.number || ''}`, `Transfer ${r?.number || ''} created`), invalidate: ['inventory', 'dashboard'] };
 </script>
 
 <template>
-  <FormDrawer :open="open" :width="640" :title="{ ar: 'تحويل بين مستودعات', en: 'Warehouse transfer' }" :sub="{ ar: 'مسودة ← بانتظار الاعتماد ← تجهيز ← شحن ← استلام ← إقفال', en: 'Draft → approval → picking → ship → receive → close' }" :fields="fields" :submit="submit" :action="action"
+  <FormDrawer :open="open" :width="640" :title="{ ar: 'تحويل بين مستودعات', en: 'Warehouse transfer' }" :sub="{ ar: 'مسودة ← اعتماد (حجز الكميات) ← تجهيز ← شحن ← استلام ← إقفال', en: 'Draft → approval (quantities held) → picking → ship → receive → close' }" :fields="fields" :submit="submit" :action="action"
               @close="emit('close')" @done="(r) => emit('done', r)">
     <template #field-lines="{ value, set, values, error }"><TransferLinesPicker :warehouse="values.fromWarehouseCode" :model-value="value || []" :error="error" @update:model-value="set" /></template>
   </FormDrawer>

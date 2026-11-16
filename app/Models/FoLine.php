@@ -25,6 +25,7 @@ class FoLine extends BaseModel
             'packed_qty' => 'integer',
             'delivered_qty' => 'integer',
             'returned_qty' => 'integer',
+            'short_qty' => 'integer',
         ];
     }
 

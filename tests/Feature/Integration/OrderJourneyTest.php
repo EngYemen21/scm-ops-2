@@ -12,6 +12,7 @@ use App\Models\SalesOrder;
 use App\Models\SalesOrderLine;
 use App\Models\Trip;
 use App\Models\TripStop;
+use App\Services\Inventory\InventoryService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\ApiTestCase;
@@ -116,7 +117,7 @@ class OrderJourneyTest extends ApiTestCase
             array_values(array_unique($this->sentTypes($ref))));
         $driver = Driver::where('code', 'DRV-04')->firstOrFail(); // the demo user `driver`
         $trip = $this->makeTrip([$fo], $this->makeVehicle(), $driver);
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]));
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedOrder' => $fo]));
         $this->expectOk($this->postAs('disp', "/api/fulfillment/trips/{$trip->number}/dispatch"));
         $dispatched = collect($this->sent)->last(fn ($e) => $e['type'] === 'shipment.dispatched' && $e['subject'] === $ref);
         $this->assertSame(['out_for_delivery', $trip->number, $driver->name_ar], [$dispatched['data']['status'], $dispatched['data']['trip'], $dispatched['data']['driver']]);
@@ -125,7 +126,7 @@ class OrderJourneyTest extends ApiTestCase
         $stop = TripStop::where('trip_id', $trip->id)->firstOrFail();
         $this->expectOk($this->postAs('driver', "/api/delivery/trips/{$trip->number}/start"));
         $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/arrive", ['gps' => ['lat' => 24.7, 'lng' => 46.7]]));
-        $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/deliver", ['receiverName' => 'م. ناصر', 'gps' => ['lat' => 24.7, 'lng' => 46.7], 'signature' => 'sig.png']));
+        $this->expectOk($this->postAs('driver', "/api/delivery/stops/{$stop->id}/deliver", ['receiverName' => 'م. ناصر', 'gps' => ['lat' => 24.7, 'lng' => 46.7], 'signature' => self::proofImage(), 'scans' => [$fo]]));
         $done = collect($this->sent)->last(fn ($e) => $e['subject'] === $ref);
         $this->assertSame(['delivery.completed', 'delivered', 'م. ناصر', 8, true], [$done['type'], $done['data']['status'], $done['data']['receiver'], $done['data']['deliveredQty'], $done['data']['gps']]);
         $this->assertSame(range(1, count($this->sentTypes($ref))), array_column(array_values(array_filter($this->sent, fn ($e) => $e['subject'] === $ref)), 'sequence'), 'gap-free, ordered');
@@ -160,7 +161,7 @@ class OrderJourneyTest extends ApiTestCase
         $this->assertEquals([['productId' => $this->p('C')['ext'], 'missing' => 3]], $backordered['data']['lines']);
         $this->assertTrue(OpsException::where('kind', 'shortage')->where('document_number', $so->number)->where('owner_role', 'proc')->exists(), 'buyers see the shortage');
         // a direct OPS order for the same product cannot take the 2 reserved units
-        $this->assertSame(0, app(\App\Services\Inventory\InventoryService::class)->availability($c->id)['total']);
+        $this->assertSame(0, app(InventoryService::class)->availability($c->id)['total']);
 
         // stock arrives → the next integration cycle completes the backorder first-come-first-served
         $this->stock($c, 'A-01-1-B1', 10);

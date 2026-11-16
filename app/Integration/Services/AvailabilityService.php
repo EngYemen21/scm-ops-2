@@ -86,17 +86,17 @@ class AvailabilityService
         }
         $available = $this->inventory->availability($productId, $warehouse?->id)['total'];
         $openPo = fn ($q) => $q->whereIn('status', ['approved', 'sent', 'confirmed', 'partial'])->when($warehouse, fn ($w) => $w->where('warehouse_id', $warehouse->id));
-        $poLines = PoLine::where('product_id', $productId)->whereHas('po', $openPo)->get(['po_id', 'qty', 'received_qty']);
-        $incoming = (int) $poLines->sum(fn ($l) => max(0, $l->qty - $l->received_qty));
+        $poLines = PoLine::where('product_id', $productId)->whereHas('po', $openPo)->get(['po_id', 'qty', 'received_qty', 'damaged_qty', 'rejected_qty']);
+        $incoming = (int) $poLines->sum(fn ($l) => ProcurementHelpers::openQty($l));
         $eta = null;
         if ($incoming > 0) {
-            $poIds = $poLines->filter(fn ($l) => $l->qty > $l->received_qty)->pluck('po_id')->unique()->all();
+            $poIds = $poLines->filter(fn ($l) => ProcurementHelpers::openQty($l) > 0)->pluck('po_id')->unique()->all();
             $eta = InboundShipment::whereIn('po_id', $poIds)->whereIn('status', ['expected', 'arrived', 'inspecting'])->whereNotNull('eta')->min('eta')
                 ?? PurchaseOrder::whereIn('id', $poIds)->whereNotNull('due_date')->min('due_date');
         }
         $inTransfer = (int) TransferLine::where('product_id', $productId)
-            ->whereHas('transfer', fn ($q) => $q->where('status', 'transit')->when($warehouse, fn ($w) => $w->where('to_warehouse_id', $warehouse->id)))
-            ->get(['qty', 'received_qty'])->sum(fn ($l) => $l->qty - ($l->received_qty ?? 0));
+            ->whereHas('transfer', fn ($q) => $q->whereIn('status', ['transit', 'partial'])->when($warehouse, fn ($w) => $w->where('to_warehouse_id', $warehouse->id)))
+            ->get(['qty', 'received_qty', 'variance_qty'])->sum(fn ($l) => max(0, $l->qty - (int) $l->received_qty - (int) $l->variance_qty));
 
         return [
             'sku' => $p->sku, 'unit' => 'base', 'onHand' => $sum['onHand'], 'reserved' => $sum['reserved'], 'allocated' => $sum['allocated'],

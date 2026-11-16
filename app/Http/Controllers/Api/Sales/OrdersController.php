@@ -14,7 +14,7 @@ class OrdersController extends Controller
 
     public function index(Request $request): array
     {
-        return $this->sales->listOrders(Paging::from($request), $request->only(['status', 'customer', 'warehouse', 'waiting']));
+        return $this->sales->listOrders(Paging::from($request), $request->only(['status', 'customer', 'warehouse', 'waiting', 'shortage', 'backorders']));
     }
 
     public function show(string $id): array
@@ -27,6 +27,8 @@ class OrdersController extends Controller
         $data = $request->validate(SalesRules::lines() + [
             'customerCode' => 'required|string|min:1', 'warehouseCode' => 'required|string|min:1', 'dueDate' => ['required', 'string', SalesRules::DATE],
             'window' => 'nullable|string', 'priority' => 'sometimes|in:normal,high',
+            // accept the order although something is short: the rest becomes a linked backorder (policy sales.allowBackorder)
+            'allowBackorder' => 'sometimes|boolean',
         ]);
 
         return $this->sales->createOrder(AuthUser::current(), $data + ['priority' => 'normal']);

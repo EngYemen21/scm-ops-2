@@ -1,6 +1,6 @@
 <script setup>
 // Return deep link (/rtn/:number): full-page return detail — stepper, meta, lines, receiving / inspection / decisions,
-// movements, history and the approve / reject / receive / inspect / decide actions. Data: GET /api/returns/:number.
+// movements, history and the approve / reject / cancel / receive / inspect / decide / ship actions. Data: GET /api/returns/:number.
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';

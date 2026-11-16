@@ -1,13 +1,40 @@
 <script setup>
 // GRN detail (GRN log tab + /grn/:number): header with links, lines + QC results, exceptions, putaway tasks, inventory movements.
+// A receipt posted wrongly is voided here (permission grn.void) while it is untouched — nothing put away, the damaged
+// quantity still in the damaged area, nothing invoiced: `grn.void` from the API says whether it can be and, if not, why.
 import { computed } from 'vue';
-import { useList } from '@/api/client';
-import { Chip, DataTable, KV, SectionCard, Timeline } from '@/components';
+import { api, useAction, useList } from '@/api/client';
+import { Btn, Chip, DataTable, ErrorBanner, KV, SectionCard, Timeline } from '@/components';
 import { fmtDate, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { MOVEMENT_LABELS } from '@/shared';
+import { useAuth } from '@/stores/auth';
+import { ask, toast } from '@/stores/ui';
 import { QC_LABELS, pn } from './shared';
 
 const props = defineProps({ grn: { type: Object, required: true } });
+const emit = defineEmits(['changed']);
+
+const auth = useAuth();
+const act = useAction({ invalidate: ['inbound', 'procurement', 'inventory', 'exceptions', 'dashboard', 'finance'] });
+const voided = computed(() => !!props.grn.voidedAt);
+/** { allowed, code, blocker, reasonAr, reasonEn } */
+const voidState = computed(() => props.grn.void || null);
+const voidReason = computed(() => (voidState.value && !voidState.value.allowed ? (lang.value === 'ar' ? voidState.value.reasonAr : voidState.value.reasonEn) : null));
+async function doVoid() {
+  const n = props.grn.number;
+  const reason = await ask({
+    title: { ar: `إلغاء إذن الاستلام ${n}`, en: `Void receipt ${n}` },
+    sub: { ar: 'تخرج الكميات من منطقة الاستلام والتالف، تُلغى مهام التخزين، يعود المتبقي على أمر الشراء كما كان، وتعود الشحنة للفحص لتُستلم من جديد. يُسجَّل السبب في سجل التدقيق.', en: 'The quantities leave staging and the damaged area, the putaway tasks are cancelled, the purchase order gets its open quantity back and the shipment returns to inspection to be received again. The reason goes to the audit trail.' },
+    label: { ar: 'سبب الإلغاء', en: 'Reason' }, placeholder: { ar: 'مثال: استُلمت على شحنة خاطئة، كميات أو دفعة خاطئة', en: 'e.g. received on the wrong shipment, wrong quantities or batch' },
+    required: true, tone: 'danger', okLabel: { ar: 'إلغاء إذن الاستلام', en: 'Void receipt' },
+  });
+  if (reason === null) return;
+  if (reason.length < 3) { toast.say(t('اكتب سبب الإلغاء (3 أحرف على الأقل)', 'Write the reason (at least 3 characters)'), 3500); return; }
+  const r = await act.run(() => api.postIdempotent(`/inbound/grns/${encodeURIComponent(n)}/void`, { reason }), {
+    success: (g) => (g.shipment?.status === 'inspecting' ? t(`أُلغي ${n} — عادت الشحنة ${g.shipment.number} للفحص`, `${n} voided — shipment ${g.shipment.number} is back in inspection`) : t(`أُلغي ${n} — المتبقي على أمر الشراء يُستلم بشحنة متابعة`, `${n} voided — what is due on the order arrives on a follow-up shipment`)),
+  });
+  if (r) emit('changed', r);
+}
 
 // Exceptions raised for this receipt (shortage / damaged / rejected).
 const exc = useList('/exceptions', () => ({ entity: props.grn.number, pageSize: 20 }));
@@ -15,8 +42,10 @@ const excItems = computed(() => exc.data.value?.items || []);
 const excFg = (s) => (s === 'resolved' ? '#1d7a3e' : s === 'ack' ? '#b26a16' : '#b23b3b');
 const excBg = (s) => (s === 'resolved' ? '#e6f9ec' : s === 'ack' ? '#fbf0dd' : '#fdecec');
 
+/** A line received in several batches has one row per batch: 1.1, 1.2 … */
+const splitLines = computed(() => { const n = {}; (props.grn.lines || []).forEach((l) => { n[l.lineNo] = (n[l.lineNo] || 0) + 1; }); return n; });
 const cols = [
-  { key: 'lineNo', header: '#', width: '36px', kind: 'num' },
+  { key: 'lineNo', header: '#', width: '44px', kind: 'num', value: (l) => (splitLines.value[l.lineNo] > 1 ? `${l.lineNo}.${l.splitNo || 1}` : l.lineNo) },
   { key: 'product', header: { ar: 'المنتج', en: 'Product' }, width: 'minmax(170px,1.5fr)' },
   { key: 'receivedQty', header: { ar: 'مستلم', en: 'Received' }, width: '70px', kind: 'num' },
   { key: 'acceptedQty', header: { ar: 'مقبول', en: 'Accepted' }, width: '70px', kind: 'num' },
@@ -31,8 +60,10 @@ const cols = [
 // Movement entries: the label is the type chip + number (slot `chip`), the note is "qty × batch → bin".
 const movements = computed(() => (props.grn.movements || []).map((m) => ({
   at: m.createdAt, label: '', type: m.type, number: m.number,
-  note: `${fmtNum(m.qty)} × ${m.batchNo || '—'} → ${m.dstBin?.code || '—'}${m.srcBin ? ` (${t('من', 'from')} ${m.srcBin.code})` : ''}`,
-  color: m.type === 'dmg' ? '#b23b3b' : m.type === 'putaway' ? '#654e92' : '#1d7a3e',
+  note: m.type === 'grnvoid'
+    ? `${fmtNum(m.qty)} × ${m.batchNo || '—'} ← ${m.srcBin?.code || '—'} (${t('خرجت بإلغاء الإذن', 'out by the void')})`
+    : `${fmtNum(m.qty)} × ${m.batchNo || '—'} → ${m.dstBin?.code || '—'}${m.srcBin ? ` (${t('من', 'from')} ${m.srcBin.code})` : ''}`,
+  color: m.type === 'dmg' || m.type === 'grnvoid' ? '#b23b3b' : m.type === 'putaway' ? '#654e92' : '#1d7a3e',
 })));
 </script>
 
@@ -41,7 +72,7 @@ const movements = computed(() => (props.grn.movements || []).map((m) => ({
     <div class="pt-4">
       <div class="row wrap !gap-3">
         <div>
-          <div class="num text-[15px] text-ok">{{ grn.number }}</div>
+          <div class="row !gap-1.5"><span class="num text-[15px]" :class="voided ? 'text-faint line-through' : 'text-ok'">{{ grn.number }}</span><Chip v-if="voided" fg="#b23b3b" bg="#fdecec" :label="{ ar: 'ملغى', en: 'Voided' }" /></div>
           <div class="mt-[3px] text-[10px] text-muted">
             {{ t('أُصدر', 'Posted') }} <span class="ltr num">{{ fmtDate(grn.postedAt) }}</span>{{ grn.postedBy ? ` · ${grn.postedBy}` : '' }}<template v-if="grn.transactionId"> · <span class="num ltr text-[8.5px]">{{ grn.transactionId }}</span></template>
           </div>
@@ -50,7 +81,14 @@ const movements = computed(() => (props.grn.movements || []).map((m) => ({
         <RouterLink :to="`/po/${encodeURIComponent(grn.po.number)}`" class="chip bg-violet-soft !text-violet">PO {{ grn.po.number }}</RouterLink>
         <RouterLink v-if="grn.shipment" :to="`/shipments/${encodeURIComponent(grn.shipment.number)}`" class="chip bg-[#d9f4f9] !text-brand-dark">{{ grn.shipment.number }}</RouterLink>
         <RouterLink :to="`/ledger?referenceNumber=${encodeURIComponent(grn.number)}`" class="chip bg-line-2 !text-sec">{{ t('سجل الحركات', 'Ledger') }}</RouterLink>
+        <Btn v-if="!voided && auth.can('grn.void')" tone="dangerOutline" size="sm" :loading="act.pending.value" :disabled="!voidState?.allowed" :title="voidReason" :label="{ ar: 'إلغاء إذن الاستلام', en: 'Void receipt' }" @click="doVoid" />
       </div>
+      <div v-if="voided" class="banner red mt-3">
+        <div>{{ t('أُلغي هذا الإذن', 'This receipt was voided') }} <span class="ltr num">{{ fmtDate(grn.voidedAt) }}</span>{{ grn.voidedBy ? ` · ${grn.voidedBy}` : '' }} — {{ grn.voidReason || '—' }}. {{ t('كمياته لا تُحتسب في أي إجمالي ولا في مطابقة الفواتير؛ الحركات العكسية في الأسفل.', 'Its quantities count in no total and in no invoice match; the reversing movements are listed below.') }}</div>
+      </div>
+      <div v-else-if="auth.can('grn.void') && voidReason" class="hint amber mt-3">{{ t('لا يمكن إلغاء هذا الإذن الآن', 'This receipt cannot be voided now') }}: {{ voidReason }}</div>
+      <div v-else-if="!auth.can('grn.void') && voidState?.allowed" class="mt-2 text-[9.5px] text-faint">{{ t('استُلم بالخطأ؟ إلغاء إذن الاستلام يتطلب صلاحية مدير المستودع (grn.void).', 'Received by mistake? Voiding a receipt needs the warehouse-manager permission (grn.void).') }}</div>
+      <ErrorBanner :error="act.error.value" class="mt-3" @close="act.clearError()" />
       <div class="kv-grid mt-3.5">
         <KV :k="{ ar: 'المورد', en: 'Supplier' }" :v="pn(grn.supplier)" />
         <KV :k="{ ar: 'المستودع', en: 'Warehouse' }" :v="`${grn.warehouse.code} ${grn.warehouse.nameAr ? `· ${grn.warehouse.nameAr}` : ''}`" />
@@ -95,7 +133,10 @@ const movements = computed(() => (props.grn.movements || []).map((m) => ({
           <div v-for="p in grn.putaways" :key="p.id" class="row wrap rounded-[11px] border border-line-2 px-3 py-2 text-[10.5px]">
             <span class="num text-violet">{{ p.number }}</span><span class="font-extrabold">{{ pn(p.product) }}</span><span class="num muted">× {{ fmtNum(p.qty) }}</span><span class="grow" />
             <span class="num text-brand-dark">{{ p.suggestedBin?.code || '—' }}</span>
+            <span v-if="p.batchNo" class="num text-[9px] text-violet">{{ p.batchNo }}</span>
             <Chip v-if="p.status === 'done'" small fg="#1d7a3e" bg="#e6f9ec" :label="`${t('مخزّن ✓', 'Stored ✓')} ${p.actualBin?.code || ''}`" />
+            <Chip v-else-if="p.status === 'cancelled'" small fg="#7d7990" bg="#F1EFF6" :label="{ ar: 'ملغاة', en: 'Cancelled' }" />
+            <Chip v-else-if="p.doneQty > 0" small fg="#b26a16" bg="#fbf0dd" :label="{ ar: `خُزّن ${p.doneQty} من ${p.qty}`, en: `${p.doneQty} of ${p.qty} stored` }" />
             <Chip v-else small fg="#b26a16" bg="#fbf0dd" :label="{ ar: 'مفتوحة', en: 'Open' }" />
           </div>
         </div>

@@ -12,6 +12,7 @@ use App\Models\SupplierInvoice;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
+use App\Services\Sales\CreditService;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
@@ -81,6 +82,7 @@ class PaymentsService
             $p->update(['allocated_amount' => $allocated, 'journal_id' => $journal->id]);
             $this->audit->log($user, ['action' => 'RECEIPT.CREATE', 'entityType' => 'Payment', 'entityId' => $p->id, 'entityNumber' => $p->number, 'newValue' => ['customer' => $customer->code, 'amount' => $amount, 'allocated' => $allocated, 'journal' => $journal->number]]);
             $this->notify->activity($user, 'Payment', $p->id, $p->number, "قُبض {$p->number} من {$customer->name_ar} بمبلغ ".number_format($amount, 2).' ر.س', "Receipt {$p->number} from {$customer->name_en}", ['finance']);
+            app(CreditService::class)->sync($customer->id); // what was collected frees the customer's credit
 
             return $this->get($p->id);
         });
@@ -183,6 +185,7 @@ class PaymentsService
             }
             $p->update(['status' => 'void', 'voided_by' => $user->username, 'voided_at' => now(), 'void_reason' => $reason, 'allocated_amount' => 0]);
             $this->audit->status($user, 'Payment', $p->id, $p->number, 'posted', 'void', $reason);
+            app(CreditService::class)->sync($p->partner_type === 'customer' ? $p->partner_id : null); // a voided receipt re-opens the debt
 
             return $this->get($p->id);
         });

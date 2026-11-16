@@ -38,15 +38,25 @@ function setOpenRtn(n) {
   router.replace({ query });
 }
 
+/** Opened from a delivered sales order (`?so=…&customer=…&fo=…`): the return form starts filled in. */
+const prefill = computed(() => (queryOf(route, 'so') ? { customerCode: queryOf(route, 'customer') || null, foNumber: queryOf(route, 'fo') || null } : null));
 /** 'return' | 'transfer' | null */
-const form = ref(null);
+const form = ref(prefill.value && auth.can('return.create') ? 'return' : null);
+function closeReturnForm() {
+  form.value = null;
+  if (prefill.value) {
+    const query = { ...route.query };
+    delete query.so; delete query.customer; delete query.fo;
+    router.replace({ query });
+  }
+}
 const onReturnCreated = (r) => { if (r?.number) setOpenRtn(r.number); };
 const onTransferCreated = (r) => { if (r?.number) router.push(`/trf/${encodeURIComponent(r.number)}`); else setTab('trf'); };
 </script>
 
 <template>
   <div>
-    <PageHead :sub="t('طلب ← اعتماد ← استلام ← فحص ← قرار (للمخزون / حجر / تالف / للمورد)', 'Request → approve → receive → inspect → decide (restock / quarantine / damaged / supplier)')">
+    <PageHead :sub="t('بضاعة تصل: طلب ← اعتماد ← استلام ← فحص ← قرار لكل سطر · من المخزون (للمورد / تالف): طلب ← اعتماد وحجز ← شحن', 'Arriving goods: request → approve → receive → inspect → decide per line · from stock (supplier / damaged): request → approve and hold → ship')">
       <Btn v-if="auth.can('inventory.transfer')" :label="{ ar: '+ تحويل بين مستودعات', en: '+ Transfer' }" @click="form = 'transfer'" />
       <Btn v-if="auth.can('return.create')" tone="primary" :label="{ ar: '+ مرتجع', en: '+ Return' }" @click="form = 'return'" />
     </PageHead>
@@ -56,7 +66,7 @@ const onTransferCreated = (r) => { if (r?.number) router.push(`/trf/${encodeURIC
     <TransfersTab v-else :initial-q="initialQ" />
 
     <ReturnDrawer :number="openRtn" @close="setOpenRtn(null)" />
-    <ReturnForm :open="form === 'return'" :initial-type="tab !== 'trf' && tab !== 'all' ? tab : null" @close="form = null" @done="onReturnCreated" />
+    <ReturnForm :open="form === 'return'" :initial-type="tab !== 'trf' && tab !== 'all' ? tab : null" :prefill="prefill" @close="closeReturnForm" @done="onReturnCreated" />
     <TransferForm :open="form === 'transfer'" @close="form = null" @done="onTransferCreated" />
   </div>
 </template>

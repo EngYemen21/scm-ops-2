@@ -14,6 +14,8 @@ class FleetController extends TransportBaseController
 {
     private const VEHICLE_STATES = 'in:available,reserved,assigned,loading,ready,onroute,returning,atwh,maintenance,breakdown,oos,inactive';
 
+    private const MAINT_KINDS = 'in:preventive,corrective,emergency,tire,oil,brake,engine,elec,ac,body';
+
     public function __construct(private readonly FleetService $fleet) {}
 
     public function kpis(): array
@@ -41,6 +43,7 @@ class FleetController extends TransportBaseController
             'odometer' => ['nullable', 'integer', 'min:0'], 'fuelType' => ['nullable', 'string'],
             'regExpiry' => ['required', 'string', self::DATE], 'insuranceExpiry' => ['required', 'string', self::DATE], 'inspectionExpiry' => ['required', 'string', self::DATE],
             'opCardExpiry' => ['nullable', 'string', self::DATE], 'gpsDeviceId' => ['nullable', 'string'],
+            'purchaseCost' => ['nullable', 'numeric', 'min:0'], 'salvageValue' => ['nullable', 'numeric', 'min:0'], 'lifeKm' => ['nullable', 'integer', 'gt:0'],
         ]);
 
         return $this->created($this->fleet->createVehicle(AuthUser::current(), $this->withDefaults($data, ['kind' => 'dry', 'ownership' => 'owned', 'pallets' => 8, 'odometer' => 0])));
@@ -58,6 +61,9 @@ class FleetController extends TransportBaseController
             'opCardExpiry' => ['sometimes', 'required', 'string', self::DATE], 'gpsDeviceId' => ['sometimes', 'nullable', 'string'],
             'avgKmL' => ['sometimes', 'required', 'numeric', 'gt:0'], 'nextMaintKm' => ['sometimes', 'required', 'integer', 'min:0'], 'nextMaintDate' => ['sometimes', 'required', 'string', self::DATE],
             'active' => ['sometimes', 'required', 'boolean'],
+            // a reading LOWER than the current one is refused without its reason (VEHICLE_ODOMETER_LOWER)
+            'odometerReason' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'purchaseCost' => ['sometimes', 'nullable', 'numeric', 'min:0'], 'salvageValue' => ['sometimes', 'nullable', 'numeric', 'min:0'], 'lifeKm' => ['sometimes', 'nullable', 'integer', 'gt:0'],
         ]);
 
         return $this->fleet->updateVehicle(AuthUser::current(), $code, $data);
@@ -101,7 +107,7 @@ class FleetController extends TransportBaseController
             'nationality' => ['nullable', 'string'], 'licenseNo' => ['required', 'string'], 'licenseType' => ['nullable', 'string'],
             'licenseExpiry' => ['required', 'string', self::DATE], 'iqamaExpiry' => ['required', 'string', self::DATE], 'medicalExpiry' => ['nullable', 'string', self::DATE],
             'shift' => ['nullable', 'in:am,pm,flex'], 'defaultVehicleCode' => ['nullable', 'string'], 'joinDate' => ['nullable', 'string', self::DATE],
-            'username' => ['nullable', 'string'], 'password' => ['nullable', 'string', 'min:8'],
+            'username' => ['nullable', 'string'], 'password' => ['nullable', 'string', 'min:8'], 'hourlyCost' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         return $this->created($this->fleet->createDriver(AuthUser::current(), $this->withDefaults($data, ['shift' => 'am'])));
@@ -114,7 +120,7 @@ class FleetController extends TransportBaseController
             'nationality' => ['sometimes', 'nullable', 'string'], 'licenseNo' => ['sometimes', 'required', 'string'], 'licenseType' => ['sometimes', 'nullable', 'string'],
             'licenseExpiry' => ['sometimes', 'required', 'string', self::DATE], 'iqamaExpiry' => ['sometimes', 'required', 'string', self::DATE], 'medicalExpiry' => ['sometimes', 'nullable', 'string', self::DATE],
             'shift' => ['sometimes', 'required', 'in:am,pm,flex'], 'defaultVehicleCode' => ['sometimes', 'nullable', 'string'], 'joinDate' => ['sometimes', 'nullable', 'string', self::DATE],
-            'blocked' => ['sometimes', 'required', 'boolean'], 'active' => ['sometimes', 'required', 'boolean'],
+            'blocked' => ['sometimes', 'required', 'boolean'], 'active' => ['sometimes', 'required', 'boolean'], 'hourlyCost' => ['sometimes', 'nullable', 'numeric', 'min:0'],
         ]);
 
         return $this->fleet->updateDriver(AuthUser::current(), $code, $data);
@@ -145,7 +151,7 @@ class FleetController extends TransportBaseController
     public function createMaintenance(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'vehicleCode' => ['required', 'string'], 'kind' => ['nullable', 'in:preventive,corrective,emergency,tire,oil,brake,engine,elec,ac,body'], 'desc' => ['required', 'string'], 'shop' => ['required', 'string'],
+            'vehicleCode' => ['required', 'string'], 'kind' => ['nullable', self::MAINT_KINDS], 'desc' => ['required', 'string'], 'shop' => ['required', 'string'],
             'startDate' => ['required', 'string', self::DATE], 'odometer' => ['nullable', 'integer', 'min:0'], 'cost' => ['nullable', 'numeric', 'min:0'], 'downDays' => ['nullable', 'integer', 'min:0'],
             'nextKm' => ['nullable', 'integer', 'min:0'], 'block' => ['nullable', 'boolean'],
         ]);
@@ -165,9 +171,55 @@ class FleetController extends TransportBaseController
         return $this->created($this->fleet->closeMaintenance(AuthUser::current(), $number, $this->withDefaults($data, ['parts' => 0, 'labor' => 0])));
     }
 
+    /** Open orders only (MAINT_NOT_OPEN otherwise). */
+    public function updateMaintenance(Request $request, string $number): array
+    {
+        $data = $request->validate([
+            'kind' => ['sometimes', 'required', self::MAINT_KINDS], 'desc' => ['sometimes', 'required', 'string'], 'shop' => ['sometimes', 'required', 'string'],
+            'startDate' => ['sometimes', 'required', 'string', self::DATE], 'odometer' => ['sometimes', 'nullable', 'integer', 'min:0'], 'cost' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'downDays' => ['sometimes', 'required', 'integer', 'min:0'], 'nextKm' => ['sometimes', 'nullable', 'integer', 'min:0'],
+        ]);
+
+        return $this->fleet->updateMaintenance(AuthUser::current(), $number, $data);
+    }
+
+    /** Open orders only; the vehicle leaves «maintenance» when it has no other open order. There is no DELETE on purpose. */
+    public function cancelMaintenance(Request $request, string $number): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        return $this->created($this->fleet->cancelMaintenance(AuthUser::current(), $number, $data['reason']));
+    }
+
     public function listFuel(Request $request): array
     {
-        return $this->fleet->listFuel(Paging::from($request), $request->only(['vehicle', 'driver', 'anomaly']));
+        return $this->fleet->listFuel(Paging::from($request), $request->only(['vehicle', 'driver', 'anomaly', 'status', 'trip']));
+    }
+
+    /** Correction of a posted fuel record: only the fields sent change, and a reason is mandatory. */
+    public function updateFuel(Request $request, string $number): array
+    {
+        $data = $request->validate([
+            'liters' => ['sometimes', 'required', 'numeric', 'gt:0'], 'cost' => ['sometimes', 'required', 'numeric', 'gt:0'], 'odometer' => ['sometimes', 'required', 'integer', 'min:0'],
+            'station' => ['sometimes', 'nullable', 'string'], 'date' => ['sometimes', 'required', 'string', self::DATE], 'tripNumber' => ['sometimes', 'nullable', 'string'],
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        return $this->fleet->updateFuel(AuthUser::current(), $number, $data);
+    }
+
+    /** A posted fuel record is voided, never deleted (there is no DELETE on purpose). */
+    public function voidFuel(Request $request, string $number): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        return $this->created($this->fleet->voidFuel(AuthUser::current(), $number, $data['reason']));
+    }
+
+    /** Recompute a trip's cost sheet (management figures — nothing is posted). */
+    public function recomputeTripCost(string $number): JsonResponse
+    {
+        return $this->created($this->fleet->recomputeTripCost(AuthUser::current(), $number));
     }
 
     public function createFuel(Request $request): JsonResponse
@@ -250,9 +302,13 @@ class FleetController extends TransportBaseController
 
     public function setOpsRequestStatus(Request $request, string $number): JsonResponse
     {
-        $data = $request->validate(['to' => ['required', 'in:review,approved,rejected,processed,closed'], 'note' => ['nullable', 'string']]);
+        $data = $request->validate([
+            'to' => ['required', 'in:review,approved,rejected,processed,closed'], 'note' => ['nullable', 'string'],
+            // receipt details typed while processing: litres + reading of a fuel request, the workshop of a maintenance one
+            'liters' => ['nullable', 'numeric', 'gt:0'], 'odometer' => ['nullable', 'integer', 'min:0'], 'shop' => ['nullable', 'string'],
+        ]);
 
-        return $this->created($this->fleet->setOpsRequestStatus(AuthUser::current(), $number, $data['to'], $data['note'] ?? null));
+        return $this->created($this->fleet->setOpsRequestStatus(AuthUser::current(), $number, $data['to'], $data['note'] ?? null, array_intersect_key($data, array_flip(['liters', 'odometer', 'shop']))));
     }
 
     // ── routes ──

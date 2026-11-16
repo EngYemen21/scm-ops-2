@@ -46,4 +46,40 @@ class PermissionSync
 
         return ['inserted' => $inserted, 'grants' => $grants];
     }
+
+    /**
+     * EXISTING permissions a release decided a role now needs (`ensure()` only grants the permissions it has just
+     * inserted). Applied once: by the release's migration on a live database, by the seeder on a fresh one — never on
+     * every sync, so a grant an administrator removes afterwards stays removed.
+     */
+    public const GRANTS_2026_11 = [
+        'proc' => ['return.create', 'page.returns'],   // purchase returns are raised by procurement
+        'sales' => ['so.allocate'],                    // retry the reservation of an order waiting for stock
+        'wm' => ['so.allocate'],
+        'gm' => ['page.sales'],                        // opens the quotation whose discount he approves (discount.approve); no sales.manage
+    ];
+
+    /** @param  array<string, string[]>  $byRole  role key → permission keys. @return int grants added */
+    public static function grant(array $byRole): int
+    {
+        if (! Schema::hasTable('permissions') || ! Schema::hasTable('roles') || ! Schema::hasTable('role_permissions')) {
+            return 0;
+        }
+        $roles = DB::table('roles')->pluck('id', 'key');
+        $perms = DB::table('permissions')->pluck('id', 'key');
+        $added = 0;
+        foreach ($byRole as $role => $keys) {
+            foreach ($keys as $key) {
+                if (! isset($roles[$role], $perms[$key])) {
+                    continue;
+                }
+                if (! DB::table('role_permissions')->where('role_id', $roles[$role])->where('permission_id', $perms[$key])->exists()) {
+                    DB::table('role_permissions')->insert(['role_id' => $roles[$role], 'permission_id' => $perms[$key]]);
+                    $added++;
+                }
+            }
+        }
+
+        return $added;
+    }
 }

@@ -22,6 +22,17 @@ class InventoryOpsService
         'damage' => ['عزل تالف', 'Isolate damaged'], 'qtn' => ['نقل للحجر', 'Move to quarantine'],
     ];
 
+    /**
+     * Bins whose stock belongs to a document in progress → the way that document gives it back. A manual move out of
+     * them would leave the document pointing at stock that is no longer there.
+     */
+    private const DOCUMENT_BINS = [
+        'PACK' => ['يخص طلب تجهيز جرت تعبئته — استخدم «فك التعبئة» من شاشة التعبئة', 'belongs to a packed fulfilment order — use “unpack” on the packing screen'],
+        'STG-OUT' => ['يخص طلب تجهيز جرى التقاطه — استخدم «إرجاع للرف» من شاشة الالتقاط', 'belongs to a picked fulfilment order — use “put back” on the picking screen'],
+        'STG-IN' => ['استلام بانتظار التخزين — نفّذ مهمة التخزين (Putaway) من شاشة الاستلام', 'is a receipt awaiting putaway — complete its putaway task on the receiving screen'],
+        'RET-01' => ['مرتجع بانتظار القرار — سجّل قرار المرتجع من شاشة المرتجعات', 'is a return awaiting its decision — record the decision on the returns screen'],
+    ];
+
     public function __construct(private readonly InventoryService $inv, private readonly AuditService $audit, private readonly NotifyService $notify) {}
 
     /**
@@ -126,6 +137,9 @@ class InventoryOpsService
             ['product' => $product, 'warehouse' => $warehouse, 'bin' => $fromBin, 'batch' => $batch, 'row' => $row] = $this->resolve($dto['sku'], $dto['warehouseCode'], $dto['fromBin'], $dto['batchNo'] ?? null);
             $reason = $dto['reason'];
             $qty = (int) $dto['qty'];
+            if ($owned = self::DOCUMENT_BINS[$fromBin->code] ?? null) {
+                throw AppError::rule('MOVE_FROM_STAGING', "لا يُنقل الرصيد يدويًا من {$fromBin->code}: {$owned[0]}", "Stock cannot be moved manually out of {$fromBin->code}: it {$owned[1]}", ['bin' => $fromBin->code]);
+            }
             if (! $row || $row->on_hand <= 0) {
                 throw AppError::rule('NO_STOCK', "موقع المصدر {$fromBin->code} لا يحوي رصيدًا لهذا المنتج/الدفعة", 'Source bin has no stock for this product/batch');
             }
@@ -163,7 +177,8 @@ class InventoryOpsService
             $mv = $this->inv->post($user, $txId, [
                 'type' => 'move', 'productId' => $product->id, 'batchId' => $batch?->id, 'qty' => $qty,
                 'from' => ['warehouseId' => $warehouse->id, 'binId' => $fromBin->id], 'to' => ['warehouseId' => $warehouse->id, 'binId' => $toBin->id],
-                'quarantine' => $reason === 'qtn', 'reference' => ['type' => 'BinMove', 'number' => "MOVE · {$fromBin->code} ← {$toBin->code}"],
+                // both codes are Latin, so the text is laid out left to right wherever it is shown: the arrow must point at the destination
+                'quarantine' => $reason === 'qtn', 'reference' => ['type' => 'BinMove', 'number' => "MOVE · {$fromBin->code} → {$toBin->code}"],
                 'note' => "{$why[0]} · {$fromBin->code} → {$toBin->code}",
             ]);
             $this->audit->log($user, [

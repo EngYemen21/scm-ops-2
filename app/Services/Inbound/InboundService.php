@@ -23,6 +23,8 @@ use App\Services\Core\NumberingService;
 use App\Services\Core\SettingsService;
 use App\Services\Exceptions\ExceptionsService;
 use App\Services\Inventory\InventoryService;
+use App\Services\Procurement\ProcurementHelpers as H;
+use App\Services\Sales\WaitingOrders;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
@@ -36,6 +38,11 @@ use Illuminate\Support\Facades\DB;
  * confirmation (scan bin + product, central location check) → available inventory. Damaged goes to the DMG area
  * (never available); rejected never enters stock. Shortage / damage / rejected raise exceptions. Partial receiving
  * keeps the PO open (partial).
+ *
+ * Ways out of every state (docs/ops-hardening/SPEC.md §W7): expected → cancel · arrived → un-arrive (wrong click) ·
+ * arrived | inspecting → refuse at the gate · putaway (nothing put away yet) → void the receipt (GrnVoidService).
+ * What the supplier still owes — including goods rejected at inspection — stays open on the purchase order
+ * (ProcurementHelpers::openQty) and arrives on a follow-up shipment.
  */
 class InboundService
 {
@@ -89,7 +96,8 @@ class InboundService
             ?? throw AppError::notFound('SHIPMENT_NOT_FOUND', 'الشحنة غير موجودة', 'Shipment not found');
         $history = StatusHistory::where('entity_type', 'InboundShipment')->where('entity_id', $s->id)->orderBy('at')->orderBy('id')->get();
 
-        return $this->decorate($s) + ['history' => $history->toArray(), 'backorder' => $this->backorderState($s->po_id)];
+        return $this->decorate($s) + ['history' => $history->toArray(), 'backorder' => $this->backorderState($s->po_id),
+            'policy' => ['rejectedStaysOpen' => H::rejectedStaysOpen(), 'allowExcess' => (bool) $this->settings->get('receiving.allowExcess')]];
     }
 
     /** Statuses in which a shipment is still waiting for goods: only one such shipment may exist per purchase order. */
@@ -106,7 +114,8 @@ class InboundService
     public function backorderState(string $poId): array
     {
         $po = PurchaseOrder::with('lines')->find($poId);
-        $open = $po ? $po->lines->map(fn ($l) => max(0, $l->qty - $l->received_qty - $l->damaged_qty - $l->rejected_qty)) : collect();
+        $staysOpen = H::rejectedStaysOpen();
+        $open = $po ? $po->lines->map(fn ($l) => H::openQty($l, $staysOpen)) : collect();
         $state = ['allowed' => false, 'openQty' => (int) $open->sum(), 'openLines' => $open->filter()->count(), 'reasonAr' => null, 'reasonEn' => null, 'shipment' => null];
         if (! $po || $state['openQty'] === 0) {
             return ['reasonAr' => 'لا كميات متبقية على أمر الشراء', 'reasonEn' => 'Nothing is left open on the purchase order'] + $state;
@@ -144,8 +153,9 @@ class InboundService
             $due = $eta ? Carbon::parse($eta) : null;
             $s = InboundShipment::create(['number' => $number, 'po_id' => $po->id, 'supplier_id' => $po->supplier_id, 'warehouse_id' => $po->warehouse_id, 'eta' => $due ?? $po->due_date, 'status' => 'expected']);
             $lineNo = 0;
+            $staysOpen = H::rejectedStaysOpen();
             foreach ($po->lines as $l) {
-                $open = max(0, $l->qty - $l->received_qty - $l->damaged_qty - $l->rejected_qty);
+                $open = H::openQty($l, $staysOpen);
                 if ($open === 0) {
                     continue;
                 }
@@ -183,12 +193,70 @@ class InboundService
 
     public function startInspection(AuthUser $user, string $idOrNumber): InboundShipment
     {
-        return $this->transition($user, $idOrNumber, 'inspecting', ['inspection_started_at' => now()]);
+        // only from `arrived`: the table's putaway → inspecting is the reopening done by a receipt void, never a button
+        return $this->transition($user, $idOrNumber, 'inspecting', ['inspection_started_at' => now()], ['arrived']);
     }
 
+    /** Cancel is for a shipment that never came (expected). Once the truck is at the gate the exits are refuse / un-arrive. */
     public function cancel(AuthUser $user, string $idOrNumber): InboundShipment
     {
-        return $this->transition($user, $idOrNumber, 'cancelled');
+        return $this->transition($user, $idOrNumber, 'cancelled', [], ['expected'],
+            'لا تُلغى الشحنة بعد تسجيل وصولها — استخدم «رفض الشحنة عند البوابة» أو «تراجع عن تسجيل الوصول»', 'A shipment that has arrived is refused at the gate or un-arrived, not cancelled');
+    }
+
+    /** arrived → expected: the arrival was registered by mistake (wrong shipment, wrong click). Nothing else has happened yet. */
+    public function unarrive(AuthUser $user, string $idOrNumber): array
+    {
+        $s = $this->transition($user, $idOrNumber, 'expected', ['arrived_at' => null, 'carrier' => null], ['arrived'],
+            'التراجع عن الوصول ممكن فقط قبل بدء الفحص — بعد بدء الفحص ارفض الشحنة عند البوابة إن لزم', 'Un-arrive is only possible before the inspection starts', 'تراجع عن تسجيل الوصول');
+        $this->audit->log($user, ['action' => 'SHIPMENT.UNARRIVE', 'entityType' => 'InboundShipment', 'entityId' => $s->id, 'entityNumber' => $s->number, 'field' => 'status', 'oldValue' => 'arrived', 'newValue' => 'expected']);
+        $this->notify->activity($user, 'InboundShipment', $s->id, $s->number, "تراجع {$user->username} عن تسجيل وصول الشحنة {$s->number} — عادت «متوقعة»", "Arrival of {$s->number} was undone — the shipment is expected again", ['wm']);
+
+        return $this->getShipment($s->id);
+    }
+
+    /**
+     * Refuse the delivery at the gate: the truck is here (arrived) or is being inspected, nothing was received (no GRN),
+     * and the whole delivery goes back — wrong goods, broken cold chain, no documents. The shipment is closed as
+     * cancelled with who / when / why, procurement gets an exception, the purchase order stays open and a follow-up
+     * shipment can be opened for the same quantity.
+     */
+    public function refuse(AuthUser $user, string $idOrNumber, string $reason): array
+    {
+        $reason = trim($reason);
+        $id = DB::transaction(function () use ($user, $idOrNumber, $reason) {
+            $s = InboundShipment::with(['po:id,number,status', 'supplier:id,code,name_ar,name_en'])
+                ->where(fn ($w) => $w->where('id', $idOrNumber)->orWhere('number', $idOrNumber))->lockForUpdate()->first()
+                ?? throw AppError::notFound('SHIPMENT_NOT_FOUND', 'الشحنة غير موجودة', 'Shipment not found');
+            if ($s->locked) {
+                throw AppError::rule('SHIPMENT_LOCKED', 'الشحنة مقفلة — بانتظار تأكيد المورد', 'Shipment locked');
+            }
+            $grn = GoodsReceipt::where('shipment_id', $s->id)->whereNull('voided_at')->value('number');
+            if ($grn) {
+                throw AppError::rule('SHIPMENT_HAS_GRN', "للشحنة {$s->number} إذن استلام {$grn} — لا تُرفض عند البوابة. ألغِ إذن الاستلام إن لم يُخزَّن منه شيء، أو أنشئ مرتجع مشتريات",
+                    "Shipment {$s->number} already has receipt {$grn} — void the receipt (if nothing was put away) or raise a purchase return", ['grn' => $grn]);
+            }
+            if (! in_array($s->status, ['arrived', 'inspecting'], true) || ! Sm::can('SHIPMENT_TRANSITIONS', $s->status, 'cancelled')) {
+                throw AppError::rule('SHIPMENT_TRANSITION', $s->status === 'expected'
+                    ? "الشحنة {$s->number} لم تصل بعد — ألغِها بدل رفضها"
+                    : "رفض الشحنة يكون بعد وصولها وقبل إصدار إذن الاستلام (الحالة: {$s->status})", "A shipment is refused after arrival and before its GRN (status {$s->status})");
+            }
+            $from = $s->status;
+            $s->update(['status' => 'cancelled', 'refused_at' => now(), 'refused_by' => $user->username, 'refused_reason' => $reason]);
+            $this->audit->status($user, 'InboundShipment', $s->id, $s->number, $from, 'cancelled', "رفض عند البوابة: {$reason}");
+            $this->audit->log($user, ['action' => 'SHIPMENT.REFUSE', 'entityType' => 'InboundShipment', 'entityId' => $s->id, 'entityNumber' => $s->number,
+                'oldValue' => $from, 'newValue' => ['status' => 'cancelled', 'reason' => $reason, 'po' => $s->po?->number, 'carrier' => $s->carrier]]);
+            $poOver = in_array($s->po?->status, ['closed', 'cancelled'], true);
+            $this->exceptions->raise($user, ['kind' => 'rejected', 'severity' => 'w', 'ownerRole' => 'proc', 'entityType' => 'InboundShipment', 'entityId' => $s->id, 'entityNumber' => $s->number,
+                'documentType' => 'PurchaseOrder', 'documentId' => $s->po_id, 'documentNumber' => $s->po?->number,
+                'textAr' => "رُفضت الشحنة {$s->number} من {$s->supplier?->name_ar} عند البوابة — {$reason}. ".($poOver ? "أمر الشراء {$s->po?->number} مقفل: أبلغ المورد بعدم التوريد" : "أمر الشراء {$s->po?->number} ما زال مفتوحًا: نسّق إعادة التوريد وافتح شحنة جديدة"),
+                'textEn' => "Shipment {$s->number} from {$s->supplier?->name_en} was refused at the gate — {$reason}. ".($poOver ? "{$s->po?->number} is closed: tell the supplier not to deliver" : "{$s->po?->number} stays open: arrange redelivery and open a new shipment")]);
+            $this->notify->activity($user, 'InboundShipment', $s->id, $s->number, "رُفضت الشحنة {$s->number} عند البوابة — {$reason}", "Shipment {$s->number} refused at the gate — {$reason}", ['proc', 'wm']);
+
+            return $s->id;
+        });
+
+        return $this->getShipment($id);
     }
 
     /**
@@ -241,15 +309,28 @@ class InboundService
                 if (in_array($s->status, ['expected', 'arrived'], true)) {
                     throw AppError::rule('GRN_BEFORE_INSPECTION', 'لا يمكن إصدار GRN قبل الوصول وبدء الفحص', 'GRN requires arrival and inspection');
                 }
+                if ($s->status === 'cancelled') {
+                    throw AppError::rule('SHIPMENT_CANCELLED', "الشحنة {$s->number} ".($s->refused_at ? 'رُفضت عند البوابة' : 'ملغاة').' — يُستلم المتبقي على أمر الشراء بشحنة متابعة جديدة', "Shipment {$s->number} is cancelled — receive what is still due on a follow-up shipment");
+                }
                 throw AppError::conflict('GRN_DUPLICATE', 'GRN صادر لهذه الشحنة — لا تكرار', 'GRN already posted for this shipment');
             }
+            if (in_array($s->po?->status, ['closed', 'cancelled'], true)) {
+                throw AppError::rule('PO_NOT_RECEIVABLE', "أمر الشراء {$s->po->number} ".($s->po->status === 'closed' ? 'مقفل' : 'ملغى').' — لا يُستلم عليه. ارفض الشحنة عند البوابة', "Purchase order {$s->po->number} is {$s->po->status} — nothing can be received on it; refuse the delivery at the gate");
+            }
             $allowExcess = (bool) $this->settings->get('receiving.allowExcess');
+            $staysOpen = H::rejectedStaysOpen();
             $byNo = [];
             foreach ($lines as $l) {
-                $byNo[(int) $l['lineNo']] = $l;
+                $no = (int) $l['lineNo'];
+                if (isset($byNo[$no])) {
+                    // a repeated line used to overwrite the first one silently — a line received in several batches is sent once, with `batches`
+                    throw AppError::validation('LINE_DUPLICATE', "السطر {$no} مكرر في الطلب — يُرسل كل سطر مرة واحدة، وتقسيمه على عدة دفعات يكون عبر «دفعات» السطر", "Line {$no} is repeated — send each line once and split it with its `batches`", ['lineNo' => $no]);
+                }
+                $byNo[$no] = $l;
             }
 
             // validation pass
+            $splitsByNo = [];
             foreach ($s->lines as $sl) {
                 $r = $byNo[$sl->line_no] ?? throw AppError::validation('LINE_MISSING', "السطر {$sl->line_no} بلا كميات", "Line {$sl->line_no} has no quantities");
                 $rem = $sl->ordered_qty - $sl->accepted_qty - $sl->damaged_qty - $sl->rejected_qty;
@@ -263,12 +344,7 @@ class InboundService
                     throw AppError::rule('OVER_RECEIPT', "مرفوض: المستلم+التالف+المرفوض ({$sum}) يتجاوز المتبقي على {$s->po->number} ({$rem}) — لا سياسة Over-Receipt (Excess مرفوض)",
                         "Received+damaged+rejected ({$sum}) exceeds open quantity ({$rem}) — excess rejected", ['lineNo' => $sl->line_no, 'remaining' => $rem, 'entered' => $sum]);
                 }
-                if ($sl->product->tracks_expiry && $r['acceptedQty'] > 0 && ! (($r['expiryDate'] ?? null) || $sl->expiry_date)) {
-                    throw AppError::validation('EXPIRY_REQUIRED', "تاريخ الانتهاء إلزامي للسطر {$sl->line_no} ({$sl->product->name_ar})", "Expiry date required for line {$sl->line_no}");
-                }
-                if ($sl->product->tracks_expiry && $r['acceptedQty'] > 0 && ! (($r['batchNo'] ?? null) || $sl->batch_no)) {
-                    throw AppError::validation('BATCH_REQUIRED', "رقم الدفعة إلزامي للسطر {$sl->line_no}", "Batch number required for line {$sl->line_no}");
-                }
+                $splitsByNo[$sl->line_no] = $this->splitsOf($sl, $r);
             }
 
             $txId = $this->inventory->newTxId();
@@ -288,37 +364,11 @@ class InboundService
             foreach ($s->lines as $sl) {
                 $r = $byNo[$sl->line_no];
                 [$accepted, $damaged, $rejected] = [$r['acceptedQty'], $r['damagedQty'], $r['rejectedQty']];
-                $batchNo = trim((string) (($r['batchNo'] ?? null) ?: ($sl->batch_no ?: ''))) ?: null;
-                $expiry = ! empty($r['expiryDate']) ? Carbon::parse($r['expiryDate']) : $sl->expiry_date;
-                $mfg = ! empty($r['mfgDate']) ? Carbon::parse($r['mfgDate']) : $sl->mfg_date;
-                $batchId = null;
-                if ($batchNo) {
-                    $batch = Batch::where('product_id', $sl->product_id)->where('batch_no', $batchNo)->lockForUpdate()->first();
-                    if ($batch) {
-                        $batch->update(array_filter(['expiry_date' => $expiry, 'mfg_date' => $mfg]));
-                    } else {
-                        $batch = Batch::create(['product_id' => $sl->product_id, 'batch_no' => $batchNo, 'expiry_date' => $expiry, 'mfg_date' => $mfg, 'supplier_id' => $s->supplier_id]);
-                    }
-                    $batchId = $batch->id;
-                }
+                $splits = $splitsByNo[$sl->line_no]; // ≥ 1: the accepted quantity per batch; the first row also carries the line's damaged / rejected
                 $prevRem = $sl->ordered_qty - $sl->accepted_qty - $sl->damaged_qty - $sl->rejected_qty;
-                $remaining = max(0, $prevRem - $accepted - $damaged - $rejected);
+                $undelivered = max(0, $prevRem - $accepted - $damaged - $rejected);    // the supplier did not bring it at all
+                $remaining = $undelivered + ($staysOpen ? $rejected : 0);              // still owed on the PO line after this receipt
                 $qcNote = $r['qcNote'] ?? null;
-                $gl = GrnLine::create([
-                    'grn_id' => $grn->id, 'line_no' => $sl->line_no, 'shipment_line_id' => $sl->id, 'po_line_id' => $sl->po_line_id, 'product_id' => $sl->product_id,
-                    'received_qty' => $accepted + $damaged + $rejected, 'accepted_qty' => $accepted, 'damaged_qty' => $damaged, 'rejected_qty' => $rejected, 'remaining_qty' => $remaining,
-                    'batch_no' => $batchNo, 'batch_id' => $batchId, 'mfg_date' => $mfg, 'expiry_date' => $expiry,
-                    'qc_result' => $rejected > 0 ? 'rejected' : ($damaged > 0 ? 'damaged' : 'accepted'), 'qc_note' => $qcNote, 'qc_by_id' => $user->id, 'qc_at' => now(),
-                ]);
-                foreach (['accepted' => $accepted, 'damaged' => $damaged, 'rejected' => $rejected] as $result => $qty) {
-                    if ($qty > 0) {
-                        QcResult::create(['grn_line_id' => $gl->id, 'result' => $result, 'qty' => $qty, 'inspector_id' => $user->id, 'inspector' => $user->username, 'notes' => $qcNote, 'at' => now()]);
-                    }
-                }
-                $sl->update([
-                    'accepted_qty' => $sl->accepted_qty + $accepted, 'damaged_qty' => $sl->damaged_qty + $damaged, 'rejected_qty' => $sl->rejected_qty + $rejected,
-                    'batch_no' => $batchNo ?: $sl->batch_no, 'expiry_date' => $expiry, 'mfg_date' => $mfg,
-                ]);
                 $unitCost = null; // finance: receipts are valued at the purchase-order price (moving average + GRNI accrual)
                 if ($sl->po_line_id && ($poLine = PoLine::whereKey($sl->po_line_id)->lockForUpdate()->first())) {
                     $poLine->update(['received_qty' => $poLine->received_qty + $accepted, 'damaged_qty' => $poLine->damaged_qty + $damaged, 'rejected_qty' => $poLine->rejected_qty + $rejected]);
@@ -326,42 +376,80 @@ class InboundService
                 }
                 $nameAr = $sl->product->name_ar;
                 $nameEn = $sl->product->name_en;
-                if ($accepted > 0) {
-                    $this->inventory->post($user, $txId, ['type' => 'grn', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $accepted, 'unitCost' => $unitCost,
-                        'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $stgIn->id], 'reference' => $reference, 'note' => 'استلام مقبول → Inbound Staging']);
-                    $sug = $sl->suggested_bin_id
-                        ? ['binId' => $sl->suggested_bin_id, 'ar' => $sl->suggestion_ar ?: 'موقع مقترح', 'en' => $sl->suggestion_en ?: 'Suggested bin']
-                        : $this->suggestBin($sl->product_id, $s->warehouse_id);
-                    PutawayTask::create([
-                        'number' => $this->numbering->next('PUT'), 'grn_id' => $grn->id, 'grn_line_id' => $gl->id, 'shipment_id' => $s->id, 'product_id' => $sl->product_id,
-                        'batch_id' => $batchId, 'batch_no' => $batchNo, 'expiry_date' => $expiry, 'qty' => $accepted, 'warehouse_id' => $s->warehouse_id,
-                        'suggested_bin_id' => $sug['binId'], 'suggestion_ar' => $sug['ar'], 'suggestion_en' => $sug['en'],
+
+                foreach ($splits as $i => $sp) {
+                    $first = $i === 0;
+                    [$qty, $dmg, $rej] = [$sp['qty'], $first ? $damaged : 0, $first ? $rejected : 0];
+                    $batchId = null;
+                    if ($sp['batchNo']) {
+                        $batch = Batch::where('product_id', $sl->product_id)->where('batch_no', $sp['batchNo'])->lockForUpdate()->first();
+                        if ($batch) {
+                            $batch->update(array_filter(['expiry_date' => $sp['expiry'], 'mfg_date' => $sp['mfg']]));
+                        } else {
+                            $batch = Batch::create(['product_id' => $sl->product_id, 'batch_no' => $sp['batchNo'], 'expiry_date' => $sp['expiry'], 'mfg_date' => $sp['mfg'], 'supplier_id' => $s->supplier_id]);
+                        }
+                        $batchId = $batch->id;
+                    }
+                    $gl = GrnLine::create([
+                        'grn_id' => $grn->id, 'line_no' => $sl->line_no, 'split_no' => $i + 1, 'shipment_line_id' => $sl->id, 'po_line_id' => $sl->po_line_id, 'product_id' => $sl->product_id,
+                        'received_qty' => $qty + $dmg + $rej, 'accepted_qty' => $qty, 'damaged_qty' => $dmg, 'rejected_qty' => $rej, 'remaining_qty' => $first ? $remaining : 0,
+                        'batch_no' => $sp['batchNo'], 'batch_id' => $batchId, 'mfg_date' => $sp['mfg'], 'expiry_date' => $sp['expiry'],
+                        'qc_result' => $rej > 0 ? 'rejected' : ($dmg > 0 ? 'damaged' : 'accepted'), 'qc_note' => $qcNote, 'qc_by_id' => $user->id, 'qc_at' => now(),
                     ]);
-                    StagingEntry::create(['direction' => 'in', 'bin_id' => $stgIn->id, 'reference_type' => 'GoodsReceipt', 'reference_id' => $grn->id, 'reference_number' => $number, 'qty' => $accepted]);
-                    $putawayTasks++;
+                    foreach (['accepted' => $qty, 'damaged' => $dmg, 'rejected' => $rej] as $result => $n) {
+                        if ($n > 0) {
+                            QcResult::create(['grn_line_id' => $gl->id, 'result' => $result, 'qty' => $n, 'inspector_id' => $user->id, 'inspector' => $user->username, 'notes' => $qcNote, 'at' => now()]);
+                        }
+                    }
+                    if ($qty > 0) {
+                        $this->inventory->post($user, $txId, ['type' => 'grn', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $qty, 'unitCost' => $unitCost,
+                            'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $stgIn->id], 'reference' => $reference, 'note' => 'استلام مقبول → Inbound Staging']);
+                        $sug = $sl->suggested_bin_id
+                            ? ['binId' => $sl->suggested_bin_id, 'ar' => $sl->suggestion_ar ?: 'موقع مقترح', 'en' => $sl->suggestion_en ?: 'Suggested bin']
+                            : $this->suggestBin($sl->product_id, $s->warehouse_id);
+                        $task = PutawayTask::create([
+                            'number' => $this->numbering->next('PUT'), 'grn_id' => $grn->id, 'grn_line_id' => $gl->id, 'shipment_id' => $s->id, 'product_id' => $sl->product_id,
+                            'batch_id' => $batchId, 'batch_no' => $sp['batchNo'], 'expiry_date' => $sp['expiry'], 'qty' => $qty, 'warehouse_id' => $s->warehouse_id,
+                            'suggested_bin_id' => $sug['binId'], 'suggestion_ar' => $sug['ar'], 'suggestion_en' => $sug['en'],
+                        ]);
+                        // the entry belongs to ITS task (reference), so a putaway clears exactly this one — never "an entry with the same quantity"
+                        StagingEntry::create(['direction' => 'in', 'bin_id' => $stgIn->id, 'reference_type' => 'PutawayTask', 'reference_id' => $task->id, 'reference_number' => $task->number, 'qty' => $qty]);
+                        $putawayTasks++;
+                    }
+                    if ($dmg > 0) {
+                        $this->inventory->post($user, $txId, ['type' => 'dmg', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $dmg, 'unitCost' => $unitCost,
+                            'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $dmgBin->id], 'reference' => $reference, 'note' => 'تالف عند الاستلام — منطقة التالف، لا يدخل المتاح']);
+                    }
                 }
+                $head = $splits[0];
+                $sl->update([
+                    'accepted_qty' => $sl->accepted_qty + $accepted, 'damaged_qty' => $sl->damaged_qty + $damaged, 'rejected_qty' => $sl->rejected_qty + $rejected,
+                    'batch_no' => $head['batchNo'] ?: $sl->batch_no, 'expiry_date' => $head['expiry'], 'mfg_date' => $head['mfg'],
+                ]);
                 if ($damaged > 0) {
-                    $this->inventory->post($user, $txId, ['type' => 'dmg', 'productId' => $sl->product_id, 'batchId' => $batchId, 'qty' => $damaged, 'unitCost' => $unitCost,
-                        'to' => ['warehouseId' => $s->warehouse_id, 'binId' => $dmgBin->id], 'reference' => $reference, 'note' => 'تالف عند الاستلام — منطقة التالف، لا يدخل المتاح']);
                     $this->exceptions->raise($user, $excBase + ['kind' => 'damage', 'textAr' => "{$nameAr}: {$damaged} تالفة عند الاستلام — موثقة، لم تدخل المخزون المتاح", 'textEn' => "{$nameEn}: {$damaged} damaged at receiving"]);
                     $exceptionsRaised++;
                 }
                 if ($rejected > 0) {
-                    $this->exceptions->raise($user, $excBase + ['kind' => 'rejected', 'textAr' => "{$nameAr}: {$rejected} مرفوضة عند الفحص (QC) — تُعاد للمورد", 'textEn' => "{$nameEn}: {$rejected} rejected at QC"]);
+                    $this->exceptions->raise($user, $excBase + ['kind' => 'rejected'] + ($staysOpen
+                        ? ['textAr' => "{$nameAr}: {$rejected} مرفوضة عند الفحص (QC) — لم تدخل المخزون وتُعاد للمورد، وتبقى مفتوحة على {$s->po->number} لإعادة توريدها", 'textEn' => "{$nameEn}: {$rejected} rejected at QC — never entered stock, still owed on {$s->po->number}"]
+                        : ['textAr' => "{$nameAr}: {$rejected} مرفوضة عند الفحص (QC) — تُعاد للمورد", 'textEn' => "{$nameEn}: {$rejected} rejected at QC"]));
                     $exceptionsRaised++;
                 }
-                if ($remaining > 0) {
-                    $this->exceptions->raise($user, $excBase + ['kind' => 'shortage', 'textAr' => "{$nameAr}: كمية مفتوحة {$remaining} على {$s->po->number} — استلام جزئي", 'textEn' => "{$nameEn}: open qty {$remaining} on {$s->po->number}"]);
+                if ($undelivered > 0) {
+                    $this->exceptions->raise($user, $excBase + ['kind' => 'shortage', 'textAr' => "{$nameAr}: كمية مفتوحة {$undelivered} على {$s->po->number} — استلام جزئي", 'textEn' => "{$nameEn}: open qty {$undelivered} on {$s->po->number}"]);
                     $exceptionsRaised++;
                 }
                 $short = fn (string $name) => implode(' ', array_slice(explode(' ', $name), 0, 2));
-                $sumAr[] = "{$short($nameAr)} {$accepted}/{$sl->ordered_qty}".($damaged ? " ({$damaged} تالفة)" : '').($rejected ? " ({$rejected} مرفوضة)" : '');
-                $sumEn[] = "{$short((string) $nameEn)} {$accepted}/{$sl->ordered_qty}".($damaged ? " ({$damaged} dmg)" : '').($rejected ? " ({$rejected} rej)" : '');
+                $batchesAr = count($splits) > 1 ? ' على '.count($splits).' دفعات' : '';
+                $batchesEn = count($splits) > 1 ? ' in '.count($splits).' batches' : '';
+                $sumAr[] = "{$short($nameAr)} {$accepted}/{$sl->ordered_qty}{$batchesAr}".($damaged ? " ({$damaged} تالفة)" : '').($rejected ? " ({$rejected} مرفوضة)" : '');
+                $sumEn[] = "{$short((string) $nameEn)} {$accepted}/{$sl->ordered_qty}{$batchesEn}".($damaged ? " ({$damaged} dmg)" : '').($rejected ? " ({$rejected} rej)" : '');
             }
             $grn->update(['summary_ar' => implode(' · ', $sumAr), 'summary_en' => implode(' · ', $sumEn)]);
 
-            // PO status
-            $openQty = (int) PoLine::where('po_id', $s->po_id)->get()->sum(fn ($l) => max(0, $l->qty - $l->received_qty - $l->damaged_qty - $l->rejected_qty));
+            // PO status: open = what the supplier still owes (rejected goods never arrived, so they keep the order partial)
+            $openQty = (int) PoLine::where('po_id', $s->po_id)->get()->sum(fn ($l) => H::openQty($l, $staysOpen));
             $poStatus = $openQty === 0 ? 'received' : 'partial';
             $poFrom = $s->po->status;
             PurchaseOrder::whereKey($s->po_id)->update(['open_qty' => $openQty, 'status' => $poStatus]);
@@ -381,11 +469,67 @@ class InboundService
         return $this->getGrn($number);
     }
 
+    /**
+     * The accepted quantity of one receiving line, per batch. Without `batches` the line is ONE batch (the line's own
+     * batch / dates, falling back to what the shipment line already declares) — exactly the old behaviour. With
+     * `batches: [{qty, batchNo, mfgDate?, expiryDate}]` every entry becomes its own GRN row, batch, putaway task and
+     * `grn` movement; the quantities must add up to the accepted quantity.
+     *
+     * @return array<int, array{qty:int, batchNo:?string, mfg:?Carbon, expiry:?Carbon}>
+     */
+    private function splitsOf(ShipmentLine $sl, array $r): array
+    {
+        $no = $sl->line_no;
+        $tracked = (bool) $sl->product->tracks_expiry;
+        $accepted = (int) $r['acceptedQty'];
+        $batches = array_values((array) ($r['batches'] ?? []));
+        if (! $batches) {
+            if ($tracked && $accepted > 0 && ! (($r['expiryDate'] ?? null) || $sl->expiry_date)) {
+                throw AppError::validation('EXPIRY_REQUIRED', "تاريخ الانتهاء إلزامي للسطر {$no} ({$sl->product->name_ar})", "Expiry date required for line {$no}");
+            }
+            if ($tracked && $accepted > 0 && ! (($r['batchNo'] ?? null) || $sl->batch_no)) {
+                throw AppError::validation('BATCH_REQUIRED', "رقم الدفعة إلزامي للسطر {$no}", "Batch number required for line {$no}");
+            }
+
+            return [[
+                'qty' => $accepted, 'batchNo' => trim((string) (($r['batchNo'] ?? null) ?: ($sl->batch_no ?: ''))) ?: null,
+                'mfg' => ! empty($r['mfgDate']) ? Carbon::parse($r['mfgDate']) : $sl->mfg_date,
+                'expiry' => ! empty($r['expiryDate']) ? Carbon::parse($r['expiryDate']) : $sl->expiry_date,
+            ]];
+        }
+        $out = [];
+        $seen = [];
+        foreach ($batches as $b) {
+            $qty = $b['qty'] ?? null;
+            $batchNo = trim((string) ($b['batchNo'] ?? ''));
+            if (! is_int($qty) || $qty <= 0) {
+                throw AppError::validation('BAD_QTY', "كمية دفعة غير صالحة في السطر {$no} — كل دفعة بكمية أكبر من صفر", "Invalid batch quantity on line {$no}");
+            }
+            if ($batchNo === '') {
+                throw AppError::validation('BATCH_REQUIRED', "رقم الدفعة إلزامي لكل دفعة في السطر {$no}", "Every batch of line {$no} needs its batch number");
+            }
+            if ($tracked && empty($b['expiryDate'])) {
+                throw AppError::validation('EXPIRY_REQUIRED', "تاريخ الانتهاء إلزامي للدفعة {$batchNo} في السطر {$no} ({$sl->product->name_ar})", "Expiry date required for batch {$batchNo} on line {$no}");
+            }
+            if (isset($seen[mb_strtoupper($batchNo)])) {
+                throw AppError::validation('BATCH_SPLIT_DUPLICATE', "الدفعة {$batchNo} مكررة في السطر {$no} — اجمع كميتها في صف واحد", "Batch {$batchNo} is repeated on line {$no}", ['lineNo' => $no, 'batchNo' => $batchNo]);
+            }
+            $seen[mb_strtoupper($batchNo)] = true;
+            $out[] = ['qty' => $qty, 'batchNo' => $batchNo, 'mfg' => ! empty($b['mfgDate']) ? Carbon::parse($b['mfgDate']) : null, 'expiry' => ! empty($b['expiryDate']) ? Carbon::parse($b['expiryDate']) : null];
+        }
+        $sum = array_sum(array_column($out, 'qty'));
+        if ($sum !== $accepted) {
+            throw AppError::validation('BATCH_SPLIT_SUM', "مجموع كميات الدفعات ({$sum}) لا يساوي الكمية المقبولة ({$accepted}) في السطر {$no}", "Batch quantities ({$sum}) do not add up to the accepted quantity ({$accepted}) on line {$no}", ['lineNo' => $no, 'accepted' => $accepted, 'batches' => $sum]);
+        }
+
+        return $out;
+    }
+
     public function getGrn(string $idOrNumber): array
     {
         $g = GoodsReceipt::with([
             'po:id,number,status', 'supplier:id,code,name_ar,name_en', 'warehouse:id,code,name_ar', 'shipment:id,number,status',
-            'lines' => fn ($q) => $q->orderBy('line_no'), 'lines.product:id,sku,name_ar,name_en', 'lines.qcResults',
+            'lines' => fn ($q) => $q->orderBy('line_no')->orderBy('split_no'), 'lines.product:id,sku,name_ar,name_en', 'lines.qcResults',
             'putaways' => fn ($q) => $q->orderBy('created_at')->orderBy('number'), 'putaways.suggestedBin:id,code', 'putaways.actualBin:id,code', 'putaways.product:id,sku,name_ar',
         ])->where(fn ($w) => $w->where('id', $idOrNumber)->orWhere('number', $idOrNumber))->first()
             ?? throw AppError::notFound('GRN_NOT_FOUND', 'GRN غير موجود');
@@ -393,7 +537,8 @@ class InboundService
             ->orderBy('created_at')->orderBy('number')->get()
             ->map(fn (InventoryMovement $m) => self::movementRow($m))->all();
 
-        return $g->toArray() + ['movements' => $movements];
+        // `void`: may this receipt be voided now, and if not what blocks it — the page shows the button or the reason
+        return $g->toArray() + ['movements' => $movements, 'voided' => $g->voided_at !== null, 'void' => app(GrnVoidService::class)->state($g)];
     }
 
     /** The ledger columns the document pages show (same projection as the reference). */
@@ -405,10 +550,17 @@ class InboundService
         ];
     }
 
-    /** @param  array{warehouse?:?string, supplier?:?string, po?:?string, from?:?string, to?:?string}  $filters */
+    /**
+     * Voided receipts stay in the log (with `voidedAt`), `voided=0` hides them; their lines never count in a total.
+     *
+     * @param  array{warehouse?:?string, supplier?:?string, po?:?string, from?:?string, to?:?string, voided?:?string}  $filters
+     */
     public function listGrns(Paging $page, array $filters): array
     {
         $query = GoodsReceipt::with(['po:id,number', 'supplier:id,code,name_ar,name_en', 'warehouse:id,code', 'lines:id,grn_id,accepted_qty,damaged_qty,rejected_qty,remaining_qty']);
+        if (isset($filters['voided']) && $filters['voided'] !== '') {
+            in_array($filters['voided'], ['1', 'true'], true) ? $query->whereNotNull('voided_at') : $query->whereNull('voided_at');
+        }
         if (! empty($filters['warehouse'])) {
             $query->whereHas('warehouse', fn ($w) => $w->where('code', $filters['warehouse']));
         }
@@ -429,7 +581,7 @@ class InboundService
             $query->where(fn ($w) => $w->where('number', 'like', "%{$q}%")->orWhereHas('po', fn ($p) => $p->where('number', 'like', "%{$q}%"))->orWhere('summary_ar', 'like', "%{$q}%"));
         }
 
-        return $page->paginate($query->orderByDesc('posted_at')->orderByDesc('id'));
+        return $page->paginate($query->orderByDesc('posted_at')->orderByDesc('id'), fn (GoodsReceipt $g) => $g->toArray() + ['voided' => $g->voided_at !== null]);
     }
 
     // ───────────── putaway ─────────────
@@ -453,16 +605,18 @@ class InboundService
 
     /**
      * Putaway confirmation: scan product + bin → validate → move STG-IN → bin. A duplicate confirmation is rejected.
+     * `$qty` (1 … what is left of the task) puts only part of the task into the scanned bin — a pallet that does not fit
+     * one location is split over several; `done_qty` accumulates and the task stays open until nothing is left. Without
+     * `$qty` the whole remainder moves, as before. The shipment is done when no putaway quantity is left on it.
      *
-     * @return array{task:string, bin:string, movement:string, shipmentDone:?bool}
+     * @return array{task:string, bin:string, movement:string, qty:int, doneQty:int, remaining:int, taskDone:bool, shipmentDone:?bool}
      */
-    public function confirmPutaway(AuthUser $user, string $idOrNumber, ?string $scannedBin = null, ?string $scannedProduct = null): array
+    public function confirmPutaway(AuthUser $user, string $idOrNumber, ?string $scannedBin = null, ?string $scannedProduct = null, ?int $qty = null): array
     {
         $t = PutawayTask::with(['product.barcodes', 'suggestedBin', 'grn'])->where(fn ($w) => $w->where('id', $idOrNumber)->orWhere('number', $idOrNumber))->first()
             ?? throw AppError::notFound('PUTAWAY_NOT_FOUND', 'مهمة التخزين غير موجودة');
-        if ($t->status !== 'open') {
-            throw AppError::conflict('PUTAWAY_DONE', 'المهمة منفَّذة مسبقًا — لا تكرار', 'Putaway task already confirmed');
-        }
+        $this->assertTaskOpen($t);
+        $this->assertPutawayQty($t, $qty);
         $targetCode = mb_strtoupper(trim((string) ($scannedBin ?: ($t->suggestedBin?->code ?? ''))));
         if ($targetCode === '') {
             throw AppError::validation('BIN_REQUIRED', 'امسح موقع التخزين (Scan Location)', 'Scan the bin');
@@ -496,30 +650,70 @@ class InboundService
 
         $txId = $this->inventory->newTxId();
 
-        return DB::transaction(function () use ($user, $t, $bin, $txId) {
+        return DB::transaction(function () use ($user, $t, $bin, $txId, $qty) {
             $locked = PutawayTask::whereKey($t->id)->lockForUpdate()->first();
-            if ($locked->status !== 'open') {
-                throw AppError::conflict('PUTAWAY_DONE', 'المهمة منفَّذة مسبقًا — لا تكرار', 'Putaway task already confirmed');
-            }
+            $this->assertTaskOpen($locked);
+            $left = $this->assertPutawayQty($locked, $qty);
+            $move = $qty ?? $left;
             $stgIn = $this->inventory->specialBin($t->warehouse_id, 'STG-IN');
-            $mv = $this->inventory->post($user, $txId, ['type' => 'putaway', 'productId' => $t->product_id, 'batchId' => $t->batch_id, 'qty' => $t->qty,
+            $mv = $this->inventory->post($user, $txId, ['type' => 'putaway', 'productId' => $t->product_id, 'batchId' => $t->batch_id, 'qty' => $move,
                 'from' => ['warehouseId' => $t->warehouse_id, 'binId' => $stgIn->id], 'to' => ['warehouseId' => $t->warehouse_id, 'binId' => $bin->id],
                 'reference' => ['type' => 'PutawayTask', 'id' => $t->id, 'number' => $t->number], 'note' => "{$t->grn->number} · Putaway → {$bin->code}"]);
-            $locked->update(['status' => 'done', 'actual_bin_id' => $bin->id, 'confirmed_by_id' => $user->id, 'confirmed_by' => $user->username, 'confirmed_at' => now()]);
-            StagingEntry::where('reference_type', 'GoodsReceipt')->where('reference_id', $t->grn_id)->where('status', 'waiting')->where('qty', $t->qty)
-                ->update(['status' => 'cleared', 'cleared_at' => now()]);
-            $this->audit->log($user, ['action' => 'PUTAWAY.CONFIRM', 'entityType' => 'PutawayTask', 'entityId' => $t->id, 'entityNumber' => $t->number,
-                'field' => 'bin', 'oldValue' => 'STG-IN', 'newValue' => $bin->code, 'transactionId' => $txId]);
-            $remaining = $t->shipment_id ? PutawayTask::where('shipment_id', $t->shipment_id)->where('status', 'open')->count() : 0;
-            if ($t->shipment_id && $remaining === 0) {
-                $sh = InboundShipment::whereKey($t->shipment_id)->lockForUpdate()->firstOrFail();
-                $sh->update(['status' => 'done', 'completed_at' => now()]);
-                $this->audit->status($user, 'InboundShipment', $sh->id, $sh->number, 'putaway', 'done', null, $txId);
-            }
-            $this->notify->activity($user, 'PutawayTask', $t->id, $t->number, "تأكيد تخزين {$t->product->name_ar} × {$t->qty} في {$bin->code} ({$t->grn->number})", "Putaway {$t->qty} × {$t->product->sku} → {$bin->code}");
+            $done = $locked->done_qty + $move;
+            $finished = $done >= $locked->qty;
+            $locked->update(['status' => $finished ? 'done' : 'open', 'done_qty' => $done, 'actual_bin_id' => $bin->id, 'confirmed_by_id' => $user->id, 'confirmed_by' => $user->username, 'confirmed_at' => now()]);
 
-            return ['task' => $t->number, 'bin' => $bin->code, 'movement' => $mv->number, 'shipmentDone' => $t->shipment_id ? $remaining === 0 : null];
+            // The task's own staging entry (by reference). Receipts posted before entries were linked to their task carry the
+            // GRN as reference: ONE such entry of the same quantity is taken, by id — never every entry that happens to match.
+            $entry = StagingEntry::where('reference_type', 'PutawayTask')->where('reference_id', $t->id)->where('status', 'waiting')->lockForUpdate()->first();
+            $legacy = $entry ? null : StagingEntry::where('reference_type', 'GoodsReceipt')->where('reference_id', $t->grn_id)->where('status', 'waiting')->where('qty', $locked->qty)
+                ->orderBy('created_at')->orderBy('id')->lockForUpdate()->first();
+            if ($finished) {
+                ($entry ?? $legacy)?->update(['status' => 'cleared', 'cleared_at' => now(), 'qty' => $locked->qty]);
+            } else {
+                $entry?->update(['qty' => $locked->qty - $done]); // what still waits in staging for this task
+            }
+            $this->audit->log($user, ['action' => 'PUTAWAY.CONFIRM', 'entityType' => 'PutawayTask', 'entityId' => $t->id, 'entityNumber' => $t->number,
+                'field' => 'bin', 'oldValue' => 'STG-IN', 'newValue' => ['bin' => $bin->code, 'qty' => $move, 'doneQty' => $done, 'of' => $locked->qty], 'transactionId' => $txId]);
+            $openTasks = $t->shipment_id ? PutawayTask::where('shipment_id', $t->shipment_id)->where('status', 'open')->count() : 0;
+            $shipmentDone = false;
+            if ($t->shipment_id && $openTasks === 0) {
+                $sh = InboundShipment::whereKey($t->shipment_id)->lockForUpdate()->firstOrFail();
+                if ($sh->status === 'putaway') {
+                    $sh->update(['status' => 'done', 'completed_at' => now()]);
+                    $this->audit->status($user, 'InboundShipment', $sh->id, $sh->number, 'putaway', 'done', null, $txId);
+                }
+                $shipmentDone = true;
+            }
+            $partAr = $finished ? '' : ' — جزء من المهمة، المتبقي '.($locked->qty - $done);
+            $this->notify->activity($user, 'PutawayTask', $t->id, $t->number, "تأكيد تخزين {$t->product->name_ar} × {$move} في {$bin->code} ({$t->grn->number}){$partAr}", "Putaway {$move} × {$t->product->sku} → {$bin->code}".($finished ? '' : ' — '.($locked->qty - $done).' left'));
+
+            WaitingOrders::stockArrived(); // the goods are on a shelf now: orders waiting for them are tried once this commits
+
+            return ['task' => $t->number, 'bin' => $bin->code, 'movement' => $mv->number, 'qty' => $move, 'doneQty' => $done, 'remaining' => $locked->qty - $done,
+                'taskDone' => $finished, 'shipmentDone' => $t->shipment_id ? $shipmentDone : null];
         });
+    }
+
+    private function assertTaskOpen(PutawayTask $t): void
+    {
+        if ($t->status === 'cancelled') {
+            throw AppError::conflict('PUTAWAY_CANCELLED', "أُلغيت مهمة التخزين {$t->number} مع إلغاء إذن الاستلام — لا تُنفَّذ", "Putaway task {$t->number} was cancelled with its voided receipt");
+        }
+        if ($t->status !== 'open') {
+            throw AppError::conflict('PUTAWAY_DONE', 'المهمة منفَّذة مسبقًا — لا تكرار', 'Putaway task already confirmed');
+        }
+    }
+
+    /** Validates the optional partial quantity; returns what is left of the task. */
+    private function assertPutawayQty(PutawayTask $t, ?int $qty): int
+    {
+        $left = max(0, (int) $t->qty - (int) $t->done_qty);
+        if ($qty !== null && ($qty < 1 || $qty > $left)) {
+            throw AppError::validation('PUTAWAY_QTY', "الكمية يجب أن تكون بين 1 و{$left} — المتبقي من مهمة التخزين {$t->number}", "Quantity must be between 1 and {$left} (what is left of {$t->number})", ['remaining' => $left, 'entered' => $qty]);
+        }
+
+        return $left;
     }
 
     // ───────────── internals ─────────────
@@ -531,14 +725,15 @@ class InboundService
             'lines' => fn ($q) => $q->orderBy('line_no'),
             'lines.product:id,sku,name_ar,name_en,storage_class,tracks_expiry', 'lines.product.barcodes' => fn ($q) => $q->where('is_primary', true),
             'lines.suggestedBin:id,code,zone_id', 'lines.suggestedBin.zone:id,code,type', 'lines.poLine:id,qty,received_qty,damaged_qty,rejected_qty',
-            'grns:id,shipment_id,number,posted_at,posted_by',
+            'grns' => fn ($q) => $q->select(['id', 'shipment_id', 'number', 'posted_at', 'posted_by', 'voided_at'])->orderBy('posted_at')->orderBy('id'),
         ];
     }
 
-    /** Adds per-line previouslyReceived / openQty and the shipment totals. */
+    /** Adds per-line previouslyReceived / openQty, the shipment totals and `grn` = the receipt in force (a voided one is history). */
     private function decorate(InboundShipment $s): array
     {
         $out = $s->toArray();
+        $out['grn'] = $s->grns->whereNull('voided_at')->last()?->number;
         $out['lines'] = array_map(function (array $l) {
             $prev = $l['acceptedQty'] + $l['damagedQty'] + $l['rejectedQty'];
 
@@ -550,20 +745,26 @@ class InboundService
         return $out;
     }
 
-    private function transition(AuthUser $user, string $idOrNumber, string $to, array $extra = []): InboundShipment
+    /**
+     * One guarded status change. `$onlyFrom` narrows the state machine for an action that is allowed from fewer states
+     * than the table (cancel = expected only; the table's arrived / inspecting → cancelled belongs to `refuse`).
+     *
+     * @param  string[]|null  $onlyFrom
+     */
+    private function transition(AuthUser $user, string $idOrNumber, string $to, array $extra = [], ?array $onlyFrom = null, ?string $ar = null, ?string $en = null, ?string $note = null): InboundShipment
     {
-        return DB::transaction(function () use ($user, $idOrNumber, $to, $extra) {
+        return DB::transaction(function () use ($user, $idOrNumber, $to, $extra, $onlyFrom, $ar, $en, $note) {
             $s = InboundShipment::where(fn ($w) => $w->where('id', $idOrNumber)->orWhere('number', $idOrNumber))->lockForUpdate()->first()
                 ?? throw AppError::notFound('SHIPMENT_NOT_FOUND', 'الشحنة غير موجودة');
             if ($s->locked) {
                 throw AppError::rule('SHIPMENT_LOCKED', 'الشحنة مقفلة — بانتظار تأكيد المورد', 'Shipment locked');
             }
-            if (! Sm::can('SHIPMENT_TRANSITIONS', $s->status, $to)) {
-                throw AppError::rule('SHIPMENT_TRANSITION', "انتقال غير مسموح: {$s->status} ← {$to}", "Invalid transition {$s->status} → {$to}");
+            if (! Sm::can('SHIPMENT_TRANSITIONS', $s->status, $to) || ($onlyFrom !== null && ! in_array($s->status, $onlyFrom, true))) {
+                throw AppError::rule('SHIPMENT_TRANSITION', ($ar ? "{$ar} — " : '')."انتقال غير مسموح: {$s->status} ← {$to}", ($en ? "{$en} — " : '')."Invalid transition {$s->status} → {$to}");
             }
             $from = $s->status;
             $s->update(['status' => $to] + $extra);
-            $this->audit->status($user, 'InboundShipment', $s->id, $s->number, $from, $to);
+            $this->audit->status($user, 'InboundShipment', $s->id, $s->number, $from, $to, $note);
 
             return $s->refresh();
         });

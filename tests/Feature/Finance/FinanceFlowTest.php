@@ -178,7 +178,7 @@ class FinanceFlowTest extends ApiTestCase
         $stop = collect($view['current']['stops'])->first(fn ($s) => ($s['fo']['number'] ?? null) === $foNo);
         $this->expectOk($this->postAs($drvUser, "/api/delivery/trips/{$tripNo}/start"));
         $this->expectOk($this->postAs($drvUser, "/api/delivery/stops/{$stop['id']}/arrive", ['gps' => ['lat' => 24.77, 'lng' => 46.74]]));
-        $pod = $this->expectOk($this->postAs($drvUser, "/api/delivery/stops/{$stop['id']}/partial", ['receiverName' => 'أبو فهد', 'deliveredQty' => 80, 'signature' => 'sig.png', 'gps' => ['lat' => 24.77, 'lng' => 46.74]]));
+        $pod = $this->expectOk($this->postAs($drvUser, "/api/delivery/stops/{$stop['id']}/partial", ['receiverName' => 'أبو فهد', 'deliveredQty' => 80, 'signature' => self::proofImage(), 'scans' => [$foNo], 'gps' => ['lat' => 24.77, 'lng' => 46.74]]));
         self::$s['rtn'] = $pod['return'];
 
         // control transferred for 80 units: invoice 80 × 60 × 0.95 = 4,560 + VAT 684 = 5,244 · COGS 80 × 38 = 3,040 out of goods in transit
@@ -317,8 +317,11 @@ class FinanceFlowTest extends ApiTestCase
         $row = collect($prof['rows'])->firstWhere('code', self::sku());
         $this->assertEquals([80, 4560.0, 3040.0, 1520.0], [$row['qty'], $row['revenue'], $row['cogs'], $row['grossProfit']]);
         $vat = $this->expectOk($this->getAs('finance', '/api/finance/reports/vat?from=2000-01-01'));
-        $this->assertGreaterThanOrEqual(684.00, $vat['outputVat']);
-        $this->assertGreaterThanOrEqual(2787.00, $vat['inputVat']);
+        // the VAT return is the two tax accounts, whatever else this run posted to them (a supplier debit note of another
+        // test class reverses input VAT, a credit note output VAT) — and this story's own figures are in those accounts
+        $this->assertEqualsWithDelta(-$this->gl('vat_output'), $vat['outputVat'], 0.001);
+        $this->assertEqualsWithDelta($this->gl('vat_input'), $vat['inputVat'], 0.001);
+        $this->assertEqualsWithDelta(2787.00, $this->gl('vat_input', self::$s['si']), 0.001);
         $this->assertEqualsWithDelta(-684.00, $this->gl('vat_output', self::$s['ci']), 0.001);
         $ledger = $this->expectOk($this->getAs('finance', '/api/finance/reports/ledger/1130?from=2000-01-01'));
         $this->assertNotEmpty($ledger['rows']);

@@ -1,19 +1,22 @@
 <script setup>
-// Vehicle drawer (520): overview · documents (expiry warnings) · maintenance · fuel · trips, state changes limited to the
-// allowed next states of the state machine, and "report breakdown". GET /transport/vehicles/:code.
+// Vehicle drawer (520): overview · documents (expiry warnings, "renew documents") · maintenance · fuel · trips, state
+// changes limited to the allowed next states of the state machine, "report breakdown", and "edit" (VehicleForm in edit
+// mode → PATCH /transport/vehicles/:code). GET /transport/vehicles/:code.
 //   <VehicleDrawer :code="vehicle" @close="vehicle = null" @open-trip="(n) => (trip = n)" />
 import { computed, ref, watch } from 'vue';
 import { api, useAction, useGet } from '@/api/client';
 import { Btn, Chip, DataTable, Drawer, EmptyState, ErrorBanner, Tabs } from '@/components';
-import { bi, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
+import { bi, fmtDateOnly, fmtMoney, fmtNum, lang, num, t } from '@/i18n';
 import { OWNERSHIP_LABELS, TRIP_LABELS, VEHICLE_LABELS, VEHICLE_TRANSITIONS } from '@/shared';
 import { useAuth } from '@/stores/auth';
 import { confirm } from '@/stores/ui';
 import BreakdownForm from './BreakdownForm.vue';
+import { MAINT_STATE_LABELS } from './fleet';
 import { gpsLabel, useGpsStatus } from './gps';
 import KvList from './KvList.vue';
+import VehicleForm from './VehicleForm.vue';
 import VehicleLiveTab from './VehicleLiveTab.vue';
-import { MAINT_KIND_LABELS, MAINT_STATUS_LABELS, VEHICLE_KIND_LABELS, docDaysLabel, labelOf, whyNot } from './tms';
+import { MAINT_KIND_LABELS, VEHICLE_KIND_LABELS, docDaysLabel, labelOf, whyNot } from './tms';
 
 const props = defineProps({ code: { type: String, default: null } });
 const emit = defineEmits(['close', 'open-trip']);
@@ -24,7 +27,9 @@ const tab = ref('overview');
 const { configured: gpsConfigured } = useGpsStatus();
 const gps = computed(() => (v.value ? gpsLabel(v.value, gpsConfigured.value) : null));
 const bd = ref(false);
-watch(() => props.code, () => { tab.value = 'overview'; bd.value = false; });
+/** 'all' | 'docs' | null — the edit form and which part of it. */
+const edit = ref(null);
+watch(() => props.code, () => { tab.value = 'overview'; bd.value = false; edit.value = null; });
 
 const q = useGet(() => (props.code ? `/transport/vehicles/${encodeURIComponent(props.code)}` : null));
 const v = computed(() => (props.code ? q.data.value : null));
@@ -63,8 +68,16 @@ const overview = computed(() => {
     { k: { ar: 'التنبيهات المفتوحة', en: 'Open alerts' }, v: alerts.length ? alerts.map((a) => (lang.value === 'en' && a.textEn) || a.textAr).join(' · ') : '—', c: alerts.length ? '#b23b3b' : undefined },
     { k: { ar: 'الموقع الحي', en: 'Live position' }, v: gps.value?.text || '—', c: gps.value?.color },
     { k: { ar: 'إجمالي الرحلات', en: 'Total trips' }, num: true, v: fmtNum(x.tripsCount) },
+    { k: { ar: 'بطاقة التكلفة', en: 'Cost card' }, v: costCard(x), c: num(x.purchaseCost) > 0 && x.lifeKm ? undefined : '#a8a4b8' },
   ];
 });
+/** Depreciation per km of the trip cost sheet — from the card when it is complete, otherwise the fleet policy applies. */
+function costCard(x) {
+  if (!(num(x.purchaseCost) > 0 && x.lifeKm)) return t('غير مُعدّة — إهلاك تكلفة الرحلة يؤخذ من سياسة الأسطول', 'Not set — trip-cost depreciation uses the fleet policy');
+  const perKm = Math.max(0, num(x.purchaseCost) - num(x.salvageValue)) / Number(x.lifeKm);
+  return `${t('شراء', 'Purchase')} ${fmtMoney(x.purchaseCost)} − ${t('خردة', 'salvage')} ${fmtMoney(x.salvageValue || 0)} ÷ ${fmtNum(x.lifeKm)} ${t('كم', 'km')} = ${fmtNum(perKm, 3)} ${t('ر.س/كم', 'SAR/km')}`;
+}
+const struck = (off) => (off ? { textDecoration: 'line-through', opacity: 0.55 } : null);
 const docs = computed(() => (v.value?.docs || []).map((d) => { const dl = docDaysLabel(d.days, lang.value); return { k: lang.value === 'en' ? d.labelEn || d.label : d.labelAr || d.label, v: `${fmtDateOnly(d.date || d.expiry)} · ${dl.text}`, c: dl.color }; }));
 
 const fuelCols = [
@@ -91,6 +104,8 @@ const tripCols = [
         <Chip :map="VEHICLE_LABELS" :k="v.state" />
         <span class="text-[9.5px] font-extrabold" :class="v.canAssign?.ok ? 'text-ok' : 'text-bad'">{{ v.canAssign?.ok ? t('قابلة للإسناد ✓', 'Assignable ✓') : `${t('غير قابلة للإسناد', 'Not assignable')} — ${whyNot(v.canAssign, lang)}` }}</span>
         <Chip small :fg="gps.color" :bg="gps.online ? '#e6f9ec' : '#F1EFF6'" :label="`GPS: ${gps.text}`" />
+        <div class="flex-1" />
+        <Btn v-if="auth.can('vehicle.manage')" size="sm" tone="soft" :label="{ ar: 'تعديل', en: 'Edit' }" @click="edit = 'all'" />
       </div>
       <Tabs v-model="tab" variant="sm" :tabs="tabs" class="!mx-0 !mb-3 !mt-3.5" />
 
@@ -101,16 +116,25 @@ const tripCols = [
         </template>
       </KvList>
       <VehicleLiveTab v-else-if="tab === 'live'" :vehicle="v" />
-      <KvList v-else-if="tab === 'docs'" :rows="docs" />
-      <div v-else-if="tab === 'maint'" class="col">
-        <EmptyState v-if="(v.maintenance || []).length === 0" :text="{ ar: 'لا أوامر صيانة', en: 'No maintenance orders' }" />
-        <div v-for="m in v.maintenance || []" :key="m.id" class="card sm px-[13px] py-2.5">
-          <div class="row wrap"><span class="num font-bold">{{ m.number }}</span><Chip small :map="MAINT_KIND_LABELS" :k="m.kind" /><Chip small :map="MAINT_STATUS_LABELS" :k="m.status" /><div class="flex-1" /><span class="num text-[10px]">{{ fmtNum(m.cost) }} {{ t('ر.س', 'SAR') }}</span></div>
-          <div class="mt-1 text-[10px] text-sec">{{ (lang === 'en' && m.descEn) || m.descAr || m.typeAr }} · {{ m.shop || '—' }} · <span class="num">{{ fmtDateOnly(m.startDate) }}{{ m.endDate ? ` ← ${fmtDateOnly(m.endDate)}` : '' }}</span></div>
+      <div v-else-if="tab === 'docs'" class="col !gap-2.5">
+        <KvList :rows="docs" />
+        <div class="row wrap !gap-2">
+          <div class="min-w-[180px] flex-1 text-[9.5px] leading-[1.7] text-faint">{{ t('أي وثيقة منتهية من الأربع تمنع إسناد المركبة. يُغلق تنبيه الوثائق فور حفظ التاريخ الجديد.', 'Any of the four documents, once expired, blocks assignment. The documents alert clears as soon as the new date is saved.') }}</div>
+          <Btn v-if="auth.can('vehicle.manage')" size="sm" tone="softPurple" :label="{ ar: 'تجديد الوثائق', en: 'Renew documents' }" @click="edit = 'docs'" />
+          <span v-else class="text-[9.5px] text-faint">{{ t('تجديد الوثائق يحتاج صلاحية إدارة المركبات', 'Renewing documents needs the vehicle-management permission') }}</span>
         </div>
       </div>
-      <DataTable v-else-if="tab === 'fuel'" :columns="fuelCols" :rows="v.fuelHistory || []" :row-key="(f) => f.id" dense :min-width="440" :empty-text="{ ar: 'لا سجلات وقود', en: 'No fuel records' }">
-        <template #cell-kmPerL="{ row }"><span :class="row.anomaly ? 'text-bad' : 'text-ok'">{{ row.kmPerL != null ? fmtNum(row.kmPerL, 1) : '—' }}{{ row.anomaly ? ' ⚠' : '' }}</span></template>
+      <div v-else-if="tab === 'maint'" class="col">
+        <EmptyState v-if="(v.maintenance || []).length === 0" :text="{ ar: 'لا أوامر صيانة', en: 'No maintenance orders' }" />
+        <div v-for="m in v.maintenance || []" :key="m.id" class="card sm px-[13px] py-2.5" :style="m.status === 'cancelled' ? { opacity: 0.6 } : null">
+          <div class="row wrap"><span class="num font-bold" :class="{ 'line-through': m.status === 'cancelled' }">{{ m.number }}</span><Chip small :map="MAINT_KIND_LABELS" :k="m.kind" /><Chip small :map="MAINT_STATE_LABELS" :k="m.status" /><div class="flex-1" /><span class="num text-[10px]" :class="{ 'line-through': m.status === 'cancelled' }">{{ fmtNum(m.cost) }} {{ t('ر.س', 'SAR') }}</span></div>
+          <div class="mt-1 text-[10px] text-sec">{{ (lang === 'en' && m.descEn) || m.descAr || m.typeAr }} · {{ m.shop || t('الورشة لم تُحدَّد', 'workshop not set') }} · <span class="num">{{ fmtDateOnly(m.startDate) }}{{ m.endDate ? ` ← ${fmtDateOnly(m.endDate)}` : '' }}</span></div>
+          <div v-if="m.status === 'cancelled'" class="mt-0.5 text-[9.5px] text-faint">{{ t('أُلغي', 'Cancelled') }}: {{ m.cancelReason || '—' }}</div>
+        </div>
+        <div class="text-[9.5px] text-faint">{{ t('تعديل الأوامر المفتوحة أو إلغاؤها من تبويب «الصيانة والوقود» في صفحة الأسطول.', 'Open orders are edited or cancelled from the "Maintenance & Fuel" tab of the fleet page.') }}</div>
+      </div>
+      <DataTable v-else-if="tab === 'fuel'" :columns="fuelCols" :rows="v.fuelHistory || []" :row-key="(f) => f.id" :row-style="(f) => struck(!!f.voidedAt)" dense :empty-text="{ ar: 'لا سجلات وقود', en: 'No fuel records' }">
+        <template #cell-kmPerL="{ row }"><span :class="row.anomaly && !row.voidedAt ? 'text-bad' : 'text-ok'" :title="row.voidedAt ? `${t('ملغى', 'Voided')}: ${row.voidReason || ''}` : undefined">{{ row.kmPerL != null ? fmtNum(row.kmPerL, 1) : '—' }}{{ row.anomaly && !row.voidedAt ? ' ⚠' : '' }}</span></template>
       </DataTable>
       <DataTable v-else-if="tab === 'trips'" :columns="tripCols" :rows="v.recentTrips || []" :row-key="(r) => r.number" dense :min-width="520" :empty-text="{ ar: 'لا رحلات', en: 'No trips' }" @row-click="(r) => emit('open-trip', r.number)">
         <template #cell-status="{ row }"><Chip :map="TRIP_LABELS" :k="row.status" /></template>
@@ -127,4 +151,5 @@ const tripCols = [
     </template>
   </Drawer>
   <BreakdownForm :open="bd && !!v" :vehicle-code="v?.code" @close="bd = false" />
+  <VehicleForm :open="!!edit && !!v" :vehicle="v" :section="edit || 'all'" @close="edit = null" />
 </template>

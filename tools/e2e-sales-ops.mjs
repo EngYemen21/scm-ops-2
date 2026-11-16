@@ -131,7 +131,7 @@ const so = view.opsOrder;
 step('3. OPS executes: release → pick → pack → trip → load → dispatch');
 const fo = await ops('wm', 'POST', `/api/sales/orders/${so}/fulfill`);
 const full = await ops('worker', 'GET', `/api/fulfillment/orders/${fo.number}`);
-for (const t of full.pickLists[0].tasks) await ops('worker', 'POST', `/api/fulfillment/pick-tasks/${t.id}/confirm`, { scannedBin: t.bin.code, scannedProduct: t.product.sku });
+for (const t of full.pickLists[0].tasks) await ops('worker', 'POST', `/api/fulfillment/pick-tasks/${t.id}/confirm`, { scannedBin: t.bin.code, scannedProduct: t.product.sku, scannedBatch: t.batch?.batchNo || undefined });
 await ops('worker', 'POST', `/api/fulfillment/orders/${fo.number}/pack`, { cartons: 2, weightKg: 20 });
 ok((await salesOrder(owner, ref)).ops.status === 'packed', 'Sales sees "packed" without logging into OPS');
 const veh = `V-E${uid}`; const drv = `DRV-E${uid}`; const drvUser = `drv-e2e-${uid}`;
@@ -140,17 +140,19 @@ await ops('disp', 'POST', '/api/transport/drivers', { code: drv, nameAr: `سائ
 const trip = await ops('disp', 'POST', '/api/transport/trips', { warehouseCode: 'RYD', date: new Date().toISOString().slice(0, 10), routeAr: 'تكامل', foNumbers: [fo.number], tempNeed: 'dry' });
 const tripNo = trip.number ?? trip.trip.number;
 await ops('disp', 'POST', `/api/transport/trips/${tripNo}/assign`, { vehicleCode: veh, driverCode: drv });
-await ops('worker', 'POST', `/api/fulfillment/trips/${tripNo}/load`, { foNumber: fo.number });
+await ops('worker', 'POST', `/api/fulfillment/trips/${tripNo}/load`, { foNumber: fo.number, scannedOrder: fo.number });
 await ops('disp', 'POST', `/api/fulfillment/trips/${tripNo}/dispatch`);
 const shipped = await waitFor(async () => { const o = await salesOrder(owner, ref); return o?.st === 'ship' ? o : null; }, 'ship in Sales');
 ok(shipped.ops.status === 'out_for_delivery' && shipped.ops.events.some((e) => e.type === 'shipment.dispatched' && e.text.includes(tripNo)), `Sales order moved to "out for delivery" by OPS (trip ${tripNo}, driver shown)`);
 
 step('4. The driver delivers with proof of delivery');
+// a real 1×1 PNG: OPS refuses a file name as a signature and keeps the image (database or object storage)
+const PROOF_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 const mine = await ops(drvUser, 'GET', '/api/delivery/my-trips');
 const stop = mine.current.stops.find((s) => s.fo?.number === fo.number);
 await ops(drvUser, 'POST', `/api/delivery/trips/${tripNo}/start`);
 await ops(drvUser, 'POST', `/api/delivery/stops/${stop.id}/arrive`, { gps: { lat: 24.7, lng: 46.7 } });
-const pod = await ops(drvUser, 'POST', `/api/delivery/stops/${stop.id}/deliver`, { receiverName: 'م. ناصر القحطاني', gps: { lat: 24.7, lng: 46.7 }, signature: 'sig.png' });
+const pod = await ops(drvUser, 'POST', `/api/delivery/stops/${stop.id}/deliver`, { receiverName: 'م. ناصر القحطاني', gps: { lat: 24.7, lng: 46.7 }, signature: PROOF_PNG, scans: [fo.number] });
 const delivered = await waitFor(async () => { const o = await salesOrder(owner, ref); return o?.ops?.status === 'delivered' ? o : null; }, 'delivered in Sales');
 ok(delivered.ops.events.some((e) => e.type === 'delivery.completed' && e.text.includes('ناصر')), `Sales shows the POD (${pod.number ?? pod.pod ?? 'POD'}, receiver)`);
 
@@ -193,17 +195,17 @@ const sub5 = await owner.cmd('orders.submit', { items: [{ pid: 'P-1118', qty: 10
 const ref5 = sub5.msg.match(/ORD-\d+/)[0];
 const so5 = (await waitFor(async () => { const o = await salesOrder(owner, ref5); return o?.ops?.status === 'reserved' ? o : null; }, 'reserved')).ops.ref;
 const fo5 = await ops('wm', 'POST', `/api/sales/orders/${so5}/fulfill`);
-for (const t of (await ops('worker', 'GET', `/api/fulfillment/orders/${fo5.number}`)).pickLists[0].tasks) await ops('worker', 'POST', `/api/fulfillment/pick-tasks/${t.id}/confirm`, { scannedBin: t.bin.code, scannedProduct: t.product.sku });
+for (const t of (await ops('worker', 'GET', `/api/fulfillment/orders/${fo5.number}`)).pickLists[0].tasks) await ops('worker', 'POST', `/api/fulfillment/pick-tasks/${t.id}/confirm`, { scannedBin: t.bin.code, scannedProduct: t.product.sku, scannedBatch: t.batch?.batchNo || undefined });
 await ops('worker', 'POST', `/api/fulfillment/orders/${fo5.number}/pack`, { cartons: 3, weightKg: 20 });
 const trip5 = await ops('disp', 'POST', '/api/transport/trips', { warehouseCode: 'RYD', date: new Date().toISOString().slice(0, 10), routeAr: 'تكامل — جزئي', foNumbers: [fo5.number], tempNeed: 'dry' });
 const trip5No = trip5.number ?? trip5.trip.number;
 await ops('disp', 'POST', `/api/transport/trips/${trip5No}/assign`, { vehicleCode: veh, driverCode: drv });
-await ops('worker', 'POST', `/api/fulfillment/trips/${trip5No}/load`, { foNumber: fo5.number });
+await ops('worker', 'POST', `/api/fulfillment/trips/${trip5No}/load`, { foNumber: fo5.number, scannedOrder: fo5.number });
 await ops('disp', 'POST', `/api/fulfillment/trips/${trip5No}/dispatch`);
 const stop5 = (await ops(drvUser, 'GET', '/api/delivery/my-trips')).current.stops.find((s) => s.fo?.number === fo5.number);
 await ops(drvUser, 'POST', `/api/delivery/trips/${trip5No}/start`);
 await ops(drvUser, 'POST', `/api/delivery/stops/${stop5.id}/arrive`);
-const pod5 = await ops(drvUser, 'POST', `/api/delivery/stops/${stop5.id}/partial`, { receiverName: 'أمين المستودع', deliveredQty: 7 });
+const pod5 = await ops(drvUser, 'POST', `/api/delivery/stops/${stop5.id}/partial`, { receiverName: 'أمين المستودع', deliveredQty: 7, signature: PROOF_PNG, scans: [fo5.number] });
 const part = await waitFor(async () => { const o = await salesOrder(owner, ref5); return o?.ops?.status === 'delivered_partial' ? o : null; }, 'partial delivery in Sales');
 ok(part.ops.events.some((e) => e.type === 'return.created' && e.text.includes(pod5.return)), `Sales shows the partial delivery and the return ${pod5.return}`);
 await ops('wm', 'POST', `/api/returns/${pod5.return}/receive`);

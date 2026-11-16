@@ -28,6 +28,8 @@ class SalesOrderLine extends BaseModel
             'picked_qty' => 'integer',
             'delivered_qty' => 'integer',
             'returned_qty' => 'integer',
+            'ordered_qty' => 'integer',
+            'short_qty' => 'integer',
         ];
     }
 

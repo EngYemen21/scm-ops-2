@@ -72,6 +72,13 @@ const AGING_COLS = [
   { key: 'current', header: { ar: 'غير مستحقة', en: 'Current' }, width: '95px', kind: 'num', value: (r) => fmtMoney(r.current) }, { key: 'd30', header: '1–30', width: '90px', kind: 'num', value: (r) => fmtMoney(r.d30) }, { key: 'd60', header: '31–60', width: '90px', kind: 'num', value: (r) => fmtMoney(r.d60) },
   { key: 'd90', header: '61–90', width: '90px', kind: 'num', value: (r) => fmtMoney(r.d90) }, { key: 'd90p', header: '90+', width: '90px', kind: 'num', value: (r) => fmtMoney(r.d90p) }, { key: 'total', header: { ar: 'الإجمالي', en: 'Total' }, width: '100px', kind: 'num', value: (r) => fmtMoney(r.total) },
 ];
+// payables are aged NET of what the supplier was sent back (debit notes + returned goods awaiting a note): the column shows what was taken off
+const returnCredits = (r) => Number(r.debitNotes || 0) + Number(r.returnsUnclaimed || 0);
+const AGING_SUPPLIER_COLS = [
+  ...AGING_COLS.slice(0, 2),
+  { key: 'returnCredits', header: { ar: 'مرتجعات مخصومة', en: 'Return credits' }, width: '110px', kind: 'num', class: 'muted', value: (r) => (returnCredits(r) ? fmtMoney(returnCredits(r)) : '') },
+  ...AGING_COLS.slice(2),
+];
 const PROFIT_COLS = [
   { key: 'name', header: { ar: 'الصنف / العميل', en: 'Item / customer' }, width: 'minmax(180px,1.6fr)', kind: 'name', value: name }, { key: 'qty', header: { ar: 'الكمية', en: 'Qty' }, width: '70px', kind: 'num' },
   { key: 'revenue', header: { ar: 'الإيراد', en: 'Revenue' }, width: '100px', kind: 'num', value: (r) => fmtMoney(r.revenue) }, { key: 'cogs', header: { ar: 'التكلفة', en: 'COGS' }, width: '100px', kind: 'num', value: (r) => fmtMoney(r.cogs) },
@@ -160,9 +167,10 @@ const needsRange = computed(() => ['trial-balance', 'income-statement', 'cash-fl
 
     <!-- aging -->
     <SectionCard v-else-if="report.startsWith('aging')" :title="report === 'aging-customer' ? { ar: 'أعمار ذمم العملاء', en: 'Receivables aging' } : { ar: 'أعمار ذمم الموردين', en: 'Payables aging' }" :sub="`${t('كما في', 'as of')} ${fmtDateOnly(d.asOf)}`" :padded="false">
-      <DataTable :columns="AGING_COLS" :rows="d.rows" :row-key="(r) => r.code" :min-width="900" :empty-text="{ ar: 'لا ذمم مفتوحة.', en: 'Nothing open.' }" @row-click="(r) => { report = report === 'aging-customer' ? 'statement-customer' : 'statement-supplier'; partner = r.code; }">
-        <template #footer><span class="num font-extrabold">{{ t('الإجمالي', 'Total') }} {{ fmtMoney(d.totals.total) }} · 90+: {{ fmtMoney(d.totals.d90p) }}</span></template>
+      <DataTable :columns="report === 'aging-supplier' ? AGING_SUPPLIER_COLS : AGING_COLS" :rows="d.rows" :row-key="(r) => r.code" :min-width="900" :empty-text="{ ar: 'لا ذمم مفتوحة.', en: 'Nothing open.' }" @row-click="(r) => { report = report === 'aging-customer' ? 'statement-customer' : 'statement-supplier'; partner = r.code; }">
+        <template #footer><span class="num font-extrabold">{{ t('الإجمالي', 'Total') }} {{ fmtMoney(d.totals.total) }} · 90+: {{ fmtMoney(d.totals.d90p) }}<template v-if="report === 'aging-supplier' && returnCredits(d.totals)"> · {{ t('مرتجعات مخصومة', 'return credits') }} {{ fmtMoney(returnCredits(d.totals)) }}</template></span></template>
       </DataTable>
+      <div v-if="report === 'aging-supplier'" class="hint px-3 pb-3">{{ t('الأرصدة صافية من مرتجعات المورد: إشعارات المدين الصادرة بإجماليها، والبضاعة المرتجعة التي أُلغي إشعارها ولم يُصدر بديله بتكلفتها. يُخصم المبلغ من أقدم فواتير المورد استحقاقًا أولًا؛ وما زاد عن كل فواتيره المفتوحة يظهر بالسالب في «غير مستحقة» (المورد مدين لنا).', 'Balances are net of what the supplier was sent back: standing debit notes at their total, and returned goods whose note was cancelled and not issued again, at cost. The credit is taken off the supplier’s oldest due invoices first; what exceeds all open invoices shows as a negative amount under “Current” (the supplier owes us).') }}</div>
     </SectionCard>
 
     <!-- VAT -->

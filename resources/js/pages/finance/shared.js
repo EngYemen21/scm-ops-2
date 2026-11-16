@@ -9,6 +9,9 @@
 //   Payment   { id, number, direction: in|out, partnerType, partner{code,nameAr,nameEn}, paymentDate, amount, allocatedAmount, method, bankAccount, reference?, status: posted|void, journal? }
 //   Expense   { id, number, expenseDate, account, amount, vatPct, vatAmount, total, settlement: bank|supplier|accrued, costCenter?, vehicle?, trip?, description, status }
 //   Asset     { id, code, nameAr, nameEn, category, vehicle?, acquiredOn, cost, salvageValue, usefulLifeMonths, accumulatedDepreciation, netBookValue, status }
+//   DebitNote { id, number, status: issued|cancelled, date, subtotal, vatPct, vatAmount, total, costTotal, notes?, createdBy, cancelledAt?, supplier{code,nameAr,nameEn,vatNo?},
+//               return?{number,type,status}, journal?{id,number,status}, lines[{lineNo?, sku, nameAr, nameEn, batchNo?, qty, price, total, unitCost, cost, priceSource: return|po|cost, movement}],
+//               detail only: po?{number,status}, grn?{number}, journals[{number,journalDate,status,kind,memo,totalDebit}] }
 import { computed } from 'vue';
 import { useGet } from '@/api/client';
 import { lang } from '@/i18n';
@@ -23,6 +26,9 @@ export const CI_LABELS = {
   issued: { ar: 'مستحقة', en: 'Issued', fg: '#b26a16', bg: '#fbf0dd' }, partially_paid: { ar: 'مسدَّدة جزئيًا', en: 'Partially paid', fg: '#3C79F5', bg: '#e8effe' }, paid: { ar: 'مسدَّدة ✓', en: 'Paid ✓', fg: '#1d7a3e', bg: '#e6f9ec' }, cancelled: { ar: 'ملغاة', en: 'Cancelled', fg: '#7d7990', bg: '#F1EFF6' },
 };
 export const CI_KIND_LABELS = { invoice: { ar: 'فاتورة', en: 'Invoice', fg: '#0d7f93', bg: '#d9f4f9' }, credit_note: { ar: 'إشعار دائن', en: 'Credit note', fg: '#b23b3b', bg: '#fdecec' } };
+export const DN_LABELS = { issued: { ar: 'صادر', en: 'Issued', fg: '#1d7a3e', bg: '#e6f9ec' }, cancelled: { ar: 'ملغى', en: 'Cancelled', fg: '#7d7990', bg: '#F1EFF6' } };
+/** Where the price a debit-note line claims came from (DebitNoteService: return line → purchase order → cost). */
+export const DN_PRICE_SOURCE_LABELS = { return: { ar: 'سعر المرتجع', en: 'Return line' }, po: { ar: 'أمر الشراء', en: 'Purchase order' }, cost: { ar: 'تكلفة المخزون', en: 'Stock cost' } };
 export const PAYMENT_STATUS_LABELS = { posted: { ar: 'مرحَّل', en: 'Posted', fg: '#1d7a3e', bg: '#e6f9ec' }, void: { ar: 'ملغى', en: 'Void', fg: '#7d7990', bg: '#F1EFF6' } };
 export const DIRECTION_LABELS = { in: { ar: 'قبض', en: 'Receipt', fg: '#1d7a3e', bg: '#e6f9ec' }, out: { ar: 'صرف', en: 'Payment', fg: '#b23b3b', bg: '#fdecec' } };
 export const METHOD_LABELS = { bank: { ar: 'تحويل بنكي', en: 'Bank transfer' }, cash: { ar: 'نقدًا', en: 'Cash' }, cheque: { ar: 'شيك', en: 'Cheque' }, card: { ar: 'بطاقة', en: 'Card' }, wallet: { ar: 'محفظة', en: 'Wallet' } };
@@ -49,7 +55,7 @@ export function sourceLink(type, number) {
   if (!type || !number) return null;
   const m = { GoodsReceipt: `/grn/${number}`, FulfillmentOrder: `/fo/${number}`, ReturnOrder: `/rtn/${number}`, WarehouseTransfer: `/trf/${number}`, InventoryCount: `/counts?q=${number}`, PurchaseOrder: `/po/${number}`,
     SupplierInvoice: `/procurement?tab=inv&invoice=${number}`, CustomerInvoice: `/finance?tab=invoices&invoice=${number}`, Payment: `/finance?tab=payments&payment=${number}`, Expense: `/finance?tab=expenses&expense=${number}`,
-    FixedAsset: `/finance?tab=assets&asset=${number}`, FuelRecord: `/fleet?q=${number}`, MaintenanceOrder: `/fleet?q=${number}`, InventoryMovement: `/ledger?q=${number}` };
+    FixedAsset: `/finance?tab=assets&asset=${number}`, DebitNote: `/finance?tab=debit-notes&note=${number}`, FuelRecord: `/fleet?q=${number}`, MaintenanceOrder: `/fleet?q=${number}`, InventoryMovement: `/ledger?q=${number}` };
   return m[type] ? m[type].replace(number, encodeURIComponent(number)) : null;
 }
 

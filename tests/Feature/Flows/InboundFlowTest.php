@@ -93,7 +93,9 @@ class InboundFlowTest extends ApiTestCase
         $this->assertCount(2, $grn['lines']);
         $this->assertCount(2, $grn['putaways']);
         $this->assertSame([490, 480, 10, 0, 10, 'damaged'], array_map(fn ($k) => $grn['lines'][0][$k], ['receivedQty', 'acceptedQty', 'damagedQty', 'rejectedQty', 'remainingQty', 'qcResult']));
-        $this->assertSame([100, 90, 0, 10, 0, 'rejected'], array_map(fn ($k) => $grn['lines'][1][$k], ['receivedQty', 'acceptedQty', 'damagedQty', 'rejectedQty', 'remainingQty', 'qcResult']));
+        // the 10 rejected never entered: they are still owed on the purchase order (procurement.rejectedStaysOpen)
+        $this->assertSame([100, 90, 0, 10, 10, 'rejected'], array_map(fn ($k) => $grn['lines'][1][$k], ['receivedQty', 'acceptedQty', 'damagedQty', 'rejectedQty', 'remainingQty', 'qcResult']));
+        $this->assertSame([1, 1], array_column($grn['lines'], 'splitNo'), 'a line without batches is one receipt row');
         $this->assertSame(['accepted', 'damaged'], array_column($grn['lines'][0]['qcResults'], 'result'));
         $this->assertSame($batchNo, $grn['lines'][0]['batchNo']);
         $this->assertSame($po->number, $grn['po']['number']);
@@ -110,10 +112,11 @@ class InboundFlowTest extends ApiTestCase
         $this->assertSame(['damage', 'rejected', 'shortage'], $kinds);
         $this->assertSame($po->number, OpsException::where('entity_number', $grn['number'])->first()->document_number);
         $po->refresh();
-        $this->assertSame(['partial', 10], [$po->status, $po->open_qty]);
+        $this->assertSame(['partial', 20], [$po->status, $po->open_qty], '10 never delivered + 10 rejected are open; the 10 damaged are received');
         $this->assertSame(1, IntegrationEvent::where('type', 'InventoryReceived')->where('payload->grn', $grn['number'])->count());
         $this->assertSame(1, AuditLog::where('action', 'GRN.POST')->where('entity_number', $grn['number'])->count());
-        $this->assertSame(2, StagingEntry::where('reference_id', $grn['id'])->where('status', 'waiting')->count());
+        $taskIds = array_column($grn['putaways'], 'id');
+        $this->assertSame(2, StagingEntry::where('reference_type', 'PutawayTask')->whereIn('reference_id', $taskIds)->where('status', 'waiting')->count(), 'one staging entry per putaway task, linked to it');
 
         // a retry with the same idempotency key replays the first answer; a genuinely new post is a duplicate
         $replay = $this->postAs('worker', "{$url}/grn", $good, $key);
@@ -170,7 +173,8 @@ class InboundFlowTest extends ApiTestCase
         $this->assertSame(['arrived', 'inspecting', 'putaway', 'done'], array_column($detail['history'], 'toStatus'));
         $this->assertSame(['ordered' => 600, 'accepted' => 570, 'damaged' => 10, 'rejected' => 10, 'open' => 10], $detail['totals']);
         $this->assertSame([$bin, 'done'], [$detail['putaways'][0]['actualBin']['code'], $detail['putaways'][0]['status']]);
-        $this->assertSame(0, StagingEntry::where('reference_id', $grn['id'])->where('status', 'waiting')->count());
+        $this->assertSame(0, StagingEntry::whereIn('reference_id', $taskIds)->where('status', 'waiting')->count());
+        $this->assertSame(2, StagingEntry::whereIn('reference_id', $taskIds)->where('status', 'cleared')->count());
         $this->assertSame(0, $this->expectOk($this->getAs('worker', '/api/inbound/putaway?grn='.$grn['number']))['total']);
         $this->assertSame(2, $this->expectOk($this->getAs('worker', '/api/inbound/putaway?status=done&grn='.$grn['number']))['total']);
         $this->assertReconciles();
@@ -206,7 +210,7 @@ class InboundFlowTest extends ApiTestCase
     public function test_a_fully_rejected_receipt_closes_the_shipment_without_putaway_and_cancel_works_only_before_arrival(): void
     {
         $product = $this->product('INB-REJ');
-        [$shipment] = $this->expectedShipment([[$product, 20]]);
+        [$shipment, $po] = $this->expectedShipment([[$product, 20]]);
         $url = "/api/inbound/shipments/{$shipment->id}";
         $this->expectOk($this->postAs('worker', "{$url}/arrive"));
         $this->expectOk($this->postAs('worker', "{$url}/inspect"));
@@ -215,6 +219,11 @@ class InboundFlowTest extends ApiTestCase
         $this->assertSame([], $grn['movements']);
         $this->assertSame('done', $grn['shipment']['status']);
         $this->assertSame(0, $this->totalOnHand($product));
+        // the shipment is over, the order is not: all 20 are still owed and a follow-up shipment can be opened for them
+        $this->assertSame(['partial', 20], [$po->refresh()->status, $po->open_qty]);
+        $this->assertSame(20, $grn['lines'][0]['remainingQty']);
+        $state = $this->expectOk($this->getAs('wm', $url))['backorder'];
+        $this->assertSame([true, 20, 1], [$state['allowed'], $state['openQty'], $state['openLines']]);
 
         [$cancellable] = $this->expectedShipment([[$product, 5]]);
         $cancelled = $this->expectOk($this->postAs('proc', "/api/inbound/shipments/{$cancellable->number}/cancel"));

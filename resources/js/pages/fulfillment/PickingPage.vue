@@ -1,7 +1,10 @@
 <script setup>
-// Pick & Pack — tabs: pick lists (FO table + pick-list panel with scan → confirm / short pick), packing station
-// (cartons / weight / volume → pack), outbound staging.
-// Data: /api/fulfillment/orders[/:n], /api/fulfillment/pick-tasks/:id/confirm|short, /api/fulfillment/orders/:n/pack, /api/inventory/staging.
+// Pick & Pack — tabs: pick lists (FO table + pick-list panel: who holds the list, scan → confirm / short pick / batch
+// substitution, put-back), packing station (cartons / weight / volume → pack → carton labels; edit package, unpack),
+// outbound staging (lanes by trip and loading door).
+// Data: /api/fulfillment/orders[/:n], /api/fulfillment/pick-lists/:n/claim|release|assign,
+//       /api/fulfillment/pick-tasks/:id/confirm|short|substitute, /api/fulfillment/orders/:n/pack|unpack|putback|package,
+//       /api/fulfillment/staging, /api/inventory/staging.
 // Deep links: `/picking?tab=pick|pack|staging`, `/picking?fo=FO-…`.
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -22,7 +25,7 @@ function setTab(k) { router.replace({ query: { ...route.query, tab: k } }); }
 
 <template>
   <div>
-    <PageHead :sub="t('Scan الموقع ← المنتج ← الدفعة ← الكمية — FEFO مفروض من النظام', 'Scan location → product → batch → qty — FEFO enforced by the system')" />
+    <PageHead :sub="t('Scan الموقع ← المنتج ← الدفعة (عند تعدد الدفعات في الموقع) ← الكمية — FEFO مفروض من النظام', 'Scan location → product → batch (when the bin holds several) → qty — FEFO enforced by the system')" />
     <Tabs :model-value="tab" :tabs="TABS" @update:model-value="setTab" />
     <PickTab v-if="tab === 'pick'" :initial-fo="initialFo" />
     <PackTab v-else-if="tab === 'pack'" />

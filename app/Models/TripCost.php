@@ -30,6 +30,8 @@ class TripCost extends BaseModel
             'parking' => 'float',
             'third' => 'float',
             'other' => 'float',
+            'computed_at' => 'datetime',
+            'basis' => 'array',
         ];
     }
 

@@ -34,12 +34,13 @@ class ProcurementHousekeeping
     public function runNow(): array
     {
         $late = 0;
-        $pos = PurchaseOrder::with(['supplier:id,code,name_ar,name_en', 'warehouse:id,code'])
+        $pos = PurchaseOrder::with(['supplier:id,code,name_ar,name_en', 'warehouse:id,code', 'lines:id,po_id,qty,received_qty,damaged_qty,rejected_qty'])
             ->whereIn('status', PoService::OPEN_FOR_DELIVERY)->whereNotNull('due_date')->where('due_date', '<', H::dayStart())->whereNull('late_alerted_at')->get();
         foreach ($pos as $po) {
             $days = (int) H::dayStart($po->due_date)->diffInDays(H::dayStart());
+            $r = PoService::receipt($po); // the figures, not one percentage: rejected goods are still owed
             $this->notify->activity(null, 'PurchaseOrder', $po->id, $po->number,
-                "تأخر توريد {$po->number} من {$po->supplier?->name_ar} — تجاوز موعده بـ {$days} يوم ({$po->receivedPct()}% مستلم). تواصل مع المورد وسجّل المتابعة",
+                "تأخر توريد {$po->number} من {$po->supplier?->name_ar} — تجاوز موعده بـ {$days} يوم (مستلم {$r['received']} من {$r['ordered']}، المتبقي {$r['open']}). تواصل مع المورد وسجّل المتابعة",
                 "{$po->number} from {$po->supplier?->name_en} is {$days} day(s) late — follow up with the supplier", ['proc']);
             $po->update(['late_alerted_at' => now()]);
             $late++;

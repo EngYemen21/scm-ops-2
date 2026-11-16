@@ -8,7 +8,7 @@ import { fmtMoney, fmtNum, t } from '@/i18n';
 import ActionDrawer from './ActionDrawer.vue';
 import LinesEditor from './LinesEditor.vue';
 import ScoreOverrideField from './ScoreOverrideField.vue';
-import { SELECT_PLACEHOLDER, TERMS_OPTIONS, linesValid, plusDays, pname, useSupplierOptions, useWarehouseOptions } from './shared';
+import { SELECT_PLACEHOLDER, TERMS_OPTIONS, linesValid, plusDays, pname, usePolicy, useSupplierOptions, useWarehouseOptions } from './shared';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -32,8 +32,11 @@ watch(() => props.open, (open) => {
 }, { immediate: true });
 
 const sup = computed(() => suppliers.value.find((s) => s.code === f.value.supplierCode));
-const lowScore = computed(() => !!sup.value && sup.value.score < 65);
-const supplierError = computed(() => (lowScore.value && !f.value.overrideSupplierScore ? t(`تقييم المورد ${fmtNum(sup.value.score)} دون الحد الأدنى (65) — يحتاج استثناء`, `Supplier score ${fmtNum(sup.value.score)} is below 65 — override required`) : null));
+/** The supplier-score limit is the policy (procurement.minSupplierScore), not a constant. */
+const policy = usePolicy();
+const minScore = computed(() => Number(policy.value.minSupplierScore));
+const lowScore = computed(() => !!sup.value && sup.value.score < minScore.value);
+const supplierError = computed(() => (lowScore.value && !f.value.overrideSupplierScore ? t(`تقييم المورد ${fmtNum(sup.value.score)} دون الحد الأدنى (${fmtNum(minScore.value)}) — يحتاج استثناء`, `Supplier score ${fmtNum(sup.value.score)} is below ${fmtNum(minScore.value)} — override required`) : null));
 const goods = computed(() => lines.value.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.price) || 0), 0));
 /** (goods − discount + shipping) × (1 + VAT) — the approval tier still follows the goods value. */
 const gross = computed(() => (goods.value - (Number(f.value.discount) || 0) + (Number(f.value.shippingCost) || 0)) * (1 + (Number(f.value.vatPct) || 0) / 100));

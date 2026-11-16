@@ -29,6 +29,7 @@ class TripStop extends BaseModel
             'lng' => 'float',
             'arrived_at' => 'datetime',
             'completed_at' => 'datetime',
+            'window_ok' => 'boolean',
         ];
     }
 
@@ -65,5 +66,10 @@ class TripStop extends BaseModel
     public function pod(): HasOne
     {
         return $this->hasOne(ProofOfDelivery::class, 'stop_id', 'id');
+    }
+
+    public function transfer(): BelongsTo
+    {
+        return $this->belongsTo(WarehouseTransfer::class, 'transfer_id', 'id');
     }
 }
