@@ -8,6 +8,7 @@ use App\Models\InventoryBalance;
 use App\Models\InventoryMovement;
 use App\Models\Trip;
 use App\Models\Vehicle;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Tests\ApiTestCase;
 
@@ -22,12 +23,13 @@ class FulfillmentNegativesTest extends ApiTestCase
         $this->stock($frozen, 'FZ-01-1-B3', 30, 90);
         $so = $this->expectOk($this->orderFor($this->makeCustomer(), [['sku' => $frozen->sku, 'qty' => 5, 'price' => 5]]));
         $fo = $this->packedOrder($so['number'], 5);
+        $scan = ['foNumber' => $fo, 'scannedOrder' => $fo];
 
         // a dry vehicle forced onto the trip: loading checks the goods' storage class against the vehicle kind
         $dry = $this->makeVehicle('dry');
         $trip = $this->makeTrip([$fo], $dry, $this->makeDriver());
         $movements = InventoryMovement::count();
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedVehicle' => $dry->code]), 'TEMP_MISMATCH', [422]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan + ['scannedVehicle' => $dry->code]), 'TEMP_MISMATCH', [422]);
         $this->assertSame($movements, InventoryMovement::count());
         $this->assertSame(['packed', false], [FulfillmentOrder::where('number', $fo)->value('status'), (bool) FulfillmentOrder::where('number', $fo)->value('loaded')]);
         $this->assertSame(['dassigned', 'available'], [Trip::find($trip->id)->status, Vehicle::find($dry->id)->state]);
@@ -35,11 +37,11 @@ class FulfillmentNegativesTest extends ApiTestCase
 
         // a chilled truck is not enough for frozen goods either; a reefer is
         $trip->update(['vehicle_id' => $this->makeVehicle('chill')->id]);
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]), 'TEMP_MISMATCH', [422]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan), 'TEMP_MISMATCH', [422]);
         $reefer = $this->makeVehicle('reefer');
         $trip->update(['vehicle_id' => $reefer->id]);
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo, 'scannedVehicle' => $reefer->code]));
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]), 'ALREADY_LOADED', [409]);
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan + ['scannedVehicle' => $reefer->code]));
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan), 'ALREADY_LOADED', [409]);
         $this->assertSame(0, $this->onHand($frozen, 'STG-OUT'));
         $this->assertReconciles();
     }
@@ -50,10 +52,11 @@ class FulfillmentNegativesTest extends ApiTestCase
         $this->stock($chilled, 'CH-01-1-B2', 12, 20);
         $so = $this->expectOk($this->orderFor($this->makeCustomer(), [['sku' => $chilled->sku, 'qty' => 4, 'price' => 5]]));
         $fo = $this->packedOrder($so['number'], 4);
+        $scan = ['foNumber' => $fo, 'scannedOrder' => $fo];
         $trip = $this->makeTrip([$fo], $this->makeVehicle('dry'), $this->makeDriver());
-        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]), 'TEMP_MISMATCH', [422]);
+        $this->expectRejected($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan), 'TEMP_MISMATCH', [422]);
         $trip->update(['vehicle_id' => $this->makeVehicle('chill')->id]);
-        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", ['foNumber' => $fo]));
+        $this->expectOk($this->postAs('worker', "/api/fulfillment/trips/{$trip->number}/load", $scan));
         $this->assertReconciles();
     }
 
@@ -68,7 +71,8 @@ class FulfillmentNegativesTest extends ApiTestCase
 
         Batch::whereKey($batch->id)->update(['expiry_date' => now()->subDay()]);
         $this->expectRejected($this->postAs('worker', "/api/fulfillment/pick-tasks/{$task['id']}/confirm", $scan), 'EXPIRED_BATCH', [422]);
-        Batch::whereKey($batch->id)->update(['expiry_date' => now()->addDays(30)]);
+        // expiry is a date, read as allocation reads it: a batch is good through its last day (it used to be refused from 00:00)
+        Batch::whereKey($batch->id)->update(['expiry_date' => Carbon::today()]);
 
         $bin = $this->inventory()->bin($this->ryd()->id, 'A-07-3-B1');
         DB::transaction(fn () => $this->inventory()->setQuarantine($product->id, $bin->id, $batch->id, true));

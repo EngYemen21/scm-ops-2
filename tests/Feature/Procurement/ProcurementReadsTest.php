@@ -199,7 +199,7 @@ class ProcurementReadsTest extends ApiTestCase
         $this->assertSame([$receipts[$number]], $po['trace'][0]['grns']);
         $this->assertSame([$receipts[$number]], array_column($po['grns'], 'number'));
         $this->assertSame(['lines' => 1], $po['grns'][0]['_count']);
-        $this->assertSame(['id', 'number', 'postedAt'], array_keys($po['shipments'][0]['grns'][0]));
+        $this->assertSame(['id', 'number', 'postedAt', 'voidedAt'], array_keys($po['shipments'][0]['grns'][0]));
         $this->assertSame(['lines' => 1, 'grns' => 1], $this->expectOk($this->getAs('sales', "/api/procurement/po?q={$number}"))['items'][0]['_count']);
 
         $this->expectRejected($this->getAs('sales', '/api/suppliers/SUP-NOPE/performance'), 'SUPPLIER_NOT_FOUND', [404]);

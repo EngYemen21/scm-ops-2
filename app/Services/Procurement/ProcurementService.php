@@ -12,6 +12,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequisition;
 use App\Models\Rfq;
 use App\Models\Supplier;
+use App\Services\Core\SettingsService;
 use App\Services\Procurement\ProcurementHelpers as H;
 use App\Support\AppError;
 use App\Support\AuthUser;
@@ -55,11 +56,14 @@ class ProcurementService
             $byName[$s->name_ar] = $s;
             $byName[$s->name_en] = $s;
         }
+        // incoming = the open quantity of open orders — the same figure receiving and the PO page use (damaged goods did
+        // arrive and are not coming again; rejected goods are still owed; a closed order owes nothing)
         $incoming = [];
+        $staysOpen = H::rejectedStaysOpen();
         $openLines = PoLine::query()->whereHas('po', fn ($p) => $p->whereIn('status', ['approved', 'sent', 'confirmed', 'partial'])->when($wh, fn ($w) => $w->where('warehouse_id', $wh->id)))
-            ->get(['product_id', 'qty', 'received_qty']);
+            ->get(['product_id', 'qty', 'received_qty', 'damaged_qty', 'rejected_qty']);
         foreach ($openLines as $l) {
-            $incoming[$l->product_id] = ($incoming[$l->product_id] ?? 0) + max(0, $l->qty - $l->received_qty);
+            $incoming[$l->product_id] = ($incoming[$l->product_id] ?? 0) + H::openQty($l, $staysOpen);
         }
 
         $rows = [];
@@ -175,6 +179,24 @@ class ProcurementService
         ], ['draft' => true, 'source' => 'suggestion']);
     }
 
+    /**
+     * The policies the procurement and receiving screens act on. Read-only and open to every signed-in user (the settings
+     * API needs `settings.manage`); the server enforces each of them regardless of what the client shows.
+     */
+    public function policy(): array
+    {
+        $s = app(SettingsService::class);
+
+        return [
+            'minSupplierScore' => (float) ($s->get('procurement.minSupplierScore') ?? 65),
+            'prPriceTolerancePct' => (float) ($s->get('procurement.prPriceTolerancePct') ?? 10),
+            'invoiceTolerancePct' => (float) ($s->get('procurement.invoiceTolerancePct') ?? 2),
+            'rejectedStaysOpen' => H::rejectedStaysOpen(),
+            'allowSelfApproval' => (bool) $s->get('procurement.allowSelfApproval'),
+            'allowExcessReceipt' => (bool) $s->get('receiving.allowExcess'),
+        ];
+    }
+
     /** Counters for the procurement page header. */
     public function dashboard(): array
     {
@@ -204,7 +226,7 @@ class ProcurementService
         $late = $openPos->filter(fn ($p) => in_array($p->status, PoService::OPEN_FOR_DELIVERY, true) && $p->due_date && $p->due_date->lt(H::dayStart()));
         $monthStart = H::dayStart()->startOfMonth();
         $receivedValue = (float) GrnLine::query()->join('po_lines', 'po_lines.id', '=', 'grn_lines.po_line_id')
-            ->join('goods_receipts', 'goods_receipts.id', '=', 'grn_lines.grn_id')->where('goods_receipts.posted_at', '>=', $monthStart)
+            ->join('goods_receipts', 'goods_receipts.id', '=', 'grn_lines.grn_id')->where('goods_receipts.posted_at', '>=', $monthStart)->whereNull('goods_receipts.voided_at')
             ->selectRaw('coalesce(sum(grn_lines.accepted_qty * po_lines.price), 0) as v')->value('v');
         $cycle = PurchaseRequisition::whereNotNull('po_id')->whereNotNull('submitted_at')->where('submitted_at', '>=', H::dayStart()->subDays(90))
             ->join('purchase_orders', 'purchase_orders.id', '=', 'purchase_requisitions.po_id')->whereNotNull('purchase_orders.sent_at')
@@ -237,7 +259,7 @@ class ProcurementService
     {
         $supplier = H::findSupplier($code, false);
         $pos = PurchaseOrder::where('supplier_id', $supplier->id)->whereNotIn('status', ['draft', 'cancelled'])
-            ->with(['lines:id,po_id,qty', 'grns' => fn ($q) => $q->select(['id', 'po_id', 'posted_at'])->orderBy('posted_at')->orderBy('id'), 'grns.lines:id,grn_id,accepted_qty'])->get();
+            ->with(['lines:id,po_id,qty', 'grns' => fn ($q) => $q->select(['id', 'po_id', 'posted_at'])->whereNull('voided_at')->orderBy('posted_at')->orderBy('id'), 'grns.lines:id,grn_id,accepted_qty'])->get();
         $delivered = $pos->filter(fn ($p) => $p->grns->isNotEmpty());
         $onTimeInFull = 0;
         $ordered = 0;

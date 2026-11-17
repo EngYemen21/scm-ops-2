@@ -22,6 +22,8 @@ class PickTask extends BaseModel
             'qty' => 'integer',
             'picked_qty' => 'integer',
             'picked_at' => 'datetime',
+            'manual' => 'boolean',
+            'substituted' => 'boolean',
         ];
     }
 

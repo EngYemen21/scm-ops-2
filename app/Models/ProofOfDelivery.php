@@ -25,6 +25,9 @@ class ProofOfDelivery extends BaseModel
             'gps_lng' => 'float',
             'gps_accuracy' => 'float',
             'at' => 'datetime',
+            'scans' => 'array',
+            'scan_ok' => 'boolean',
+            'delivered_cartons' => 'integer',
         ];
     }
 

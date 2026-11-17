@@ -1,6 +1,7 @@
 <script setup>
-// Fleet · drivers tab: search + state filter + "blocked — docs" toggle → GET /transport/drivers (polled every 30s).
-// License / Iqama expiry warnings and performance figures per row.
+// Fleet · drivers tab: search + state filter + "blocked" toggle → GET /transport/drivers (polled every 30s).
+// License / Iqama expiry warnings and performance figures per row. A blocked driver shows WHY (row.docBlock from the
+// API): the license under the fleet minimum, an expired iqama, or a block set by hand.
 import { ref } from 'vue';
 import { useList } from '@/api/client';
 import { Chip, DataTable, ErrorBanner, SelectInput, TextInput } from '@/components';
@@ -50,7 +51,7 @@ const columns = [
     <div class="row wrap mb-2.5">
       <TextInput v-model="q" small class="w-60" :placeholder="{ ar: 'بحث بالاسم / الرقم / الجوال', en: 'Search name / code / mobile' }" @update:model-value="reset" />
       <SelectInput v-model="state" small class="w-40" :placeholder="{ ar: '— كل الحالات —', en: '— all states —' }" :options="stateOpts" @update:model-value="reset" />
-      <button type="button" class="pill" :class="{ active: blocked }" @click="blocked = !blocked; reset()">{{ t('موقوفون — وثائق', 'Blocked — docs') }}</button>
+      <button type="button" class="pill" :class="{ active: blocked }" @click="blocked = !blocked; reset()">{{ t('الموقوفون عن الإسناد', 'Blocked from assignment') }}</button>
       <div class="grow" />
       <div class="text-[10.5px] font-extrabold text-muted"><span class="num">{{ list.data.value?.total ?? '—' }}</span> {{ t('سائق', 'drivers') }}</div>
     </div>
@@ -67,7 +68,11 @@ const columns = [
         <template #cell-okPct="{ row }"><b class="text-ok">{{ fmtNum(row.okPct) }}%</b></template>
         <template #cell-ontimePct="{ row }"><b class="text-brand-dark">{{ fmtNum(row.ontimePct) }}%</b></template>
         <template #cell-safety="{ row }"><b :style="{ color: safetyColor(row.safety) }">{{ fmtNum(row.safety) }}</b></template>
-        <template #cell-state="{ row }"><Chip :map="DRIVER_STATE_LABELS" :k="row.blocked ? 'blocked' : row.state" /></template>
+        <template #cell-state="{ row }">
+          <Chip v-if="row.blocked && row.docBlock" fg="#b23b3b" bg="#fdecec" :label="row.docBlock.doc === 'iqamaExpiry' ? { ar: 'موقوف — الإقامة', en: 'Blocked — iqama' } : { ar: 'موقوف — الرخصة', en: 'Blocked — license' }" :title="lang === 'en' ? row.docBlock.en : row.docBlock.ar" />
+          <Chip v-else-if="row.blocked" fg="#b23b3b" bg="#fdecec" :label="{ ar: 'موقوف يدويًا', en: 'Blocked by hand' }" />
+          <Chip v-else :map="DRIVER_STATE_LABELS" :k="row.state" />
+        </template>
       </DataTable>
     </div>
   </div>

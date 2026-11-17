@@ -5,7 +5,8 @@ namespace App\Services\Integrations\Adapters;
 /**
  * Environment → adapter selection. Every method takes an optional env array (defaults to config/integrations.php, which reads the environment) so
  * tests can pass `[]` and get the honest "pending" implementations regardless of the developer's local .env.
- * Unconfigured → the Pending* implementation, which sends nothing and answers `integration_pending`.
+ * Unconfigured → the Pending* implementation, which sends nothing and answers `integration_pending`. The one exception
+ * is file storage: without an object store the files are kept in the database (DatabaseStorage), never dropped.
  */
 final class AdapterFactory
 {
@@ -22,10 +23,14 @@ final class AdapterFactory
         return self::v($env, 'OBJECT_STORAGE_ENDPOINT') && self::v($env, 'OBJECT_STORAGE_BUCKET') && self::v($env, 'OBJECT_STORAGE_ACCESS_KEY') && self::v($env, 'OBJECT_STORAGE_SECRET_KEY');
     }
 
+    /**
+     * Object storage when its four variables are set; otherwise the database (`stored_files`). There is no "pending"
+     * storage any more: a file handed to the system is always kept, and its row says where (`uploaded` | `stored`).
+     */
     public static function storage(?array $env = null): ObjectStorageAdapter
     {
         if (! self::storageConfigured($env)) {
-            return new PendingStorage;
+            return new DatabaseStorage;
         }
 
         return new S3CompatibleStorage(

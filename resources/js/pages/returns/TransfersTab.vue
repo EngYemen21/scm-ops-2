@@ -42,7 +42,7 @@ const columns = [
   { key: 'number', header: { ar: 'التحويل', en: 'Transfer' }, width: '130px', kind: 'id' },
   { key: 'route', header: { ar: 'المسار', en: 'Route' }, width: 'minmax(150px,1.2fr)' },
   { key: 'lines', header: { ar: 'أسطر', en: 'Lines' }, width: '60px', kind: 'num', value: (r) => r.lines?.length ?? '—' },
-  { key: 'qty', header: { ar: 'الكمية', en: 'Qty' }, width: '80px', kind: 'num', value: (r) => `${fmtNum(r.totalQty)}${r.receivedQty ? ` / ${fmtNum(r.receivedQty)}` : ''}` },
+  { key: 'qty', header: { ar: 'الكمية / المستلم', en: 'Qty / received' }, width: '104px', kind: 'num' },
   { key: 'requestedBy', header: { ar: 'الطالب', en: 'Requested by' }, width: '120px', kind: 'muted', value: (r) => r.requestedBy || '—' },
   { key: 'date', header: { ar: 'التاريخ', en: 'Date' }, width: '95px', kind: 'date', value: (r) => fmtDateOnly(r.date || r.createdAt) },
   { key: 'eta', header: { ar: 'الوصول المتوقع', en: 'ETA' }, width: '100px', kind: 'date', value: (r) => (r.eta ? fmtDateOnly(r.eta) : '—') },
@@ -69,10 +69,15 @@ const columns = [
     <div class="card">
       <DataTable :columns="columns" :paged="list.data.value" :loading="list.isLoading.value" :min-width="900" sticky-head :row-key="(r) => r.number" :empty-text="{ ar: 'لا تحويلات مطابقة', en: 'No matching transfers' }"
                  @page="page = $event" @row-click="(r) => openTrf(r.number)">
-        <template #cell-route="{ row }"><span class="text-[10.5px] font-extrabold text-brand-dark">{{ row.fromWarehouse?.code }} ← {{ row.toWarehouse?.code }}</span></template>
+        <!-- warehouse codes are Latin: an LTR box (as on the transfer page) keeps "source → destination" reading the right way in Arabic too -->
+        <template #cell-route="{ row }"><span class="ltr inline-block text-[10.5px] font-extrabold text-brand-dark">{{ row.fromWarehouse?.code }} → {{ row.toWarehouse?.code }}</span></template>
+        <template #cell-qty="{ row }">
+          <span class="cell-num">{{ fmtNum(row.totalQty) }}<template v-if="row.receivedQty"> / {{ fmtNum(row.receivedQty) }}</template></span>
+          <div v-if="row.inTransitQty && row.status === 'partial'" class="cell-sub">{{ t('في الطريق', 'on the road') }} <span class="num">{{ fmtNum(row.inTransitQty) }}</span></div>
+        </template>
         <template #cell-status="{ row }"><Chip :map="TRANSFER_LABELS" :k="row.status" /></template>
       </DataTable>
     </div>
-    <div class="hint teal mt-3">{{ t('مسودة ← بانتظار الاعتماد ← معتمد ← قيد التجهيز ← جاهز للشحن ← في العبور ← مستلم ← مكتمل. الكميات تُحجز بالمصدر عند الاعتماد وتُصرف عند الشحن وتُضاف بالوجهة عند الاستلام.', 'Draft → requested → approved → picking → ready → in transit → received → done. Quantities are reserved at source on approval, issued on shipment and added at destination on receipt.') }}</div>
+    <div class="hint teal mt-3">{{ t('مسودة ← بانتظار الاعتماد ← معتمد ← قيد التجهيز ← جاهز للشحن ← في العبور ← مستلم ← مكتمل. الكميات تُحجز بالمصدر عند الاعتماد وتُصرف عند الشحن وتُضاف بالوجهة عند الاستلام — على دفعة أو أكثر. ما لم يصل يبقى «مستلم جزئيًا» حتى يُستلم أو يُسوّى فرقه (خسارة / أُعيد للمصدر)، ولا يُقفل التحويل قبل ذلك.', 'Draft → requested → approved → picking → ready → in transit → received → done. Quantities are reserved at source on approval, issued on shipment and added at destination on receipt — in one delivery or several. What has not arrived keeps the transfer “partially received” until it is received or its variance is resolved (loss / returned to source); the transfer cannot close before that.') }}</div>
   </div>
 </template>

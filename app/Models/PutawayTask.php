@@ -21,6 +21,7 @@ class PutawayTask extends BaseModel
             'expiry_date' => 'datetime',
             'qty' => 'integer',
             'confirmed_at' => 'datetime',
+            'done_qty' => 'integer',
         ];
     }
 

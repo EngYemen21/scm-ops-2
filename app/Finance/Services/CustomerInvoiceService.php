@@ -8,12 +8,14 @@ use App\Models\Customer;
 use App\Models\FulfillmentOrder;
 use App\Models\Product;
 use App\Models\ProofOfDelivery;
+use App\Models\ReturnLine;
 use App\Models\ReturnOrder;
 use App\Models\SalesOrder;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
 use App\Services\Core\SettingsService;
+use App\Services\Sales\CreditService;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
@@ -122,42 +124,84 @@ class CustomerInvoiceService
             'newValue' => ['customer' => $customer->code, 'fo' => $fo->number, 'pod' => $pod->number, 'total' => $total, 'cogs' => $cogs, 'journal' => $journal->number]]);
         $this->notify->activity($user, 'CustomerInvoice', $inv->id, $inv->number, "صدرت فاتورة {$inv->number} للعميل {$customer->name_ar} بقيمة ".number_format($total, 2).' ر.س عن تسليم '.$fo->number,
             "Invoice {$inv->number} issued to {$customer->name_en} for {$fo->number}", ['finance']);
+        app(CreditService::class)->sync($customer->id); // the delivered order is now a receivable
 
         return $inv->refresh();
     }
 
-    /** Credit note for a post-delivery customer return (received goods of an invoiced fulfilment order). Returns null when no invoice covers it. */
+    /**
+     * Credit note for a post-delivery customer return (received goods of an invoiced fulfilment order). Returns null
+     * when no invoice covers it; idempotent per return.
+     *
+     * What is credited is what ARRIVED: the stored lines of the return are read here (`received_qty`; a line received
+     * before partial receipts existed counts in full) and added up per product — a return carries one line per batch.
+     * So the caller passes the return as it is; the `lines` relation it happens to carry is not used. A product is
+     * credited against the invoice lines that billed it, in line order, never beyond what a line billed minus what
+     * earlier credit notes took from it. The note that returns the last invoiced unit takes what is left of the
+     * invoice's net and VAT to the halala, so a fully returned invoice is settled exactly.
+     */
     public function creditFromReturn(?AuthUser $user, ReturnOrder $r): ?CustomerInvoice
     {
         if (! $r->fo_id || CustomerInvoice::where('return_id', $r->id)->exists()) {
             return CustomerInvoice::where('return_id', $r->id)->first();
         }
-        $invoice = CustomerInvoice::with('lines')->where('fo_id', $r->fo_id)->where('kind', 'invoice')->where('status', '!=', 'cancelled')->orderBy('created_at')->first();
+        // locked until the caller commits: two returns of one delivery received at the same moment must not both read
+        // the same "already credited"
+        $invoice = CustomerInvoice::with(['lines' => fn ($q) => $q->orderBy('line_no')])->where('fo_id', $r->fo_id)->where('kind', 'invoice')->where('status', '!=', 'cancelled')
+            ->orderBy('created_at')->lockForUpdate()->first();
         if (! $invoice) {
             return null;
         }
-        $credited = CustomerInvoiceLine::whereIn('invoice_id', CustomerInvoice::where('credit_of_id', $invoice->id)->where('status', '!=', 'cancelled')->pluck('id'))
-            ->selectRaw('product_id, coalesce(sum(qty), 0) as qty')->groupBy('product_id')->pluck('qty', 'product_id');
+        $arrived = [];   // product id → quantity that came back
+        foreach (ReturnLine::where('return_id', $r->id)->get(['product_id', 'qty', 'received_qty']) as $rl) {
+            $arrived[$rl->product_id] = ($arrived[$rl->product_id] ?? 0) + max(0, (int) ($rl->received_qty ?? $rl->qty));
+        }
+        $earlier = CustomerInvoice::where('credit_of_id', $invoice->id)->where('status', '!=', 'cancelled')->get(['id', 'subtotal', 'vat_amount']);
+        // a credit line copies the `so_line_id` of the invoice line it credits: that is how what was taken is found per line
+        $slot = fn (CustomerInvoiceLine $l) => $l->so_line_id ?: "product:{$l->product_id}";
+        $taken = $credited = $billed = [];
+        foreach (CustomerInvoiceLine::whereIn('invoice_id', $earlier->pluck('id'))->get(['product_id', 'so_line_id', 'qty']) as $cl) {
+            $taken[$slot($cl)] = ($taken[$slot($cl)] ?? 0) + (int) $cl->qty;
+            $credited[$cl->product_id] = ($credited[$cl->product_id] ?? 0) + (int) $cl->qty;
+        }
+        foreach ($invoice->lines as $il) {
+            $billed[$il->product_id] = ($billed[$il->product_id] ?? 0) + (int) $il->qty;
+        }
         $lines = [];
-        foreach ($r->lines as $rl) {
-            $il = $invoice->lines->firstWhere('product_id', $rl->product_id);
-            if (! $il) {
-                continue;
-            }
-            $remaining = max(0, (int) $il->qty - (int) ($credited[$rl->product_id] ?? 0));
-            $qty = min((int) $rl->qty, $remaining);
+        $settles = true;   // true when this note credits everything the invoice still carried
+        foreach ($invoice->lines as $il) {
+            $key = $slot($il);
+            $used = min((int) $il->qty, $taken[$key] ?? 0);
+            $taken[$key] = ($taken[$key] ?? 0) - $used;
+            $open = (int) $il->qty - $used;
+            $pid = $il->product_id;
+            // the product-level cap also covers an earlier credit that cannot be matched to a line
+            $qty = min($open, $arrived[$pid] ?? 0, max(0, $billed[$pid] - ($credited[$pid] ?? 0)));
+            $settles = $settles && $qty === $open;
             if ($qty <= 0) {
                 continue;
             }
+            $arrived[$pid] -= $qty;
+            $credited[$pid] = ($credited[$pid] ?? 0) + $qty;
             $lineTotal = round($qty * (float) $il->price * (1 - (float) $il->disc_pct / 100), 2);
-            $lines[] = ['so_line_id' => $il->so_line_id, 'product_id' => $il->product_id, 'qty' => $qty, 'price' => (float) $il->price, 'disc_pct' => (float) $il->disc_pct, 'line_total' => $lineTotal, 'unit_cost' => (float) $il->unit_cost, 'cogs' => round((float) $il->unit_cost * $qty, 2)];
+            $lines[] = ['so_line_id' => $il->so_line_id, 'product_id' => $pid, 'qty' => $qty, 'price' => (float) $il->price, 'disc_pct' => (float) $il->disc_pct, 'line_total' => $lineTotal, 'unit_cost' => (float) $il->unit_cost, 'cogs' => round((float) $il->unit_cost * $qty, 2)];
         }
         if (! $lines) {
             return null;
         }
-        $subtotal = round(array_sum(array_column($lines, 'line_total')), 2);
-        $vat = round($subtotal * (float) $invoice->vat_pct / 100, 2);
+        $leftNet = round((float) $invoice->subtotal - (float) $earlier->sum('subtotal'), 2);
+        $leftVat = round((float) $invoice->vat_amount - (float) $earlier->sum('vat_amount'), 2);
+        $net = round(array_sum(array_column($lines, 'line_total')), 2);
+        $subtotal = max(0.0, $settles ? $leftNet : min($net, $leftNet));
+        if ($subtotal !== $net) {
+            $last = array_key_last($lines);   // the rounding of quantity × price over several notes lands on the last line
+            $lines[$last]['line_total'] = round($lines[$last]['line_total'] + $subtotal - $net, 2);
+        }
+        $vat = max(0.0, $settles ? $leftVat : min(round($subtotal * (float) $invoice->vat_pct / 100, 2), $leftVat));
         $total = round($subtotal + $vat, 2);
+        if ($total <= 0) {
+            return null;   // goods billed at no charge: nothing to credit
+        }
         $customer = Customer::findOrFail($invoice->customer_id);
         $cn = CustomerInvoice::create([
             'number' => $this->numbering->next('CN'), 'kind' => 'credit_note', 'customer_id' => $customer->id, 'so_id' => $invoice->so_id, 'fo_id' => $invoice->fo_id, 'return_id' => $r->id,
@@ -183,6 +227,7 @@ class CustomerInvoiceService
         $this->applyToInvoice($invoice->id, $total);
         $this->audit->log($user, ['action' => 'CN.ISSUE', 'entityType' => 'CustomerInvoice', 'entityId' => $cn->id, 'entityNumber' => $cn->number, 'newValue' => ['invoice' => $invoice->number, 'return' => $r->number, 'total' => $total]]);
         $this->notify->activity($user, 'CustomerInvoice', $cn->id, $cn->number, "صدر إشعار دائن {$cn->number} بقيمة ".number_format($total, 2)." ر.س للعميل {$customer->name_ar} عن المرتجع {$r->number}", "Credit note {$cn->number} issued for return {$r->number}", ['finance']);
+        app(CreditService::class)->sync($customer->id); // the credit note lowered what the customer owes
 
         return $cn->refresh();
     }
@@ -217,6 +262,7 @@ class CustomerInvoiceService
             }
             $inv->update(['status' => 'cancelled', 'cancelled_by' => $user->username, 'cancelled_at' => now(), 'cancel_reason' => $reason]);
             $this->audit->status($user, 'CustomerInvoice', $inv->id, $inv->number, 'issued', 'cancelled', $reason);
+            app(CreditService::class)->sync($inv->customer_id); // a cancelled invoice is no longer owed
 
             return $this->get($inv->id);
         });

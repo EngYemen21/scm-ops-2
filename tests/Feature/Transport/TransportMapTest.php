@@ -8,6 +8,7 @@ use App\Models\Warehouse;
 use App\Services\Integrations\Adapters\AdapterFactory;
 use App\Services\Integrations\Adapters\MapboxMaps;
 use App\Services\Integrations\Adapters\PendingMaps;
+use App\Services\Transport\TripsService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\ApiTestCase;
@@ -82,8 +83,9 @@ class TransportMapTest extends ApiTestCase
 
     public function test_trip_route_comes_from_the_provider_and_is_cached(): void
     {
+        [$t] = $this->locatedTrip(); // planned before the provider is configured: creating a trip also plans its arrivals
+        $this->assertSame(['estimate', 'estimate', 'estimate'], TripStop::where('trip_id', $t['id'])->orderBy('seq')->pluck('eta_source')->all());
         $this->useMapbox();
-        [$t] = $this->locatedTrip();
         $line = ['type' => 'LineString', 'coordinates' => [[46.844, 24.6408], [46.68, 24.70], [46.844, 24.6408]]];
         Http::fake(['api.mapbox.com/directions/*' => Http::response(['code' => 'Ok', 'routes' => [[
             'duration' => 5400, 'distance' => 61250, 'geometry' => $line, 'legs' => [['duration' => 1200, 'distance' => 14000], ['duration' => 1500, 'distance' => 16000], ['duration' => 1300, 'distance' => 15000], ['duration' => 1400, 'distance' => 16250]],
@@ -101,13 +103,23 @@ class TransportMapTest extends ApiTestCase
             // lng,lat order; round trip from the warehouse; traffic-aware profile; the token travels as a query value
             return str_contains($r->url(), '/directions/v5/mapbox/driving-traffic/46.844,24.6408;46.68,24.7;46.8,24.75;46.6,24.66;46.844,24.6408') && str_contains($r->url(), 'access_token='.self::TOKEN);
         });
+
+        // the planned arrivals use the very same answer (legs of 20 · 25 · 22 · 23 min + 15 min at each stop, start 08:00):
+        // drawing the route and planning the stops cost ONE provider call between them
+        $plan = $this->app->make(TripsService::class)->recomputeEtas($t['number']);
+        $this->assertSame(['source' => 'maps', 'planned' => 3, 'unlocated' => 0, 'late' => 0, 'plannedEnd' => '10:15'], $plan);
+        $this->assertSame([['08:20', 'maps'], ['09:00', 'maps'], ['09:37', 'maps']], TripStop::where('trip_id', $t['id'])->orderBy('seq')->get()->map(fn ($s) => [$s->eta, $s->eta_source])->all());
+        Http::assertSentCount(1);
     }
 
     public function test_provider_failure_is_reported_not_hidden(): void
     {
-        $this->useMapbox();
         [$t] = $this->locatedTrip();
+        $this->useMapbox();
         Http::fake(['api.mapbox.com/*' => Http::response(['code' => 'InvalidInput', 'message' => 'bad coordinate'], 422)]);
+        // a provider that has no answer never leaves the stops without a plan: the estimate is used and says it is one
+        $this->assertSame('estimate', $this->app->make(TripsService::class)->recomputeEtas($t['number'])['source']);
+        $this->assertSame(0, TripStop::where('trip_id', $t['id'])->whereNull('eta')->count());
 
         $map = $this->expectOk($this->getAs('disp', "/api/transport/trips/{$t['number']}/map"));
         $this->assertSame('error', $map['route']['status']);
@@ -118,8 +130,8 @@ class TransportMapTest extends ApiTestCase
 
     public function test_optimise_reorders_the_stops_through_the_normal_rule(): void
     {
-        $this->useMapbox();
         [$t, $ids] = $this->locatedTrip();
+        $this->useMapbox();
         Http::fake([
             // waypoints answer in INPUT order (warehouse, stop 1, 2, 3); waypoint_index = position in the optimised tour
             'api.mapbox.com/optimized-trips/*' => Http::response(['code' => 'Ok', 'trips' => [['distance' => 48700, 'duration' => 4380]],
@@ -138,6 +150,10 @@ class TransportMapTest extends ApiTestCase
         $this->assertSame([$ids[1], $ids[2], $ids[0]], array_column($res['map']['stops'], 'id'));
         $this->assertSame([$ids[1], $ids[2], $ids[0]], TripStop::where('trip_id', $t['id'])->orderBy('seq')->pluck('id')->all());
         $this->assertSame(1, AuditLog::where('action', 'TRIP.REORDER_STOPS')->where('entity_number', $t['number'])->count());
+        // the new order is planned at once: the stops carry their arrival in the optimised sequence
+        $etas = TripStop::where('trip_id', $t['id'])->orderBy('seq')->pluck('eta')->all();
+        $this->assertCount(3, array_filter($etas));
+        $this->assertSame($etas, collect($etas)->sort()->values()->all(), 'later stops arrive later');
         Http::assertSent(fn (Request $r) => str_contains($r->url(), '/optimized-trips/v1/mapbox/driving/46.844,24.6408;') && str_contains($r->url(), 'source=first') && str_contains($r->url(), 'roundtrip=true'));
     }
 

@@ -208,9 +208,9 @@ class InventoryQueryService
             ->get();
 
         $out = $in = [];
-        $transit = TransferLine::with('transfer:id,from_warehouse_id,to_warehouse_id')->whereHas('transfer', fn ($q) => $q->where('status', 'transit'))->get();
+        $transit = TransferLine::with('transfer:id,from_warehouse_id,to_warehouse_id')->whereHas('transfer', fn ($q) => $q->whereIn('status', ['transit', 'partial']))->get();
         foreach ($transit as $l) {
-            $qty = $l->qty - ($l->received_qty ?? 0);
+            $qty = max(0, $l->qty - (int) $l->received_qty - (int) $l->variance_qty);
             $out[$l->transfer->from_warehouse_id] = ($out[$l->transfer->from_warehouse_id] ?? 0) + $qty;
             $in[$l->transfer->to_warehouse_id] = ($in[$l->transfer->to_warehouse_id] ?? 0) + $qty;
         }

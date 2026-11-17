@@ -1,6 +1,7 @@
 <script setup>
 // Multi-line editor of the quotation / sales-order forms: product picker, qty, unit price, optional discount %, live net
 // per line and totals incl. VAT. Field errors arrive keyed as `lines.<i>.<field>` (client validation + server details).
+// The VAT rate and the discount limit are policies (GET /sales/policy): a discount above the limit is marked on its line.
 //   <LinesEditor v-model:lines="lines" discount :errors="errors" />
 import { computed } from 'vue';
 import { Btn, NumberInput } from '@/components';
@@ -8,7 +9,7 @@ import { isMobile } from '@/composables/viewport';
 import { fmtMoney, num, t } from '@/i18n';
 import ProductPicker from './ProductPicker.vue';
 import TotalsBox from './TotalsBox.vue';
-import { lineNet, linesTotals, newLine } from './shared';
+import { lineNet, linesTotals, newLine, usePolicy } from './shared';
 
 const props = defineProps({
   /** LineDraft[] — see shared.js */
@@ -18,8 +19,11 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:lines']);
 
+const policy = usePolicy();
 const cols = computed(() => (props.discount ? 'minmax(170px,1.5fr) 80px 95px 70px 95px 28px' : 'minmax(170px,1.5fr) 80px 95px 95px 28px'));
-const totals = computed(() => linesTotals(props.lines));
+const totals = computed(() => linesTotals(props.lines, policy.value?.vatPct));
+/** The line carries a discount above the limit: it will need the discount approval. */
+const aboveMax = (l) => props.discount && policy.value?.maxDiscountPct != null && num(l.discPct) > num(policy.value.maxDiscountPct);
 /** On a phone the column header row is hidden, so every field carries its own caption. */
 const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
 
@@ -44,6 +48,7 @@ function onPick(i, l, p, sku) {
         <ProductPicker small :value="l.sku" @pick="(p, sku) => onPick(i, l, p, sku)" />
         <div v-if="l.name" class="faint mt-0.5 text-[8.5px]">{{ l.name }}{{ l.uom ? ` · ${l.uom}` : '' }}</div>
         <div v-if="errors[`lines.${i}.sku`]" class="field-err">{{ errors[`lines.${i}.sku`] }}</div>
+        <div v-if="aboveMax(l) && !errors[`lines.${i}.discPct`]" class="mt-0.5 text-[8.5px] font-extrabold text-warn">{{ t(`خصم فوق الحد ${policy.maxDiscountPct}% — يحتاج اعتماد الخصم`, `Discount above the ${policy.maxDiscountPct}% limit — needs discount approval`) }}</div>
       </div>
       <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :error="errors[`lines.${i}.qty`]" @update:model-value="upd(i, { qty: $event })" />
       <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price" :min="0" :error="errors[`lines.${i}.price`]" @update:model-value="upd(i, { price: $event })" />

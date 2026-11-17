@@ -1,7 +1,8 @@
 <script setup>
 // Driver "My Trips" — prototype `pDrv`, mobile-first 430px column. GET /api/delivery/my-trips → { current, upcoming, gps }
-// (polled every 30s). Start route / arrive / deliver (POD: receiver, signature, photo, phone GPS) / partial / fail; ops requests.
-// ETA, live tracking and file upload are "Integration Pending" — shown as such, never simulated.
+// (polled every 30s). Start route / arrive / deliver (POD: scan of the order, receiver, signature / photo, phone GPS) /
+// partial per item / fail; ops requests. Each stop shows the customer's window and the PLANNED arrival (a plan, not
+// tracking); live vehicle tracking stays "Integration Pending" until a GPS provider is connected.
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, useAction, useGet, useList } from '@/api/client';
@@ -13,7 +14,7 @@ import { BIG } from './driver';
 import DriverStopCard from './DriverStopCard.vue';
 import DriverTrackingStatus from './DriverTrackingStatus.vue';
 import OpsRequestForm from './OpsRequestForm.vue';
-import { OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, drvName, labelOf, vehName } from './tms';
+import { ETA_SOURCE_LABELS, OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, drvName, labelOf, vehName } from './tms';
 
 const auth = useAuth();
 const act = useAction();
@@ -40,6 +41,9 @@ const canStart = computed(() => canExec.value && !!cur.value && cur.value.status
 const onRoute = computed(() => !!cur.value && ['onroute', 'partial'].includes(cur.value.status));
 const waitingDispatch = computed(() => !!cur.value && cur.value.status !== 'onroute' && !['partial', 'completed', 'returning'].includes(cur.value.status));
 const notDriver = computed(() => q.error.value?.code === 'NOT_A_DRIVER');
+/** Planned arrival at the next stop as the API reports it (`planned` | `unavailable`). */
+const eta = computed(() => (cur.value?.eta?.status === 'planned' ? cur.value.eta : null));
+const policy = computed(() => cur.value?.policy || q.data.value?.policy || {});
 
 const start = () => act.run(() => api.postIdempotent(`/delivery/trips/${encodeURIComponent(cur.value.number)}/start`), { success: (r) => r?.message || t('بدأت الرحلة — بالتوفيق', 'Trip started — drive safe'), invalidate: ['delivery', 'transport'] });
 
@@ -86,15 +90,21 @@ const sub = computed(() => `${userName.value} · ${t('واجهة السائق Mo
           <div class="num text-[13px] font-bold text-brand">{{ prog.done }}/{{ prog.total }}</div>
         </div>
         <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-night-3"><div class="h-full bg-brand" :style="{ width: progPct + '%' }" /></div>
+        <div v-if="eta" class="mt-2 text-[9.5px] text-[#c9cde0]">
+          {{ t('الوصول المخطط للمحطة', 'Planned arrival at stop') }} <span class="num">{{ eta.stop }}</span>:
+          <b dir="ltr" class="num" :class="eta.windowOk === false ? 'text-[#ff9c9c]' : 'text-brand'">{{ eta.time }}</b>
+          <span class="text-[#8b90a5]"> ({{ bi(labelOf(ETA_SOURCE_LABELS, eta.source)) }})</span>
+          <span v-if="eta.windowOk === false" class="font-extrabold text-[#ff9c9c]"> · {{ t('خارج نافذة العميل', 'outside the customer window') }}</span>
+        </div>
         <DriverTrackingStatus v-if="!onBehalf" />
         <button v-if="canStart" type="button" :class="BIG" class="mt-[13px] h-[46px] w-full rounded-xl bg-brand text-[12.5px] text-[#0b2a30]" :disabled="act.pending.value" @click="start">{{ t('بدء الرحلة — Start Route', 'Start Route') }}</button>
         <div v-if="waitingDispatch" class="mt-2.5 text-[9.5px] text-[#8b90a5]">{{ t('بانتظار التحميل والإرسال من المستودع (Dispatch) قبل بدء الرحلة.', 'Waiting for warehouse loading & dispatch before the trip can start.') }}</div>
       </div>
 
       <div class="col mt-3 !gap-2.5">
-        <DriverStopCard v-for="s in stops" :key="s.id" :stop="s" :is-next="s.seq === nextSeq" :on-route="onRoute && canExec" />
+        <DriverStopCard v-for="s in stops" :key="s.id" :stop="s" :is-next="s.seq === nextSeq" :on-route="onRoute && canExec" :policy="policy" :on-behalf="!!cur.onBehalf" />
       </div>
-      <div class="hint">{{ t('كل تسليم يُنشئ POD مرقّمًا بالوقت والموقع. التوقيع والصور تُحفظ كمراجع (رفع الملفات: Integration Pending). الفشل يعيد الطلب للمستودع كمرتجع توصيل.', 'Each delivery creates a numbered POD with time and location. Signatures and photos are stored as references (file upload: Integration Pending). A failed stop returns the order to the warehouse as a delivery return.') }}</div>
+      <div class="hint">{{ t('كل تسليم يُنشئ POD مرقّمًا بالوقت والموقع، ومعه مسح الطلب وتوقيع المستلم أو صورة التسليم — يُحفظان ويمكن عرضهما من بطاقة المحطة. التسليم الجزئي يُسجَّل لكل صنف وما لم يُسلَّم يعود للمستودع كمرتجع؛ تعذر التسليم يعيد الطلب كله كمرتجع توصيل.', 'Each delivery creates a numbered POD with time and location, the scan of the order and the receiver signature or delivery photo — both are stored and can be viewed from the stop card. A partial delivery is recorded per item and what was not delivered returns to the warehouse; a failed stop returns the whole order as a delivery return.') }}</div>
     </template>
 
     <div v-if="upcoming.length > 0" class="card mt-3">

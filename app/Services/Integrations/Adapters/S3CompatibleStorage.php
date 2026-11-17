@@ -8,7 +8,7 @@ use RuntimeException;
 use Throwable;
 
 /** S3-compatible object storage over plain HTTP + SigV4 (path-style addressing: {endpoint}/{bucket}/{key}). */
-class S3CompatibleStorage implements ObjectStorageAdapter
+class S3CompatibleStorage implements ObjectStorageAdapter, ReadableStorage
 {
     private readonly SigV4 $signer;
 
@@ -51,6 +51,22 @@ class S3CompatibleStorage implements ObjectStorageAdapter
     public function getSignedUrl(string $key, int $expiresSeconds = 900): ?string
     {
         return $this->signer->presignUrl('GET', $this->objectUrl($key), $expiresSeconds);
+    }
+
+    /** Signed GET of the object, so the API can stream it to a signed-in user without exposing a bucket URL. */
+    public function getObject(string $key): ?array
+    {
+        $signed = $this->signer->signRequest('GET', $this->objectUrl($key), [], hash('sha256', ''));
+        $res = Http::timeout($this->timeoutMs / 1000)->withHeaders($signed['headers'])->get($signed['url']);
+        if ($res->status() === 404) {
+            return null;
+        }
+        if (! $res->successful()) {
+            throw new RuntimeException("storage GET failed: HTTP {$res->status()} ".Pending::snippet($res->body()));
+        }
+        $bytes = $res->body();
+
+        return ['bytes' => $bytes, 'mime' => $res->header('Content-Type') ?: null, 'size' => strlen($bytes)];
     }
 
     /** HEAD bucket with a hard timeout; never throws. */

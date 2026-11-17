@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Integrations;
 
 use App\Http\Controllers\Controller;
+use App\Services\Integrations\FileStore;
 use App\Services\Integrations\IntegrationsService;
 use App\Services\Integrations\OutboxService;
 use App\Support\AuthUser;
@@ -70,6 +71,29 @@ class IntegrationsController extends Controller
     public function podAttachments(string $podId)
     {
         return $this->integrations->podAttachments($podId);
+    }
+
+    /**
+     * A stored file (POD signature / photo, attachment) for a signed-in user. Default: the bytes, streamed with their
+     * type (images and PDF inline, everything else as a download). `?as=data` answers JSON with a data URL instead —
+     * what the client uses, because an `<img>` tag cannot send the bearer token.
+     */
+    public function file(Request $request, string $key)
+    {
+        $file = $this->integrations->file(AuthUser::current(), $key);
+        if ($request->query('as') === 'data') {
+            return ['key' => $key, 'fileName' => $file['fileName'], 'kind' => $file['kind'], 'mime' => $file['mime'], 'size' => $file['size'],
+                'dataUrl' => "data:{$file['mime']};base64,".base64_encode($file['bytes'])];
+        }
+        $inline = in_array($file['mime'], FileStore::INLINE_MIMES, true);
+
+        return response($file['bytes'], 200, [
+            'Content-Type' => $inline ? $file['mime'] : 'application/octet-stream',
+            'Content-Length' => (string) $file['size'],
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment')."; filename*=UTF-8''".rawurlencode($file['fileName']),
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
     }
 
     /** Base64 of a 5 MB file is ~6.7 MB of text (+ an optional data-URL prefix). */

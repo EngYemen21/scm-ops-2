@@ -164,3 +164,36 @@ request, 3 requests per load — a 48 h window fills in over a few refreshes) in
 vehicle + time; standing-still repeats skipped). The window starts on a whole hour. The line drawn is that track
 snapped to the streets by Mapbox Map Matching (`TraceMatcher`, per-hour blocks cached; the growing last block is
 re-matched at most every 2 min); it breaks at gaps (no fix for 15 min or a 3 km jump) instead of inventing a road.
+
+## 7. Releasing the 2026-11 operational hardening
+
+One release, five migrations (`2026_11_15_*`), all additive. In this order:
+
+1. `php artisan migrate --force` against the production database. The first migration also adds the new permissions
+   and grants (`PermissionSync`), so no separate permission step is needed.
+2. Deploy the code.
+3. `php artisan scm:credit-sync` once. `customers.balance` used to be a counter that only grew; it is now the customer's
+   exposure (unpaid invoices + accepted orders not yet delivered). The command prints every balance it rewrites.
+4. `php artisan scm:reconcile` and `php artisan scm:finance-check` — both must report OK.
+5. Smoke: `SMOKE_PASSWORD=… node tools/smoke.mjs <url>`.
+
+What changes for the people on the floor from the first minute (all are policies, Settings → policies):
+
+| Policy (default) | Effect |
+|---|---|
+| `loading.requireOrderScan` (on) | loading needs a scan of the order or one of its cartons; without it: a supervisor with `load.override` and a reason |
+| `loading.enforceSequence` (on) | an order is not loaded while the order of a later stop is not packed yet |
+| `delivery.requireScan` (on) | the driver scans a carton or gives a reason |
+| `delivery.requireSignature` (on) | a delivery needs a signature or a photo |
+| `fulfillment.backorderShortPicks` (on) | a short pick becomes a linked backorder order |
+| `fulfillment.blockBinOnShortPick` (on) | "not found" freezes the bin row until it is counted |
+| `returns.requireBatchOnRestock` (on) | expiry-tracked goods go back on the shelf only with a batch and a date |
+| `procurement.rejectedStaysOpen` (on) | rejected goods stay owed by the supplier |
+| `transfers.requireCarrier` (off) | when on, a transfer ships only with a vehicle and its driver, or a named carrier |
+
+Clock: on the serverless deployment there is no scheduler. The integration heartbeat runs `OpsHousekeeping`: waiting
+orders every 10 minutes; once a day expired quotations, driver / vehicle document alerts and the customer balances.
+Under a real scheduler the same work also has its own commands (`php artisan schedule:list`).
+
+Proof-of-delivery files are kept in the database table `stored_files` until object storage (S3) is configured; they
+grow with every delivery — connect object storage before the volume does.

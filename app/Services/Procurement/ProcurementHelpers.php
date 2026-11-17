@@ -5,6 +5,7 @@ namespace App\Services\Procurement;
 use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\Core\SettingsService;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use Illuminate\Support\Carbon;
@@ -19,6 +20,27 @@ final class ProcurementHelpers
     public static function round2(float|int $n): float
     {
         return round($n * 100) / 100;
+    }
+
+    /** Policy `procurement.rejectedStaysOpen`: goods rejected at receiving never entered and are still owed by the supplier. */
+    public static function rejectedStaysOpen(): bool
+    {
+        return (bool) app(SettingsService::class)->get('procurement.rejectedStaysOpen');
+    }
+
+    /**
+     * THE open quantity of a purchase-order line — what the supplier still owes: ordered − accepted − damaged.
+     * Damaged goods count as received (they are in DMG-01 and are settled by a purchase return); rejected goods count
+     * as received only when the policy is switched off. Receiving, follow-up shipments, the PO status, the PO page and
+     * "incoming" in replenishment all use this one formula.
+     *
+     * @param  object  $line  a PoLine (or any row with qty / received_qty / damaged_qty / rejected_qty)
+     */
+    public static function openQty(object $line, ?bool $rejectedStaysOpen = null): int
+    {
+        $rejectedStaysOpen ??= self::rejectedStaysOpen();
+
+        return max(0, (int) $line->qty - (int) $line->received_qty - (int) $line->damaged_qty - ($rejectedStaysOpen ? 0 : (int) $line->rejected_qty));
     }
 
     /** The approver must hold the step's role; `super` passes every step. */

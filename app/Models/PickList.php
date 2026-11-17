@@ -20,6 +20,7 @@ class PickList extends BaseModel
     {
         return [
             'completed_at' => 'datetime',
+            'assigned_at' => 'datetime',
         ];
     }
 

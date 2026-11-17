@@ -32,7 +32,7 @@ const sumOf = (g, key) => g.lines.reduce((a, l) => a + l[key], 0);
 
   <template v-if="sel">
     <div v-if="detail.isLoading.value" class="skel min-h-[200px]" />
-    <GrnDetail v-else-if="detail.data.value" :grn="detail.data.value" />
+    <GrnDetail v-else-if="detail.data.value" :grn="detail.data.value" @changed="detail.refetch()" />
   </template>
   <div v-else class="card">
     <div class="card-head">
@@ -42,11 +42,13 @@ const sumOf = (g, key) => g.lines.reduce((a, l) => a + l[key], 0);
     <div v-if="list.isLoading.value && !list.data.value" class="skel m-[18px] min-h-[100px]" />
     <div v-if="list.data.value && list.data.value.items.length === 0" class="empty">{{ t('لا إشعارات استلام بعد.', 'No goods receipts yet.') }}</div>
     <div v-for="g in list.data.value?.items || []" :key="g.id" class="row wrap cursor-pointer border-t border-line-2 px-[18px] py-2.5 !gap-3" @click="emit('update:sel', g.number)">
-      <span class="num min-w-[130px] text-[10px] text-ok">{{ g.number }}</span>
+      <span class="num min-w-[130px] text-[10px]" :class="g.voidedAt ? 'text-faint line-through' : 'text-ok'">{{ g.number }}</span>
       <RouterLink :to="`/po/${encodeURIComponent(g.po.number)}`" class="num min-w-[120px] text-[10px] !text-violet" @click.stop>{{ g.po.number }}</RouterLink>
       <span class="min-w-[150px] text-[10.5px] font-extrabold">{{ pn(g.supplier) }}</span>
       <span class="min-w-[200px] flex-1 text-[10px] leading-[1.7] text-sec">{{ lang === 'ar' ? g.summaryAr : g.summaryEn }}</span>
-      <span class="row !gap-1">
+      <!-- a voided receipt stays in the log as history; its quantities are not shown as totals -->
+      <span v-if="g.voidedAt" class="row !gap-1"><Chip small fg="#b23b3b" bg="#fdecec" :label="{ ar: 'ملغى', en: 'Voided' }" :title="g.voidReason || null" /></span>
+      <span v-else class="row !gap-1">
         <Chip small fg="#1d7a3e" bg="#e6f9ec" :label="`${fmtNum(sumOf(g, 'acceptedQty'))} ✓`" />
         <Chip v-if="sumOf(g, 'damagedQty') > 0" small fg="#b23b3b" bg="#fdecec" :label="`${fmtNum(sumOf(g, 'damagedQty'))} ${t('تالف', 'dmg')}`" />
         <Chip v-if="sumOf(g, 'rejectedQty') > 0" small fg="#b26a16" bg="#fbf0dd" :label="`${fmtNum(sumOf(g, 'rejectedQty'))} ${t('مرفوض', 'rej')}`" />

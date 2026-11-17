@@ -1,7 +1,7 @@
 <script setup>
 // Finance — the CFO board and the ledger's documents in one page: board · journals · customer invoices · payments ·
-// expenses · fixed assets · chart of accounts · periods · reports. Deep links: `?tab=…`, `?journal=JV-…`, `?invoice=CI-…`,
-// `?payment=RCT-…`, `?expense=EXP-…`, `?asset=FA-…`, `?report=trial-balance`.
+// supplier debit notes · expenses · fixed assets · chart of accounts · periods · reports. Deep links: `?tab=…`,
+// `?journal=JV-…`, `?invoice=CI-…`, `?payment=RCT-…`, `?note=DN-…`, `?expense=EXP-…`, `?asset=FA-…`, `?report=trial-balance`.
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGet } from '@/api/client';
@@ -12,6 +12,7 @@ import { qs } from '@/pages/procurement/shared';
 import AccountsTab from './AccountsTab.vue';
 import AssetsTab from './AssetsTab.vue';
 import BoardTab from './BoardTab.vue';
+import DebitNotesTab from './DebitNotesTab.vue';
 import ExpensesTab from './ExpensesTab.vue';
 import InvoicesTab from './InvoicesTab.vue';
 import JournalsTab from './JournalsTab.vue';
@@ -22,7 +23,7 @@ import ReportsTab from './ReportsTab.vue';
 const auth = useAuth();
 const route = useRoute();
 const router = useRouter();
-const TAB_KEYS = ['board', 'journals', 'invoices', 'payments', 'expenses', 'assets', 'accounts', 'periods', 'reports'];
+const TAB_KEYS = ['board', 'journals', 'invoices', 'payments', 'debit-notes', 'expenses', 'assets', 'accounts', 'periods', 'reports'];
 const tab = computed(() => { const k = qs(route.query.tab); return TAB_KEYS.includes(k) ? k : 'board'; });
 const setTab = (k) => router.replace({ query: { tab: k } });
 
@@ -33,6 +34,7 @@ const tabs = computed(() => [
   { k: 'journals', label: { ar: 'القيود', en: 'Journals' }, badge: board.value?.period?.draftJournals },
   { k: 'invoices', label: { ar: 'فواتير العملاء', en: 'Customer invoices' }, badge: board.value?.receivables?.overdue?.count },
   { k: 'payments', label: { ar: 'المقبوضات والمدفوعات', en: 'Receipts & payments' } },
+  { k: 'debit-notes', label: { ar: 'إشعارات مدينة للموردين', en: 'Supplier debit notes' } },
   { k: 'expenses', label: { ar: 'المصروفات', en: 'Expenses' } },
   { k: 'assets', label: { ar: 'الأصول الثابتة', en: 'Fixed assets' } },
   { k: 'accounts', label: { ar: 'دليل الحسابات', en: 'Chart of accounts' } },
@@ -49,6 +51,7 @@ const tabs = computed(() => [
     <JournalsTab v-else-if="tab === 'journals'" />
     <InvoicesTab v-else-if="tab === 'invoices'" />
     <PaymentsTab v-else-if="tab === 'payments'" />
+    <DebitNotesTab v-else-if="tab === 'debit-notes'" />
     <ExpensesTab v-else-if="tab === 'expenses'" />
     <AssetsTab v-else-if="tab === 'assets'" />
     <AccountsTab v-else-if="tab === 'accounts'" />

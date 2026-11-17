@@ -1,6 +1,8 @@
 <script setup>
 // Fleet · operational requests of drivers: status pills → GET /transport/ops-requests (polled every 30s); the flow buttons
 // come from the server (`allowed` next states) → POST /transport/ops-requests/:number/status { to, note }.
+// Processing a fuel / maintenance / tire / vehicle request creates a fleet document (a posted fuel record, an open
+// maintenance order): OpsRequestProcessModal asks for the receipt details first. Other types are a plain confirmation.
 // Attachments are references: "Integration Pending" (no file storage connected).
 import { computed, ref } from 'vue';
 import { api, useAction, useList } from '@/api/client';
@@ -8,14 +10,19 @@ import { Btn, Chip, EmptyState, ErrorBanner, SectionCard } from '@/components';
 import { bi, fmtDate, fmtNum, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { ask, confirm } from '@/stores/ui';
+import OpsRequestProcessModal from './OpsRequestProcessModal.vue';
 import { OPREQ_ACTION_LABELS, OPREQ_STATE_LABELS, OPREQ_TYPE_LABELS, PENDING, labelOf } from './tms';
 
 const emit = defineEmits(['new', 'open-trip', 'open-vehicle']);
+
+/** Request types whose processing creates a fleet document. */
+const DOCUMENT_TYPES = ['fuel', 'maint', 'tire', 'vehicle'];
 
 const auth = useAuth();
 const act = useAction();
 const status = ref('submitted,review,approved');
 const page = ref(1);
+const processing = ref(null);
 const list = useList('/transport/ops-requests', () => ({ status: status.value || undefined, page: page.value, pageSize: 20 }), { refetchInterval: 30_000 });
 const items = computed(() => list.data.value?.items || []);
 
@@ -25,6 +32,7 @@ const tone = (to) => (to === 'approved' ? 'softGreen' : to === 'rejected' ? 'sof
 async function setState(r, to) {
   let note;
   if (to === 'rejected') { const n = await ask({ title: { ar: `رفض الطلب ${r.number}؟`, en: `Reject ${r.number}?` }, label: { ar: 'سبب الرفض', en: 'Rejection reason' }, tone: 'danger', okLabel: { ar: 'رفض', en: 'Reject' } }); if (n == null) return; note = n || undefined; }
+  else if (to === 'processed' && DOCUMENT_TYPES.includes(r.type)) { processing.value = r; return; }
   else if (to === 'processed' && !(await confirm({ title: { ar: `معالجة الطلب ${r.number}؟`, en: `Process ${r.number}?` }, sub: { ar: 'صرف المبلغ / تنفيذ الطلب وتسجيله في Audit.', en: 'Disburse / execute the request and record it in the audit trail.' }, tone: 'dark' }))) return;
   await act.run(() => api.postIdempotent(`/transport/ops-requests/${r.number}/status`, { to, note }), { success: (x) => x?.message || t('تم تحديث الطلب', 'Request updated'), invalidate: ['transport'] });
 }
@@ -69,5 +77,6 @@ async function setState(r, to) {
         <button v-for="i in list.data.value.pages" :key="i" type="button" class="pg-btn" :class="{ active: page === i }" @click="page = i">{{ i }}</button>
       </div>
     </SectionCard>
+    <OpsRequestProcessModal :request="processing" @close="processing = null" />
   </div>
 </template>

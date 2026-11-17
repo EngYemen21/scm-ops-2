@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Inventory;
 
+use App\Finance\Models\Account;
+use App\Finance\Models\Journal;
+use App\Finance\Models\JournalLine;
 use App\Models\Batch;
 use App\Models\Bin;
 use App\Models\InventoryBalance;
@@ -53,6 +56,25 @@ trait InventoryFixtures
             'type' => 'opening', 'productId' => $product->id, 'batchId' => $batch?->id, 'qty' => $qty,
             'to' => ['warehouseId' => $wh->id, 'binId' => $bin->id], 'reference' => ['type' => 'OpeningBalance', 'number' => $reference],
         ]));
+    }
+
+    /** Opening stock at a given unit cost (re-averages the product's moving average like a priced receipt). */
+    protected function stockAtCost(Product $product, ?Batch $batch, Warehouse $wh, Bin $bin, int $qty, float $unitCost, string $reference): void
+    {
+        DB::transaction(fn () => $this->engine()->post(null, $this->engine()->newTxId(), [
+            'type' => 'opening', 'productId' => $product->id, 'batchId' => $batch?->id, 'qty' => $qty, 'unitCost' => $unitCost,
+            'to' => ['warehouseId' => $wh->id, 'binId' => $bin->id], 'reference' => ['type' => 'OpeningBalance', 'number' => $reference],
+        ]));
+    }
+
+    /** Debit − credit left on the "inventory in transit" account by the journals of one transfer (0.0 once it is fully accounted for). */
+    protected function inTransitNet(string $transferId): float
+    {
+        $account = Account::where('role', 'inventory_in_transit')->firstOrFail();
+        $journals = Journal::where('source_type', 'WarehouseTransfer')->where('source_id', $transferId)->pluck('id');
+        $sum = JournalLine::whereIn('journal_id', $journals)->where('account_id', $account->id)->selectRaw('coalesce(sum(debit), 0) as debit, coalesce(sum(credit), 0) as credit')->first();
+
+        return round((float) $sum->debit - (float) $sum->credit, 2);
     }
 
     protected function balance(string $productId, string $binId, ?string $batchId): ?InventoryBalance

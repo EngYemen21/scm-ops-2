@@ -24,6 +24,8 @@ const inv = computed(() => (props.number ? invQ.data.value : null));
 const VARIANCE_KIND = { qty: { ar: 'كمية', en: 'Qty' }, price: { ar: 'سعر', en: 'Price' }, charges: { ar: 'خصم / شحن', en: 'Discount / shipping' } };
 const varianceText = (v) => {
   const kind = lang.value === 'ar' ? VARIANCE_KIND[v.kind]?.ar : VARIANCE_KIND[v.kind]?.en;
+  // charges are compared with what is LEFT of the order's discount / shipping after its earlier invoices — the server says which and why
+  if (v.kind === 'charges' && v.fields) return `${kind}: ${lang.value === 'ar' ? v.textAr : v.textEn}`;
   if (v.kind === 'charges') return `${kind}: ${t('المتوقع', 'expected')} ${fmtMoney(v.expected?.discount)} / ${fmtMoney(v.expected?.shipping)} — ${t('الفعلي', 'actual')} ${fmtMoney(v.actual?.discount)} / ${fmtMoney(v.actual?.shipping)}`;
   return `${kind} · ${t('بند', 'line')} ${v.lineNo} ${v.product ? `(${v.product})` : ''}: ${t('المتوقع', 'expected')} ${v.kind === 'qty' ? fmtNum(v.expected) : fmtMoney(v.expected)} — ${t('الفعلي', 'actual')} ${v.kind === 'qty' ? fmtNum(v.actual) : fmtMoney(v.actual)}`;
 };

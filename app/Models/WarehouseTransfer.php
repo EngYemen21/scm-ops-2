@@ -40,4 +40,19 @@ class WarehouseTransfer extends BaseModel
     {
         return $this->hasMany(TransferLine::class, 'transfer_id', 'id');
     }
+
+    public function trip(): BelongsTo
+    {
+        return $this->belongsTo(Trip::class, 'trip_id', 'id');
+    }
+
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class, 'vehicle_id', 'id');
+    }
+
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(Driver::class, 'driver_id', 'id');
+    }
 }

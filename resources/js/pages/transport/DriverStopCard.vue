@@ -1,7 +1,9 @@
 <script setup>
-// One stop of the driver's current trip: customer / contact / address / order, items toggle, then the action for its state:
+// One stop of the driver's current trip: customer / contact / address / order, the customer's WINDOW and the PLANNED
+// arrival as two separate things, items toggle, then the action for its state:
 // pending → "Arrived" (POST /delivery/stops/:id/arrive with the phone's GPS), arrived → "Deliver (POD)" / "Unable to deliver",
-// closed → the POD summary or the fail reason. One POD per stop: a stop with a POD (or any outcome) offers no further action.
+// closed → the POD summary (result, scan, the stored signature / photo) or the fail reason.
+// One POD per stop: a stop with a POD (or any outcome) offers no further action.
 import { computed, ref } from 'vue';
 import { api, useAction } from '@/api/client';
 import { Chip, ErrorBanner } from '@/components';
@@ -9,8 +11,9 @@ import { bi, fmtDate, fmtNum, fmtTime, lang, t } from '@/i18n';
 import { FAIL_REASON_LABELS, STOP_LABELS } from '@/shared';
 import { BIG, STOP_DRIVER_LABELS, captureGps, isClosedStop } from './driver';
 import FailPanel from './FailPanel.vue';
+import PodFiles from './PodFiles.vue';
 import PodPanel from './PodPanel.vue';
-import { PENDING, labelOf } from './tms';
+import { ETA_SOURCE_LABELS, NO_SCAN_REASON_LABELS, labelOf } from './tms';
 
 const props = defineProps({
   stop: { type: Object, required: true },
@@ -18,6 +21,10 @@ const props = defineProps({
   isNext: { type: Boolean, default: false },
   /** The trip is on route and the user may execute deliveries. */
   onRoute: { type: Boolean, default: false },
+  /** Delivery policies of the trip (`requireScan`, `requireSignature`, `noScanReasons`). */
+  policy: { type: Object, default: () => ({}) },
+  /** The signed-in user records on behalf of the driver. */
+  onBehalf: { type: Boolean, default: false },
 });
 
 const act = useAction();
@@ -33,9 +40,13 @@ const itemsQty = computed(() => lines.value.reduce((a, l) => a + (l.qty || 0), 0
 const closed = computed(() => isClosedStop(props.stop));
 const stKey = computed(() => (props.stop.status === 'pending' && props.isNext ? 'next' : props.stop.status));
 const canArrive = computed(() => props.onRoute && props.stop.status === 'pending');
-const canPod = computed(() => props.onRoute && props.stop.status === 'arrived' && !props.stop.pod);
+/** A stop that carries a warehouse transfer: the destination warehouse receives it on the transfer — no POD here. */
+const isTransfer = computed(() => !!props.stop.transferId);
+const canPod = computed(() => props.onRoute && props.stop.status === 'arrived' && !props.stop.pod && !isTransfer.value);
 const highlight = computed(() => props.isNext && !closed.value);
 const badge = computed(() => (closed.value && STOP_DRIVER_LABELS[props.stop.status]) || { bg: '#EFEAF8', fg: '#654e92' });
+/** The planned arrival misses the window the customer was promised. */
+const late = computed(() => !closed.value && props.stop.windowOk === false);
 
 async function arrive() {
   const g = await captureGps();
@@ -49,9 +60,20 @@ async function arrive() {
       <div class="num flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[12px] font-bold" :style="{ background: badge.bg, color: badge.fg }">{{ stop.seq }}</div>
       <div class="min-w-0 flex-1">
         <div class="text-[12px] font-extrabold">{{ (lang === 'en' && stop.customerEn) || stop.customerAr || stop.customer?.nameAr }}</div>
-        <div class="num mt-px text-[8.5px] text-faint">{{ fo.number || '—' }}{{ stop.customer?.zone ? ` · ${stop.customer.zone}` : '' }}{{ cartons != null ? ` · ${fmtNum(cartons)} ${t('كرتون', 'ctn')}` : '' }} · ETA {{ stop.plannedTime || stop.window || bi(PENDING) }}</div>
+        <div class="num mt-px text-[8.5px] text-faint">{{ fo.number || '—' }}{{ stop.customer?.zone ? ` · ${stop.customer.zone}` : '' }}{{ cartons != null ? ` · ${fmtNum(cartons)} ${t('كرتون', 'ctn')}` : '' }}</div>
       </div>
       <Chip small :map="STOP_DRIVER_LABELS" :k="stKey" />
+    </div>
+
+    <!-- the promise to the customer and the plan of the trip are two things -->
+    <div class="row wrap mt-2 !gap-x-3 !gap-y-1 text-[9.5px]">
+      <span><b class="text-faint">{{ t('نافذة العميل', 'Customer window') }}</b> <span dir="ltr" class="num font-bold">{{ stop.window || '—' }}</span></span>
+      <span>
+        <b class="text-faint">{{ t('الوصول المخطط', 'Planned arrival') }}</b>
+        <span dir="ltr" class="num font-extrabold" :class="late ? 'text-bad' : 'text-brand-dark'"> {{ stop.eta || '—' }}</span>
+        <span v-if="stop.eta && stop.etaSource" class="text-faint"> ({{ bi(labelOf(ETA_SOURCE_LABELS, stop.etaSource)) }})</span>
+      </span>
+      <span v-if="late" class="font-extrabold text-bad">{{ t('خارج النافذة', 'Outside the window') }}</span>
     </div>
 
     <div class="mt-[9px] text-[10px] leading-[1.8] text-sec">
@@ -66,7 +88,9 @@ async function arrive() {
       <button v-if="lines.length > 0" type="button" class="btn ghost sm mt-1 !px-2 !py-0.5" @click="showItems = !showItems">{{ showItems ? t('إخفاء الأصناف', 'Hide items') : t('عرض الأصناف', 'Show items') }}</button>
       <div v-if="showItems" class="mt-1 overflow-hidden rounded-[10px] border border-line-2">
         <div v-for="l in lines" :key="l.id || l.lineNo" class="row border-b border-[#F7F6FA] px-2.5 py-[5px] text-[10px]">
-          <span class="flex-1 font-bold">{{ (lang === 'en' && l.product?.nameEn) || l.product?.nameAr || l.sku }}</span><span class="num muted">{{ l.product?.sku }}</span><span class="num font-bold">×{{ fmtNum(l.qty) }}</span>
+          <span class="flex-1 font-bold">{{ (lang === 'en' && l.product?.nameEn) || l.product?.nameAr || l.sku }}</span><span class="num muted">{{ l.product?.sku }}</span>
+          <span class="num font-bold">×{{ fmtNum(l.qty) }}</span>
+          <span v-if="closed && l.deliveredQty != null && l.deliveredQty !== l.qty" class="num font-extrabold text-warn">{{ t('سُلّم', 'delivered') }} {{ fmtNum(l.deliveredQty) }}</span>
         </div>
       </div>
     </div>
@@ -77,13 +101,16 @@ async function arrive() {
       <button type="button" :class="BIG" class="h-11 flex-1 rounded-[11px] bg-ok text-[12.5px] text-white" @click="panel = 'pod'">{{ t('تسليم POD', 'Deliver (POD)') }}</button>
       <button type="button" :class="BIG" class="h-11 rounded-[11px] border-[1.5px] border-[#F3C4C4] bg-white px-[15px] text-[11px] text-bad" @click="panel = 'fail'">{{ t('تعذر التسليم', 'Unable to deliver') }}</button>
     </div>
-    <PodPanel v-if="panel === 'pod' && canPod" :stop="stop" :total-qty="itemsQty" @close="panel = null" />
+    <div v-if="isTransfer && !closed" class="hint teal !mt-2.5 !px-[11px] !py-[7px] !text-[9.5px]">{{ t('محطة تحويل مخزني: سلّم الحمولة لمستودع الوجهة — يستلمها أمين المستودع من شاشة التحويلات وتُقفل المحطة تلقائيًا. لا يُسجَّل لها إثبات تسليم.', 'Warehouse transfer stop: hand the load to the destination warehouse — its keeper receives it on the transfer and the stop closes by itself. No proof of delivery is recorded.') }}</div>
+    <PodPanel v-if="panel === 'pod' && canPod" :stop="stop" :policy="policy" :on-behalf="onBehalf" @close="panel = null" />
     <FailPanel v-if="panel === 'fail' && canPod" :stop="stop" @close="panel = null" />
 
     <div v-if="stop.pod" class="hint green !mt-2.5 !px-[11px] !py-[7px] !text-[9.5px] !leading-[1.8]">
       <b>POD <span class="num">{{ stop.pod.number }}</span></b> · <Chip small :map="STOP_LABELS" :k="stop.pod.result" /> · <span class="num">{{ fmtDate(stop.pod.at) }}</span>
       <div>{{ t('المستلم', 'Receiver') }}: {{ stop.pod.receiverName || '—' }}{{ stop.pod.deliveredQty != null ? ` · ${t('مسلّم', 'delivered')} ${fmtNum(stop.pod.deliveredQty)}` : '' }}{{ stop.pod.returnedQty ? ` · ${t('مرتجع', 'returned')} ${fmtNum(stop.pod.returnedQty)}` : '' }}{{ stop.pod.failReason ? ` · ${t('السبب', 'reason')}: ${bi(labelOf(FAIL_REASON_LABELS, stop.pod.failReason))}` : '' }}</div>
-      <div class="text-muted">{{ t('التوقيع / الصورة / GPS: مراجع محفوظة — الرفع Integration Pending', 'Signature / photo / GPS: references stored — upload Integration Pending') }}</div>
+      <div v-if="stop.pod.scanOk === true" class="font-bold text-ok">{{ t('مسح الطلب ✓', 'Order scanned ✓') }}</div>
+      <div v-else-if="stop.pod.noScanReason" class="font-bold text-warn">{{ t('بلا مسح', 'No scan') }}: {{ bi(labelOf(NO_SCAN_REASON_LABELS, stop.pod.noScanReason)) }}</div>
+      <div v-if="(stop.pod.attachments || []).length > 0" class="mt-0.5"><PodFiles :attachments="stop.pod.attachments" /></div>
     </div>
     <div v-if="closed && !stop.pod && stop.failReason" class="mt-2 text-[9.5px] font-bold text-bad">{{ t('سبب الفشل', 'Fail reason') }}: {{ bi(labelOf(FAIL_REASON_LABELS, stop.failReason)) }}</div>
     <div v-if="stop.arrivedAt && !closed" class="num mt-1.5 text-[9px] text-brand-dark">{{ t('وصول', 'Arrived') }} {{ fmtTime(stop.arrivedAt) }}</div>

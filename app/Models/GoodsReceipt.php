@@ -20,6 +20,7 @@ class GoodsReceipt extends BaseModel
     {
         return [
             'posted_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 

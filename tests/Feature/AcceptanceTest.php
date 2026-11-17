@@ -212,9 +212,9 @@ class AcceptanceTest extends ApiTestCase
         $this->expectRejected($this->postAs($driver, "/api/delivery/stops/{$stop['id']}/deliver", ['receiverName' => 'x']), 'ARRIVE_FIRST');
         $this->expectOk($this->postAs($driver, "/api/delivery/trips/{$tripNo}/start"));
         $this->expectOk($this->postAs($driver, "/api/delivery/stops/{$stop['id']}/arrive", ['gps' => ['lat' => 24.77, 'lng' => 46.74]]));
-        $pod = $this->expectOk($this->postAs($driver, "/api/delivery/stops/{$stop['id']}/partial", ['receiverName' => 'م. ناصر القحطاني', 'deliveredQty' => 80, 'signature' => 'sig.png', 'photo' => 'door.jpg', 'gps' => ['lat' => 24.77, 'lng' => 46.74]]));
+        $pod = $this->expectOk($this->postAs($driver, "/api/delivery/stops/{$stop['id']}/partial", ['receiverName' => 'م. ناصر القحطاني', 'deliveredQty' => 80, 'signature' => self::proofImage(), 'photo' => self::proofImage(), 'scans' => [$foNo], 'gps' => ['lat' => 24.77, 'lng' => 46.74]]));
         $this->assertSame([80, 20], [$pod['delivered'], $pod['returned']]);
-        $this->assertSame('integration_pending', $pod['attachments']['signature'], 'no upload happened, so none is claimed');
+        $this->assertSame(['stored', 'stored', true], [$pod['attachments']['signature'], $pod['attachments']['photo'], $pod['scanOk']], 'the signature and the photo are kept (in the database when no object storage is connected)');
         $rtn = self::$s['rtn'] = $pod['return'];
         $this->assertMatchesRegularExpression('/^RTN-/', $rtn);
         $this->expectRejected($this->postAs($driver, "/api/delivery/stops/{$stop['id']}/deliver", ['receiverName' => 'x']), 'POD_DUPLICATE', [409]);

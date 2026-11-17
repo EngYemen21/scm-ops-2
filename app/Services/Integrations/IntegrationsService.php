@@ -7,6 +7,7 @@ use App\Models\PodAttachment;
 use App\Models\ProofOfDelivery;
 use App\Services\Core\AuditService;
 use App\Services\Integrations\Adapters\AdapterFactory;
+use App\Services\Integrations\Adapters\DatabaseStorage;
 use App\Services\Integrations\Adapters\ErpAdapter;
 use App\Services\Integrations\Adapters\GpsAdapter;
 use App\Services\Integrations\Adapters\MapsAdapter;
@@ -21,9 +22,9 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Integration facade. Every answer is honest: a file is `uploaded` only when the storage provider accepted it,
- * otherwise the row is kept as `integration_pending` and no URL is invented; an integration is `connected` only when
- * its provider is configured (and, for storage, reachable).
+ * Integration facade. Every answer is honest: a file is `uploaded` when the object store accepted it and `stored`
+ * when it is kept in the database (no object store configured) — it is never dropped and no URL is invented; an
+ * integration is `connected` only when its provider is configured (and, for storage, reachable).
  *
  * The adapters default to what the environment configures (AdapterFactory); tests and other services may pass their
  * own. Do not bind ErpAdapter in the container — the ERP and the B2B webhook share that contract.
@@ -88,7 +89,10 @@ class IntegrationsService
             'detailAr' => $detailAr ?? ($configured ? 'مُهيّأ' : Pending::DETAIL_AR),
         ];
 
-        if (! $this->storage->configured()) {
+        if ($this->storage instanceof DatabaseStorage) {
+            // no object store: the provider is pending, the files themselves are kept in the database
+            $storageRow = $row('storage', false, DatabaseStorage::DETAIL_EN, DatabaseStorage::DETAIL_AR);
+        } elseif (! $this->storage->configured()) {
             $storageRow = $row('storage', false);
         } else {
             try {
@@ -115,7 +119,7 @@ class IntegrationsService
     }
 
     /**
-     * Generic attachment on any entity → `attachments` row (uploaded | integration_pending).
+     * Generic attachment on any entity → `attachments` row (`uploaded` to the object store | `stored` in the database).
      *
      * @param  array{fileName:string, mime:string, base64:string}  $file  base64 may carry a `data:<mime>;base64,` prefix
      */
@@ -125,12 +129,12 @@ class IntegrationsService
         $name = self::safeName($file['fileName']);
         $key = mb_strtolower($entityType)."/{$entityId}/".self::stamp()."-{$name}";
         $put = $this->store($key, $bytes, $file['mime']);
-        $uploaded = $put['status'] === 'uploaded';
+        $kept = in_array($put['status'], FileStore::KEPT, true);
         $row = Attachment::create([
             'entity_type' => $entityType, 'entity_id' => $entityId, 'file_name' => $name, 'mime' => $file['mime'], 'size' => strlen($bytes),
-            'status' => $uploaded ? 'uploaded' : Pending::STATUS,
-            'storage_key' => $uploaded ? ($put['key'] ?? $key) : null,
-            'url' => $uploaded ? ($put['url'] ?? null) : null,
+            'status' => $kept ? $put['status'] : Pending::STATUS,
+            'storage_key' => $kept ? ($put['key'] ?? $key) : null,
+            'url' => $kept ? ($put['url'] ?? null) : null,
         ]);
         $this->audit->log($user, ['action' => 'ATTACHMENT.ADD', 'entityType' => $entityType, 'entityId' => $entityId, 'newValue' => ['fileName' => $name, 'size' => strlen($bytes), 'status' => $row->status]]);
 
@@ -144,7 +148,8 @@ class IntegrationsService
     }
 
     /**
-     * Proof-of-delivery signature / photo → `pod_attachments` row (uploaded | integration_pending).
+     * Proof-of-delivery signature / photo added after the delivery → `pod_attachments` row (`uploaded` | `stored`).
+     * The signature and the photo taken AT the delivery are stored by DeliveryService::closeStop with the POD itself.
      *
      * @param  array{fileName:string, mime:string, base64:string}  $file
      */
@@ -155,12 +160,12 @@ class IntegrationsService
         $name = self::safeName($file['fileName']);
         $key = "pod/{$pod->number}/{$kind}-".self::stamp()."-{$name}";
         $put = $this->store($key, $bytes, $file['mime']);
-        $uploaded = $put['status'] === 'uploaded';
+        $kept = in_array($put['status'], FileStore::KEPT, true);
         $row = PodAttachment::create([
             'pod_id' => $pod->id, 'kind' => $kind, 'file_name' => $name, 'mime' => $file['mime'], 'size' => strlen($bytes),
-            'status' => $uploaded ? 'uploaded' : Pending::STATUS,
-            'storage_key' => $uploaded ? ($put['key'] ?? $key) : null,
-            'url' => $uploaded ? ($put['url'] ?? null) : null,
+            'status' => $kept ? $put['status'] : Pending::STATUS,
+            'storage_key' => $kept ? ($put['key'] ?? $key) : null,
+            'url' => $kept ? ($put['url'] ?? null) : null,
         ]);
         $this->audit->log($user, ['action' => 'POD.ATTACHMENT', 'entityType' => 'ProofOfDelivery', 'entityId' => $pod->id, 'entityNumber' => $pod->number, 'newValue' => ['kind' => $kind, 'fileName' => $name, 'size' => strlen($bytes), 'status' => $row->status]]);
 
@@ -171,6 +176,34 @@ class IntegrationsService
     public function podAttachments(string $podId): Collection
     {
         return PodAttachment::where('pod_id', $this->pod($podId)->id)->orderByDesc('created_at')->orderByDesc('id')->get();
+    }
+
+    /**
+     * A kept file (POD signature / photo, attachment) for `GET /integrations/files/{key}`. Only keys that belong to an
+     * attachment row are served. A driver reaches the proofs of delivery of their own trips only — the same rule as
+     * the rest of the driver app; every other signed-in user may see a POD, as they may read `/delivery/pods`.
+     *
+     * @return array{bytes:string, mime:string, size:int, fileName:string, kind:?string}
+     */
+    public function file(AuthUser $user, string $key): array
+    {
+        $missing = fn () => AppError::notFound('FILE_NOT_FOUND', 'الملف غير موجود', 'File not found');
+        $key = trim($key, '/');
+        $podFile = $key !== '' ? PodAttachment::with('pod:id,driver_id,number')->where('storage_key', $key)->first() : null;
+        $row = $podFile ?? ($key !== '' ? Attachment::where('storage_key', $key)->first() : null) ?? throw $missing();
+        if ($podFile && $user->driverId && ! $user->can('trip.manage') && $podFile->pod?->driver_id !== $user->driverId) {
+            throw AppError::forbidden('NOT_YOUR_TRIP', 'السائق لا يرى إثباتات تسليم غيره', 'Drivers see only the proofs of delivery of their own trips');
+        }
+        try {
+            $file = (new FileStore($this->storage))->read($key, $row->status);
+        } catch (Throwable $e) {
+            Log::warning("storage read failed for {$key}: {$e->getMessage()}");
+            throw AppError::unavailable('STORAGE_UNAVAILABLE', 'تعذّر قراءة الملف من التخزين — حاول بعد قليل', 'The file store did not answer — try again shortly');
+        }
+        $file ?? throw $missing();
+
+        return ['bytes' => $file['bytes'], 'mime' => $row->mime ?: ($file['mime'] ?: 'application/octet-stream'), 'size' => $file['size'],
+            'fileName' => $row->file_name ?: basename($key), 'kind' => $podFile?->kind];
     }
 
     private function pod(string $idOrNumber): ProofOfDelivery
@@ -197,12 +230,7 @@ class IntegrationsService
     /** Sends bytes to the storage adapter. Returns the honest outcome; throws BUSINESS_RULE only on a real remote failure. */
     private function store(string $key, string $bytes, string $mime): array
     {
-        try {
-            return $this->storage->putObject($key, $bytes, $mime);
-        } catch (Throwable $e) {
-            Log::warning("storage upload failed for {$key}: {$e->getMessage()}");
-            throw AppError::rule('STORAGE_UPLOAD_FAILED', 'فشل رفع الملف إلى التخزين — لم يُحفظ المرفق', 'Storage upload failed — attachment not saved', ['detail' => $e->getMessage()]);
-        }
+        return (new FileStore($this->storage))->put($key, $bytes, $mime);
     }
 
     private static function stamp(): string

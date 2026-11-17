@@ -9,7 +9,7 @@ import { fmtDateOnly, fmtMoney, fmtNum, lang, t } from '@/i18n';
 import { PO_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
 import SupplierDocumentsTab from './SupplierDocumentsTab.vue';
-import { SQ_LABELS, SUPPLIER_STATUS_LABELS, pname, scoreColor } from './shared';
+import { SQ_LABELS, SUPPLIER_STATUS_LABELS, pname, scoreColor, usePolicy } from './shared';
 
 const props = defineProps({
   /** Supplier code; null = closed. */
@@ -19,6 +19,7 @@ const emit = defineEmits(['close', 'newPo', 'edit', 'quote']);
 
 const auth = useAuth();
 const router = useRouter();
+const policy = usePolicy();
 const path = computed(() => (props.code ? `/suppliers/${encodeURIComponent(props.code)}` : null));
 /** Supplier + { products[{ price, leadDays, preferred, product }], recentPos[], openPosCount, blocksPo } */
 const detail = useGet(path);
@@ -89,7 +90,7 @@ const basisText = computed(() => {
       <div v-if="tab === 'over'" class="kv-grid">
         <div v-for="[k, v] in overview" :key="k" class="kv"><div class="kv-k">{{ k }}</div><div class="kv-v num-mixed" dir="auto">{{ v || '—' }}</div></div>
         <div v-if="s.notes" class="kv col-span-full"><div class="kv-k">{{ t('ملاحظات', 'Notes') }}</div><div class="kv-v !font-normal">{{ s.notes }}</div></div>
-        <div v-if="s.blocksPo" class="banner amber col-span-full mt-2">{{ t('التقييم دون الحد الأدنى (65) — إنشاء أمر شراء يتطلب استثناءً من مدير المشتريات', 'Score below minimum (65) — creating a PO requires a procurement-manager override') }}</div>
+        <div v-if="s.blocksPo" class="banner amber col-span-full mt-2">{{ t(`التقييم دون الحد الأدنى (${policy.minSupplierScore}) — إنشاء أمر شراء يتطلب استثناءً من مدير المشتريات`, `Score below minimum (${policy.minSupplierScore}) — creating a PO requires a procurement-manager override`) }}</div>
         <div v-if="s.expiredDocuments" class="banner red col-span-full mt-2 cursor-pointer" @click="tab = 'docs'">{{ t(`${s.expiredDocuments} مستند إلزامي منتهٍ — أوامر الشراء الجديدة موقوفة حتى التجديد`, `${s.expiredDocuments} mandatory document(s) expired — new POs blocked until renewal`) }}</div>
         <div v-else-if="s.status === 'review'" class="banner amber col-span-full mt-2">{{ t('المورد تحت المراجعة — لا تُصدر له أوامر شراء جديدة حتى اكتمال التأهيل (المستندات + التقييم)', 'Supplier under review — no new POs until qualification completes (documents + evaluation)') }}</div>
       </div>

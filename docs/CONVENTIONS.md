@@ -119,3 +119,40 @@ openLines, reasonAr, reasonEn, shipment }` so the client shows the button or the
 
 In the client every shipment row shows its next action, and the shipment opens in a drawer (`ShipmentsTab.vue` →
 `ShipmentPanel.vue`) whose "next step" box names the step, the permission it needs and — when the role lacks it — says so.
+
+### Receiving after the 2026-11 hardening
+
+- **Open quantity is one formula**: `ProcurementHelpers::openQty()` = ordered − received − damaged, and rejected goods
+  stay open while the policy `procurement.rejectedStaysOpen` is on. Receiving, follow-up shipments, the PO status, the
+  PO page, replenishment and the "incoming" figure sent to Sales all use it. Never compute `qty − received_qty` by hand.
+- **Exits instead of dead ends**: a truck at the gate is `refuse`d (reason) or `unarrive`d (wrong click); a receipt
+  that was not touched yet is voided (`GrnVoidService`, permission `grn.void`, movement `grnvoid` at the receipt's own
+  cost); after putaway, an invoice or a purchase return the correction is a purchase return. An order the supplier will
+  not complete is closed with a reason (`POST /procurement/po/{id}/close`), also when nothing was received.
+- A receiving line may arrive in several batches (`batches[]`): one `grn_lines` row per batch (`split_no`), one putaway
+  task each. Reports count the ordered quantity of a split line once and ignore voided receipts (`voided_at IS NULL`).
+- Staging entries reference their putaway task; a putaway may be confirmed in parts (`qty`).
+
+## Rules added by the 2026-11 hardening (read `docs/ops-hardening/SPEC.md` and the `W*.md` reports for the detail)
+
+- **Holds**: a document that is not a sales order promises stock through `InventoryService::hold()` (owner type + id +
+  line) and takes it with `postHold()`; cancel / reject call `releaseHolds()`. Transfers and purchase returns from
+  stock work this way. `scm:reconcile` counts holds.
+- **Voids, not deletes**: fuel records, maintenance orders, goods receipts, debit notes and packages are voided or
+  cancelled with a reason and stay visible; a posted journal is reversed, never removed.
+- **Customer credit is derived**: `customers.balance` = unpaid invoices + accepted orders not yet delivered
+  (`CreditService`). Never write the column; call `CreditService::sync($customerId)` after changing one of its sources.
+- **Shortage is explicit**: a quantity an order could not ship moves to a linked backorder order or is cancelled on the
+  line (`BackorderService`), once, when the pick list closes. Orders of another system are never split: they get
+  `order.short` and that system decides.
+- **Stock arrival wakes waiting orders**: after stock lands on a shelf (putaway, transfer receipt, return restock) call
+  `WaitingOrders::stockArrived()`; it retries the waiting OPS orders after the transaction commits. The periodic safety
+  net is `OpsHousekeeping` on the integration heartbeat (the only clock on the serverless deployment) and the
+  `scm:backorders-allocate` / `scm:quotations-expire` / `scm:fleet-documents` / `scm:credit-sync` commands under a scheduler.
+- **Scans go through `ScanCodes`** (fulfilment order, sales order, package, label, carton `{FO}-C{nn}`); loading and
+  delivery accept any of them. Skipping a scan needs a reason (and `load.override` at the dock).
+- **Proof-of-delivery files** are stored through `FileStore` (database table `stored_files`, object storage when S3 is
+  configured) and read back through `GET /integrations/files/{key}`. A file name is not a signature.
+- **A transfer on the company's own vehicle is a trip** (`TransferTripService`, `trips.kind = transfer`): the vehicle
+  is never named without its driver; the destination's first receipt closes the stop; dispatch closes the trip.
+- **Driver rule in one place**: `TripsService::driverCanAssign()` (assignment) and `driverDispatchBlock()` (dispatch).

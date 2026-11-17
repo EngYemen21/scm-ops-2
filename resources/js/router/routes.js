@@ -60,6 +60,7 @@ export function entityPath(type, number) {
   if (k === 'supplier') return `/procurement?tab=sup&supplier=${encodeURIComponent(number)}`;
   if (k === 'customerinvoice' || k === 'ci') return `/finance?tab=invoices&invoice=${encodeURIComponent(number)}`;
   if (k === 'payment' || k === 'receipt') return `/finance?tab=payments&payment=${encodeURIComponent(number)}`;
+  if (k === 'debitnote' || k === 'dn') return `/finance?tab=debit-notes&note=${encodeURIComponent(number)}`;
   if (k === 'expense') return `/finance?tab=expenses&expense=${encodeURIComponent(number)}`;
   if (k === 'fixedasset' || k === 'asset') return `/finance?tab=assets&asset=${encodeURIComponent(number)}`;
   if (k === 'supplierinvoice') return `/procurement?tab=inv&invoice=${encodeURIComponent(number)}`;

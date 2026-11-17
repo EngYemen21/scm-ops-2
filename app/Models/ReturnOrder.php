@@ -26,6 +26,8 @@ class ReturnOrder extends BaseModel
             'received_at' => 'datetime',
             'inspected_at' => 'datetime',
             'closed_at' => 'datetime',
+            'shipped_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 

@@ -1,6 +1,9 @@
 <script setup>
 // Trip room · "Assignment": smart vehicle recommendation (score + reasons, or why a vehicle is unfit) and the driver list
-// (busy driver / expired license shown as the rejection reason). Assign / unassign only while the trip is editable.
+// (busy driver / expired licence or iqama shown as the rejection reason).
+//  · planning stage (`trip.canEdit`): vehicle and driver may both change;
+//  · loading / ready (`trip.canAssignDriver` only): the vehicle is fixed — the goods are on it, unload first — but the
+//    driver can still be named or replaced, so a trip that started loading without a driver is never stuck.
 //   GET /transport/trips/:n/recommend → [{ vehicle, ok, score, reasons[], why }]
 import { computed } from 'vue';
 import { api, useAction, useGet, useList } from '@/api/client';
@@ -19,6 +22,10 @@ const drivers = useList('/transport/drivers', { pageSize: 100 });
 
 const editable = computed(() => !!props.trip.canEdit);
 const canAssign = computed(() => auth.can('trip.assign') && editable.value);
+/** The driver may be named / replaced while planning AND while loading (older API answers have no flag: fall back to canEdit). */
+const driverOpen = computed(() => !!(props.trip.canAssignDriver ?? props.trip.canEdit));
+const canAssignDriver = computed(() => auth.can('trip.assign') && driverOpen.value);
+const loadingStage = computed(() => driverOpen.value && !editable.value);
 const rows = computed(() => rec.data.value || []);
 const firstOk = computed(() => rows.value.find((r) => r.ok)?.vehicle?.code);
 const driverRows = computed(() => drivers.data.value?.items || []);
@@ -35,7 +42,9 @@ const driverOk = (d) => d.canAssign?.ok !== false && !d.blocked;
 <template>
   <div class="col !gap-3">
     <ErrorBanner :error="act.error.value" @close="act.clearError()" />
-    <div v-if="!editable" class="hint teal !mt-0">{{ t('الإسناد متاح فقط قبل بدء التحميل (مسودة / مخططة / مسندة).', 'Assignment is only possible before loading starts (draft / planned / assigned).') }}</div>
+    <div v-if="loadingStage" class="hint amber !mt-0">{{ t('بدأ التحميل: المركبة ثابتة — لتغييرها أنزل الحمولة أولًا من لوحة التحميل والإرسال. السائق يمكن إسناده أو تغييره الآن.', 'Loading has started: the vehicle is fixed — unload from the load & dispatch board to change it. The driver can still be assigned or replaced now.') }}</div>
+    <div v-else-if="!editable" class="hint teal !mt-0">{{ t('الإسناد مقفل: الرحلة غادرت أو انتهت.', 'Assignment is locked: the trip has left or ended.') }}</div>
+    <div v-if="loadingStage && !trip.driver" class="hint amber !mt-0">{{ t('لا سائق مسند — لا تُرسل الرحلة بلا سائق. اختر سائقًا من القائمة أدناه.', 'No driver assigned — the trip cannot be dispatched without one. Pick a driver below.') }}</div>
 
     <SectionCard small :padded="false">
       <template #title>
@@ -44,7 +53,7 @@ const driverOk = (d) => d.canAssign?.ok !== false && !d.blocked;
         </span>
       </template>
       <template v-if="trip.vehicle && canAssign" #actions>
-        <Btn tone="softRed" size="sm" :label="{ ar: 'إلغاء إسناد المركبة', en: 'Unassign vehicle' }" @click="unassign({ vehicle: true })" />
+        <Btn tone="softRed" size="sm" :loading="act.pending.value" :label="{ ar: 'إلغاء إسناد المركبة', en: 'Unassign vehicle' }" @click="unassign({ vehicle: true })" />
       </template>
 
       <div v-if="rec.isLoading.value" class="skel m-3.5 h-20" />
@@ -68,8 +77,8 @@ const driverOk = (d) => d.canAssign?.ok !== false && !d.blocked;
     </SectionCard>
 
     <SectionCard small :padded="false" :title="{ ar: 'السائقون', en: 'Drivers' }">
-      <template v-if="trip.driver && canAssign" #actions>
-        <Btn tone="softRed" size="sm" :label="{ ar: 'إلغاء إسناد السائق', en: 'Unassign driver' }" @click="unassign({ driver: true })" />
+      <template v-if="trip.driver && canAssignDriver" #actions>
+        <Btn tone="softRed" size="sm" :loading="act.pending.value" :label="{ ar: 'إلغاء إسناد السائق', en: 'Unassign driver' }" @click="unassign({ driver: true })" />
       </template>
       <div v-if="drivers.isLoading.value" class="skel m-3.5 h-[60px]" />
       <div v-for="d in driverRows" :key="d.code" class="row wrap !gap-2.5 border-t border-line-2 px-[15px] py-2.5">
@@ -84,7 +93,7 @@ const driverOk = (d) => d.canAssign?.ok !== false && !d.blocked;
         <div class="flex-1" />
         <span v-if="!driverOk(d) && d.canAssign?.why" class="text-[9px] text-bad">{{ whyNot(d.canAssign, lang) }}</span>
         <Chip :map="DRIVER_STATE_LABELS" :k="d.blocked ? 'blocked' : d.state" />
-        <Btn v-if="driverOk(d) && canAssign && trip.driver?.code !== d.code" tone="purple" size="sm" :loading="act.pending.value" :label="{ ar: 'إسناد السائق', en: 'Assign driver' }" @click="assign({ driverCode: d.code })" />
+        <Btn v-if="driverOk(d) && canAssignDriver && trip.driver?.code !== d.code" tone="purple" size="sm" :loading="act.pending.value" :label="trip.driver ? { ar: 'تبديل السائق', en: 'Replace driver' } : { ar: 'إسناد السائق', en: 'Assign driver' }" @click="assign({ driverCode: d.code })" />
       </div>
     </SectionCard>
   </div>

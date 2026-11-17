@@ -2,20 +2,22 @@
 
 namespace App\Finance\Services;
 
-use App\Finance\Models\Expense;
+use App\Finance\Models\Journal;
 use App\Models\FuelRecord;
 use App\Models\MaintenanceOrder;
 use App\Models\Trip;
-use App\Models\TripCost;
 use App\Services\Core\SettingsService;
+use App\Services\Transport\TripCostService;
 use App\Support\AuthUser;
 
 /**
  * Fleet costs → ledger and trip cost sheet.
  *  - Fuel record: fuel expense on the vehicle's cost center (accrued until the station is paid through an expense/payment);
+ *    a corrected record reverses its journal and posts again under a new event key (`fuel:{id}:v{n}`), a voided one
+ *    reverses it;
  *  - Maintenance close: maintenance expense at the final cost;
- *  - `trip_costs` is rebuilt from the facts linked to the trip (fuel with a trip, expense vouchers with a trip) — it was
- *    always zero before; the columns nothing feeds (driver, ot, dep …) stay 0 and the UI says so.
+ *  - `trip_costs` is management accounting and posts nothing: rebuildTripCosts() hands the trip to
+ *    TripCostService::compute(), the one implementation of the cost sheet.
  * `finance.fleetExpensesIncludeVat` (default false, CFO decision) splits VAT input out of fuel/maintenance amounts.
  */
 class FleetPosting
@@ -28,15 +30,52 @@ class FleetPosting
         if ($trip && ! $rec->trip_id) {
             $rec->update(['trip_id' => $trip->id]);
         }
+        if ($rec->voided_at) {
+            return;
+        }
+        $this->postFuel($user, $rec, "fuel:{$rec->id}");
+        if ($rec->trip_id) {
+            $this->rebuildTripCosts($rec->trip_id);
+        }
+    }
+
+    /**
+     * A corrected fuel record (amount, date or trip changed): the posted journal is reversed and the record is posted
+     * again as it now stands. A record that never reached the ledger (written before finance went live) stays out of it.
+     * The caller rebuilds the cost sheets of the trips involved.
+     */
+    public function repostFuel(AuthUser $user, FuelRecord $rec, string $reason): ?Journal
+    {
+        if (! $this->reverseFuel($user, $rec, $reason)) {
+            return null;
+        }
+        $version = Journal::where('source_type', 'FuelRecord')->where('source_id', $rec->id)->where('kind', 'auto')->count() + 1;
+
+        return $this->postFuel($user, $rec, "fuel:{$rec->id}:v{$version}");
+    }
+
+    /** Reverses the record's posted journal (voided or about to be re-posted). Null when there is nothing posted to reverse. */
+    public function reverseFuel(AuthUser $user, FuelRecord $rec, string $reason): ?Journal
+    {
+        $journal = $rec->journal_id ? Journal::find($rec->journal_id) : null;
+        if (! $journal || $journal->status !== 'posted') {
+            return null;
+        }
+
+        return $this->ledger->reverse($user, $journal->id, $reason);
+    }
+
+    private function postFuel(?AuthUser $user, FuelRecord $rec, string $eventKey): ?Journal
+    {
         $cost = round((float) $rec->cost, 2);
         if ($cost <= 0) {
-            return;
+            return null;
         }
         [$net, $vat] = $this->split($cost);
         $cc = $this->map->forVehicle($rec->vehicle_id)?->id;
         $dims = ['vehicleId' => $rec->vehicle_id, 'tripId' => $rec->trip_id, 'costCenterId' => $cc, 'referenceType' => 'FuelRecord', 'referenceId' => $rec->id];
         $j = $this->ledger->post($user, [
-            'eventKey' => "fuel:{$rec->id}", 'date' => $rec->date, 'source' => ['type' => 'FuelRecord', 'id' => $rec->id, 'number' => $rec->number],
+            'eventKey' => $eventKey, 'date' => $rec->date, 'source' => ['type' => 'FuelRecord', 'id' => $rec->id, 'number' => $rec->number],
             'memo' => "وقود {$rec->number} — ".($rec->vehicle?->code ?? '').($rec->station ? " — {$rec->station}" : ''),
             'lines' => array_merge(
                 [['role' => 'fuel', 'debit' => $net, 'description' => "{$rec->liters} لتر"] + $dims],
@@ -45,9 +84,8 @@ class FleetPosting
             ),
         ]);
         $rec->update(['journal_id' => $j->id]);
-        if ($rec->trip_id) {
-            $this->rebuildTripCosts($rec->trip_id);
-        }
+
+        return $j;
     }
 
     public function maintenance(?AuthUser $user, MaintenanceOrder $mo): void
@@ -71,16 +109,15 @@ class FleetPosting
         $mo->update(['journal_id' => $j->id]);
     }
 
-    /** Rebuild the trip's cost sheet from linked facts (fuel, expense vouchers by kind). */
+    /**
+     * Rebuild the trip's cost sheet. Entry point for everything that changes a fact linked to a trip (fuel records,
+     * expense vouchers); the figures themselves are TripCostService's — there is one implementation.
+     */
     public function rebuildTripCosts(string $tripId): void
     {
-        $fuel = round((float) FuelRecord::where('trip_id', $tripId)->sum('cost'), 2);
-        $expenses = Expense::where('trip_id', $tripId)->where('status', 'posted')->with('account:id,role')->get();
-        $by = fn (array $roles) => round((float) $expenses->filter(fn ($e) => in_array($e->account?->role, $roles, true))->sum('total'), 2);
-        $tolls = $by(['fleet_other']);
-        $maint = $by(['maintenance']);
-        $other = round((float) $expenses->sum('total') - $tolls - $maint, 2);
-        TripCost::updateOrCreate(['trip_id' => $tripId], ['fuel' => $fuel, 'tolls' => $tolls, 'maint' => $maint, 'other' => max(0, $other)]);
+        if (Trip::whereKey($tripId)->exists()) {
+            app(TripCostService::class)->compute($tripId);
+        }
     }
 
     /** @return array{0: float, 1: float} net, VAT */

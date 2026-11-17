@@ -78,4 +78,12 @@ class PoController extends ProcurementBaseController
 
         return $this->created($this->po->cancel(AuthUser::current(), $id, $data['reason']));
     }
+
+    /** partial → closed: the supplier will not deliver the rest; what is open is waived. */
+    public function close(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate(['reason' => 'required|string|min:3|max:500'], ['reason.required' => 'سبب إقفال أمر الشراء مطلوب', 'reason.min' => 'سبب إقفال أمر الشراء مطلوب (3 أحرف على الأقل)']);
+
+        return $this->created($this->po->close(AuthUser::current(), $id, $data['reason']));
+    }
 }

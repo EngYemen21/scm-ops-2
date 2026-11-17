@@ -81,12 +81,28 @@ class PoService
             $wh = H::findWarehouse($dto['warehouseCode']);
             $products = H::findProducts(array_map(fn ($l) => $l['sku'], $dto['lines']));
             $lines = [];
+            $raised = []; // lines priced above the requisition estimate beyond the tolerance
+            $tolerance = (float) ($this->settings->get('procurement.prPriceTolerancePct') ?? 10);
             foreach (array_values($dto['lines']) as $i => $l) {
-                $lines[] = ['line_no' => $i + 1, 'product_id' => $products[$l['sku']]->id, 'qty' => (int) $l['qty'], 'price' => H::round2((float) $l['price'])];
+                $price = H::round2((float) $l['price']);
+                // `prEstPrice` only ever comes from PrService::toPo (the controllers' validation never lets it through)
+                $est = isset($l['prEstPrice']) && (float) $l['prEstPrice'] > 0 ? round((float) $l['prEstPrice'], 4) : null;
+                $lines[] = ['line_no' => $i + 1, 'product_id' => $products[$l['sku']]->id, 'qty' => (int) $l['qty'], 'price' => $price, 'pr_est_price' => $est];
+                if ($est !== null && $price > $est * (1 + $tolerance / 100) + 1e-9) {
+                    $raised[] = ['lineNo' => $i + 1, 'sku' => $products[$l['sku']]->sku, 'product' => $products[$l['sku']]->name_ar, 'estimate' => $est, 'price' => $price, 'pct' => round(($price - $est) / $est * 100, 1)];
+                }
             }
             $total = H::round2(array_sum(array_map(fn ($l) => $l['qty'] * $l['price'], $lines)));
             if ($total <= 0) {
                 throw AppError::rule('PO_EMPTY', 'قيمة أمر الشراء يجب أن تكون أكبر من صفر', 'PO total must be positive');
+            }
+            // Price control from requisition to order: the requisition was approved at an estimate; ordering well above it
+            // needs a written reason, is flagged on the order and is seen by finance whatever the value tier says.
+            $priceReason = trim((string) ($dto['priceReason'] ?? ''));
+            if ($raised && mb_strlen($priceReason) < 5) {
+                $list = implode('، ', array_map(fn ($r) => "{$r['product']} +{$r['pct']}%", $raised));
+                throw AppError::rule('PR_PRICE_REASON', 'سعر أمر الشراء يتجاوز تقدير طلب الشراء المعتمد بأكثر من '.self::num($tolerance)."% ({$list}) — اكتب سبب تغيّر السعر (5 أحرف على الأقل)؛ يُعرض على المعتمدين ويُضاف اعتماد المالية",
+                    'The order price exceeds the approved requisition estimate by more than '.self::num($tolerance).'% — a written reason is required; finance approval is added', ['tolerancePct' => $tolerance, 'lines' => $raised]);
             }
             // order-level charges: total (net goods) − discount + shipping, then VAT → gross. Approval tiers stay on the net goods value.
             $discount = H::round2((float) ($dto['discount'] ?? 0));
@@ -127,9 +143,14 @@ class PoService
             }
 
             $chain = $this->chainFor($total);
+            if ($raised && ! in_array('finance', array_column($chain, 'roleKey'), true)) {
+                $labels = (array) config('scm.ROLE_LABELS', []);
+                $chain[] = ['step' => count($chain) + 1, 'roleKey' => 'finance', 'labelAr' => $labels['finance']['ar'] ?? 'finance', 'labelEn' => $labels['finance']['en'] ?? 'finance'];
+            }
             $number = $this->numbering->next('PO');
             $status = ! empty($opts['draft']) ? 'draft' : 'pending';
             $po = PurchaseOrder::create([
+                'price_changed' => (bool) $raised, 'price_note' => $raised ? $priceReason : null,
                 'number' => $number, 'supplier_id' => $supplier->id, 'warehouse_id' => $wh->id, 'rfq_id' => ($opts['rfqId'] ?? null) ?: null, 'status' => $status, 'total' => $total,
                 'due_date' => H::parseDate($dto['dueDate']), 'payment_terms' => ($dto['paymentTerms'] ?? null) ?: ($supplier->terms ?: null),
                 'reference' => ($dto['reference'] ?? null) ?: null, 'notes' => ($dto['notes'] ?? null) ?: null, 'approval_step' => 0,
@@ -147,7 +168,16 @@ class PoService
             if (! empty($opts['rfqId'])) {
                 $newValue['rfqId'] = $opts['rfqId'];
             }
+            // converted from a requisition: the estimate each price was compared with stays on the audit trail
+            $estimates = array_values(array_filter(array_map(fn ($l) => $l['pr_est_price'] !== null ? ['lineNo' => $l['line_no'], 'estimate' => $l['pr_est_price'], 'price' => $l['price']] : null, $lines)));
+            if ($estimates) {
+                $newValue['prPrices'] = $estimates;
+            }
             $this->audit->log($user, ['action' => 'PO.CREATE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $number, 'newValue' => $newValue]);
+            if ($raised) {
+                $this->audit->log($user, ['action' => 'PO.PRICE_ABOVE_ESTIMATE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $number, 'field' => 'price',
+                    'oldValue' => ['tolerancePct' => $tolerance, 'reference' => ($dto['reference'] ?? null) ?: null], 'newValue' => ['reason' => $priceReason, 'lines' => $raised, 'by' => $user->username]]);
+            }
             if ($override) {
                 $this->audit->log($user, ['action' => 'PO.SUPPLIER_SCORE_OVERRIDE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $number, 'field' => 'supplierScore',
                     'oldValue' => "{$score} < {$min}", 'newValue' => ['supplier' => $supplier->code, 'reason' => $override['reason'], 'by' => $user->username]]);
@@ -162,6 +192,11 @@ class PoService
             $this->notify->activity($user, 'PurchaseOrder', $po->id, $number,
                 "أُنشئ {$number} لـ {$supplier->name_ar} بقيمة {$totalText} ر.س — سلسلة اعتماد {$steps} خطوة".($steps > 1 ? 'ات' : '').($status === 'draft' ? ' (مسودة)' : ''),
                 "{$number} created for {$supplier->name_en} — {$totalText} SAR, {$steps}-step approval", $status === 'pending' ? [$chain[0]['roleKey']] : []);
+            if ($raised) {
+                $worst = max(array_column($raised, 'pct'));
+                $this->notify->activity($user, 'PurchaseOrder', $po->id, $number, "{$number}: سعر أعلى من تقدير طلب الشراء (حتى +{$worst}%) — السبب: {$priceReason}. أُضيف اعتماد المالية",
+                    "{$number}: priced above the requisition estimate (up to +{$worst}%) — {$priceReason}. Finance approval added", ['finance']);
+            }
 
             return $this->load($po->id);
         });
@@ -319,12 +354,73 @@ class PoService
         return in_array($po->status, self::OPEN_FOR_DELIVERY, true) && $po->due_date !== null && $po->due_date->lt(H::dayStart());
     }
 
-    /** Received share of the ordered quantity (accepted + damaged + rejected count as received for progress). */
+    /**
+     * Share of the ordered quantity that physically came in (accepted + damaged). Rejected goods never entered, so they
+     * are never progress — whatever `procurement.rejectedStaysOpen` says. Needs `lines` loaded with their counters.
+     */
     public static function receivedPct(PurchaseOrder $po): int
     {
         $ordered = (int) $po->lines->sum('qty');
+        $in = (int) $po->lines->sum(fn ($l) => min((int) $l->qty, (int) $l->received_qty + (int) $l->damaged_qty));
 
-        return $ordered > 0 ? (int) round(($ordered - (int) $po->open_qty) / $ordered * 100) : 0;
+        return $ordered > 0 ? (int) round($in / $ordered * 100) : 0;
+    }
+
+    /**
+     * The four figures of a purchase order, never one percentage: accepted into stock, damaged (in DMG-01, settled by a
+     * purchase return), rejected (never entered) and what the supplier still owes. `waived` is what was written off when
+     * the order was closed short. Needs `lines` loaded with their counters.
+     *
+     * @return array{ordered:int, received:int, damaged:int, rejected:int, open:int, waived:int}
+     */
+    public static function receipt(PurchaseOrder $po): array
+    {
+        $staysOpen = H::rejectedStaysOpen();
+        $owed = (int) $po->lines->sum(fn ($l) => H::openQty($l, $staysOpen));
+        $over = in_array($po->status, ['closed', 'cancelled'], true);
+
+        return ['ordered' => (int) $po->lines->sum('qty'), 'received' => (int) $po->lines->sum('received_qty'), 'damaged' => (int) $po->lines->sum('damaged_qty'),
+            'rejected' => (int) $po->lines->sum('rejected_qty'), 'open' => $over ? 0 : $owed, 'waived' => $po->status === 'closed' ? $owed : 0];
+    }
+
+    /**
+     * Close an order short: the supplier will not deliver what is still open (out of stock, rejected goods not replaced).
+     * `partial → closed` — the transition the state machine always had and nothing implemented. What is open is waived:
+     * no follow-up shipment, no "incoming" in replenishment, the commitment leaves the open-orders value. A shipment that
+     * never arrived is cancelled with the order; a truck at the gate has to be received or refused first.
+     */
+    public function close(AuthUser $user, string $id, string $reason): PurchaseOrder
+    {
+        return $this->locked($id, function (PurchaseOrder $po) use ($user, $reason) {
+            $this->transition($po, 'closed', $po->status === 'closed' ? "أمر الشراء {$po->number} مقفل مسبقًا"
+                : "يُقفل أمر الشراء بعد استلام جزء منه (الحالة: {$po->status}) — قبل أي استلام يُلغى أو تُتابَع الشحنة المتوقعة");
+            // A truck at the gate is not locked here on purpose (GRN posting locks shipment → order, the reverse order would
+            // deadlock): the rare arrival registered during this very request is stopped by receiving itself, which refuses
+            // a closed order (PO_NOT_RECEIVABLE) and leaves "refuse at the gate" as the way out.
+            $busy = InboundShipment::where('po_id', $po->id)->whereIn('status', ['arrived', 'inspecting'])->orderBy('created_at')->value('number');
+            if ($busy) {
+                throw AppError::rule('PO_CLOSE_SHIPMENT_OPEN', "الشحنة {$busy} عند البوابة لهذا الأمر — استلمها أو ارفضها أولًا ثم أقفل الأمر", "Shipment {$busy} of this order is at the gate — receive or refuse it first", ['shipment' => $busy]);
+            }
+            $waiting = InboundShipment::where('po_id', $po->id)->where('status', 'expected')->orderBy('created_at')->orderBy('id')->lockForUpdate()->get();
+            $figures = self::receipt($po);
+            $waived = $po->lines->map(fn ($l) => ['lineNo' => $l->line_no, 'sku' => $l->product?->sku, 'qty' => H::openQty($l)])->filter(fn ($l) => $l['qty'] > 0)->values()->all();
+            $waivedQty = array_sum(array_column($waived, 'qty'));
+            $waivedValue = H::round2($po->lines->sum(fn ($l) => H::openQty($l) * (float) $l->price));
+            foreach ($waiting as $s) {
+                $s->update(['status' => 'cancelled']);
+                $this->audit->status($user, 'InboundShipment', $s->id, $s->number, 'expected', 'cancelled', "إقفال {$po->number}: {$reason}");
+            }
+            $from = $po->status;
+            $po->update(['status' => 'closed', 'closed_at' => now(), 'closed_by' => $user->username, 'close_reason' => $reason, 'open_qty' => 0]);
+            $this->audit->log($user, ['action' => 'PO.CLOSE', 'entityType' => 'PurchaseOrder', 'entityId' => $po->id, 'entityNumber' => $po->number, 'oldValue' => ['status' => $from, 'openQty' => $waivedQty] + $figures,
+                'newValue' => ['status' => 'closed', 'reason' => $reason, 'waivedQty' => $waivedQty, 'waivedValue' => $waivedValue, 'lines' => $waived]]);
+            $this->audit->status($user, 'PurchaseOrder', $po->id, $po->number, $from, 'closed', $reason);
+            $valueText = self::num($waivedValue);
+            $this->notify->activity($user, 'PurchaseOrder', $po->id, $po->number, "أُقفل {$po->number} على ما استُلم — أُسقطت {$waivedQty} وحدة لم تورَّد (قيمتها {$valueText} ر.س): {$reason}",
+                "{$po->number} closed short — {$waivedQty} undelivered units waived ({$valueText} SAR): {$reason}", ['proc', 'finance']);
+
+            return $this->load($po->id);
+        });
     }
 
     /** Cancel is allowed only before the PO is sent to the supplier. */
@@ -351,7 +447,7 @@ class PoService
         $query = PurchaseOrder::query()->with([
             'supplier:id,code,name_ar,name_en,score', 'warehouse:id,code,name_ar,name_en',
             'approvals' => fn ($q) => $q->orderBy('step'), 'shipments:id,po_id,number,status,eta',
-        ])->with('lines:id,po_id,qty')->withCount(['lines', 'grns']);
+        ])->with('lines:id,po_id,qty,received_qty,damaged_qty,rejected_qty')->withCount(['lines', 'grns' => fn ($q) => $q->whereNull('voided_at')]);
         if (! empty($filters['status'])) {
             $query->whereIn('status', H::csv($filters['status']));
         }
@@ -387,6 +483,7 @@ class PoService
             $row['currentStep'] = $po->approvals->first(fn ($a) => $a->decision === 'pending')?->toArray();
             $row['late'] = self::isLate($po);
             $row['receivedPct'] = self::receivedPct($po);
+            $row['receipt'] = self::receipt($po);
             unset($row['lines']);
 
             return $row;
@@ -403,8 +500,8 @@ class PoService
             'rfq:id,number,status',
             'shipments' => fn ($q) => $q->orderBy('created_at')->orderBy('id'),
             'shipments.lines' => fn ($q) => $q->orderBy('line_no'), 'shipments.lines.product:'.self::PRODUCT_SEL,
-            'shipments.grns:id,number,posted_at,shipment_id',
-            'grns' => fn ($q) => $q->select(['id', 'number', 'posted_at', 'posted_by', 'shipment_id', 'summary_ar', 'summary_en', 'po_id'])->withCount('lines')->orderBy('posted_at')->orderBy('id'),
+            'shipments.grns:id,number,posted_at,shipment_id,voided_at',
+            'grns' => fn ($q) => $q->select(['id', 'number', 'posted_at', 'posted_by', 'shipment_id', 'summary_ar', 'summary_en', 'po_id', 'voided_at', 'voided_by', 'void_reason'])->withCount('lines')->orderBy('posted_at')->orderBy('id'),
         ]);
         $po->shipments->each(fn ($s) => $s->grns->each->makeHidden('shipment_id'));
         $po->grns->each->makeHidden('po_id');
@@ -416,20 +513,35 @@ class PoService
         $prs = PurchaseRequisition::where('po_id', $po->id)->get(['id', 'number', 'status']);
         // per line: what the GRNs accepted and what supplier invoices already cover — the invoice form bills the difference
         $lineIds = $po->lines->pluck('id');
-        $accepted = GrnLine::whereIn('po_line_id', $lineIds)->selectRaw('po_line_id, coalesce(sum(accepted_qty), 0) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
+        $accepted = GrnLine::whereIn('po_line_id', $lineIds)->whereHas('grn', fn ($q) => $q->whereNull('voided_at')) // a voided receipt is history, not goods
+            ->selectRaw('po_line_id, coalesce(sum(accepted_qty), 0) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
         $invoiced = SupplierInvoiceLine::whereIn('po_line_id', $lineIds)->whereHas('invoice', fn ($q) => $q->where('status', '!=', 'cancelled'))
             ->selectRaw('po_line_id, coalesce(sum(qty), 0) as qty')->groupBy('po_line_id')->pluck('qty', 'po_line_id');
+        $staysOpen = H::rejectedStaysOpen();
+        $over = in_array($po->status, ['closed', 'cancelled'], true);
+        $tolerance = (float) ($this->settings->get('procurement.prPriceTolerancePct') ?? 10);
         foreach ($row['lines'] as $i => $l) {
+            $line = $po->lines[$i];
             $row['lines'][$i]['acceptedQty'] = (int) ($accepted[$l['id']] ?? 0);
             $row['lines'][$i]['invoicedQty'] = (int) ($invoiced[$l['id']] ?? 0);
+            // what the supplier still owes on the line (rejected goods included while the policy says so); 0 once the order is over
+            $row['lines'][$i]['openQty'] = $over ? 0 : H::openQty($line, $staysOpen);
+            $row['lines'][$i]['waivedQty'] = $po->status === 'closed' ? H::openQty($line, $staysOpen) : 0;
+            $est = $line->pr_est_price !== null ? (float) $line->pr_est_price : null;
+            $row['lines'][$i]['priceChangePct'] = $est ? round(((float) $line->price - $est) / $est * 100, 1) : null;
+            $row['lines'][$i]['priceAboveEstimate'] = $est !== null && (float) $line->price > $est * (1 + $tolerance / 100) + 1e-9;
         }
 
         return $row + [
-            'late' => self::isLate($po), 'receivedPct' => self::receivedPct($po),
+            'late' => self::isLate($po), 'receivedPct' => self::receivedPct($po), 'receipt' => self::receipt($po),
+            'rejectedStaysOpen' => $staysOpen, 'prPriceTolerancePct' => $tolerance,
+            // discount / shipping the next invoice may still carry: the order's figure minus what earlier invoices already billed
+            'charges' => SupplierInvoiceService::chargesLeft($po),
+            'canClose' => Sm::can('PO_TRANSITIONS', $po->status, 'closed'),
             'invoices' => $po->invoices()->orderBy('created_at')->get(['id', 'number', 'supplier_invoice_no', 'status', 'total', 'due_date'])->map->toArray()->all(),
             'currentStep' => $po->approvals->first(fn ($a) => $a->decision === 'pending')?->toArray(),
             'sources' => ['rfq' => $po->rfq?->toArray(), 'prs' => $prs->map->toArray()->all()],
-            'trace' => $po->shipments->map(fn ($s) => ['shipment' => $s->number, 'status' => $s->status, 'eta' => $s->eta?->toJSON(), 'grns' => $s->grns->pluck('number')->all()])->all(),
+            'trace' => $po->shipments->map(fn ($s) => ['shipment' => $s->number, 'status' => $s->status, 'eta' => $s->eta?->toJSON(), 'grns' => $s->grns->whereNull('voided_at')->pluck('number')->values()->all()])->all(),
         ];
     }
 

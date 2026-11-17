@@ -2,23 +2,32 @@
 
 namespace Tests\Feature\Transport;
 
+use App\Models\ActivityLog;
 use App\Models\AuditLog;
+use App\Models\Customer;
 use App\Models\Driver;
 use App\Models\FulfillmentOrder;
+use App\Models\OpsException;
+use App\Models\SalesOrder;
 use App\Models\StatusHistory;
 use App\Models\Trip;
 use App\Models\TripOrder;
 use App\Models\TripStop;
 use App\Models\Vehicle;
+use App\Models\Warehouse;
 use App\Services\Core\SettingsService;
+use App\Services\Transport\TripCostService;
 use App\Services\Transport\TripsService;
 use App\Support\AppError;
+use PHPUnit\Framework\Assert;
+use RuntimeException;
 use Tests\ApiTestCase;
 
 /**
- * Trips (TMS): planning from packed fulfillment orders, vehicle recommendation, assignment rules, stop order,
- * cancel / close and the control tower. Seeded fleet used for the rejections: V-15 maintenance · V-09 out of service ·
- * DRV-11 blocked · DRV-16 off shift · DRV-13 on route (TRP-2026-0029).
+ * Trips (TMS): planning from packed fulfillment orders, vehicle recommendation, assignment rules (also while loading),
+ * stop order and planned arrivals, orders joining / leaving a trip, the dispatch gate, cancel / close and the control
+ * tower. Seeded fleet used for the rejections: V-15 maintenance · V-09 out of service · DRV-11 blocked ·
+ * DRV-16 off shift · DRV-13 on route (TRP-2026-0029).
  */
 class TripsTest extends ApiTestCase
 {
@@ -62,9 +71,18 @@ class TripsTest extends ApiTestCase
         $this->assertSame(1, AuditLog::where('action', 'TRIP.CREATE')->where('entity_id', $t['id'])->count());
         $this->assertSame('planned', StatusHistory::where('entity_type', 'Trip')->where('entity_id', $t['id'])->value('to_status'));
 
-        // honest integration status: no ETA / delay is invented for a trip nobody tracks yet
+        // honest integration status: no LIVE eta / delay is invented for a trip nobody tracks yet …
         $this->assertNull($t['eta']);
         $this->assertSame(0, $t['delayMin']);
+        // … but every stop has a PLANNED arrival (an estimate: no maps provider here), and the order has no window to keep
+        $this->assertSame(['estimate', 'estimate'], array_column($t['stops'], 'etaSource'));
+        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $t['stops'][0]['eta']);
+        $this->assertGreaterThan($t['stops'][0]['eta'], $t['stops'][1]['eta'], 'the second stop is reached after the first one and its service time');
+        $this->assertSame([null, null], array_column($t['stops'], 'windowOk'));
+        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $t['plannedEnd']);
+        $this->assertTrue($t['canAssignDriver']);
+        $this->assertTrue($t['canRemoveOrders']);
+        $this->assertSame(['TRIP_NOT_READY', 'TRIP_NO_VEHICLE', 'TRIP_NO_DRIVER', 'TRIP_NOT_LOADED', 'TRIP_NOTHING_LOADED'], array_column($t['dispatchGate']['blockers'], 'code'));
 
         // the same order cannot be put on a second active trip
         $this->expectRejected($this->postAs('disp', '/api/transport/trips', ['warehouseCode' => 'RYD', 'date' => '2026-09-20', 'routeAr' => 'x', 'foNumbers' => [$fo1->number]]), 'FO_ON_TRIP', [422]);
@@ -209,7 +227,7 @@ class TripsTest extends ApiTestCase
         $url = "/api/transport/trips/{$t['number']}/assign";
 
         $body = $this->expectRejected($this->postAs('disp', $url, ['driverCode' => 'DRV-11']), 'DRIVER_CANNOT_ASSIGN', [422]);
-        $this->assertSame('مرفوض: وثائق السائق تنتهي قريبًا — الإسناد موقوف', $body['message']);
+        $this->assertSame('مرفوض: السائق موقوف عن الإسناد — راجع وثائقه أو سبب الإيقاف في بطاقته', $body['message']);
         $body = $this->expectRejected($this->postAs('disp', $url, ['driverCode' => 'DRV-13']), 'DRIVER_BUSY', [422]);
         $this->assertSame('مرفوض: السائق برحلة متزامنة', $body['message']);
         $body = $this->expectRejected($this->postAs('disp', $url, ['driverCode' => 'DRV-16']), 'DRIVER_CANNOT_ASSIGN', [422]);
@@ -221,6 +239,18 @@ class TripsTest extends ApiTestCase
         Driver::where('code', $expired['code'])->update(['license_expiry' => now()->subDays(2)]);
         $body = $this->expectRejected($this->postAs('disp', $url, ['driverCode' => $expired['code']]), 'DRIVER_CANNOT_ASSIGN', [422]);
         $this->assertStringContainsString('رخصة منتهية', $body['message']);
+
+        // an expired iqama / ID blocks exactly like an expired licence
+        $noIqama = $this->mkDriver();
+        Driver::where('code', $noIqama['code'])->update(['iqama_expiry' => now()->subDays(2)]);
+        $body = $this->expectRejected($this->postAs('disp', $url, ['driverCode' => $noIqama['code']]), 'DRIVER_CANNOT_ASSIGN', [422]);
+        $this->assertSame('مرفوض: الإقامة / الهوية منتهية', $body['message']);
+        $this->assertFalse($this->app->make(TripsService::class)->driverCanAssign(Driver::where('code', $noIqama['code'])->first())['ok']);
+        $this->expectRejected($this->postAs('disp', '/api/transport/trips', ['warehouseCode' => 'RYD', 'date' => '2026-09-20', 'routeAr' => 'x', 'foNumbers' => [$this->mkFo(100)->number], 'driverCode' => $noIqama['code']]), 'DRIVER_CANNOT_ASSIGN', [422]);
+        // the medical certificate only warns
+        $noMedical = $this->mkDriver();
+        Driver::where('code', $noMedical['code'])->update(['medical_expiry' => now()->subDays(2)]);
+        $this->assertTrue($this->app->make(TripsService::class)->driverCanAssign(Driver::where('code', $noMedical['code'])->first())['ok']);
 
         $this->assertNull(Trip::find($t['id'])->driver_id);
         $this->assertSame('planned', Trip::find($t['id'])->status);
@@ -273,9 +303,65 @@ class TripsTest extends ApiTestCase
         Trip::where('id', $first['id'])->update(['status' => 'loading']); // loading is done by the fulfillment domain
         $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$t['number']}/assign", ['driverCode' => $driver['code']]), 'DRIVER_BUSY', [422]);
         $this->expectRejected($this->postAs('disp', "/api/transport/drivers/{$driver['code']}/state", ['to' => 'off']), 'DRIVER_ON_TRIP', [422]);
-        // once loading started the assignment is locked
-        $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$first['number']}/assign", ['driverCode' => 'DRV-07']), 'TRIP_LOCKED', [422]);
-        $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$first['number']}/unassign"), 'TRIP_LOCKED', [422]);
+        // once loading started the VEHICLE is fixed (the goods are on it); the driver may still change — see the next test
+        $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$first['number']}/unassign"), 'TRIP_LOADED_VEHICLE', [422]);
+        $this->assertSame([$first['vehicle']['id'], $first['driver']['id']], [Trip::find($first['id'])->vehicle_id, Trip::find($first['id'])->driver_id]);
+    }
+
+    public function test_a_trip_that_started_loading_can_still_get_or_change_its_driver_but_not_its_vehicle(): void
+    {
+        // the dead end found by the audit: loading needs only a vehicle, so this trip had no way to ever get a driver,
+        // be dispatched (no driver) or be cancelled (loaded)
+        $vehicle = $this->mkVehicle('dry');
+        $other = $this->mkVehicle('dry');
+        $driver = $this->mkDriver();
+        $second = $this->mkDriver();
+        $t = $this->mkTrip([$this->mkFo(100)->number], ['vehicleCode' => $vehicle['code']]);
+        $this->assertSame('vassigned', $t['status']);
+        Trip::where('id', $t['id'])->update(['status' => 'loading']); // loading is done by the fulfillment domain
+        TripOrder::where('trip_id', $t['id'])->update(['loaded' => true]);
+        $url = "/api/transport/trips/{$t['number']}";
+
+        $room = $this->expectOk($this->getAs('disp', $url));
+        $this->assertSame([false, true], [$room['canEdit'], $room['canAssignDriver']]);
+        $this->assertContains('TRIP_NO_DRIVER', array_column($room['dispatchGate']['blockers'], 'code'));
+
+        $a = $this->expectOk($this->postAs('disp', "{$url}/assign", ['driverCode' => $driver['code']]));
+        $this->assertSame(['loading', $driver['code'], $vehicle['code']], [$a['status'], $a['driver']['code'], $a['vehicle']['code']], 'the driver is named; the trip stays in loading');
+        $this->assertTrue($a['dispatchGate']['ok'], 'vehicle + driver + everything loaded → it can leave');
+        $this->assertSame(1, AuditLog::where('action', 'TRIP.ASSIGN_DRIVER')->where('entity_id', $t['id'])->where('new_value', $driver['code'])->count());
+        // replacing him is possible too; the same rules as ever apply to the new one
+        $this->expectRejected($this->postAs('disp', "{$url}/assign", ['driverCode' => 'DRV-11']), 'DRIVER_CANNOT_ASSIGN', [422]);
+        $swapped = $this->expectOk($this->postAs('disp', "{$url}/assign", ['driverCode' => $second['code'], 'vehicleCode' => $vehicle['code']]));
+        $this->assertSame($second['code'], $swapped['driver']['code']);
+        $this->assertStringContainsString('بدلًا من', collect($swapped['events'])->last()['textAr']);
+
+        // the vehicle: not while it is loaded
+        $body = $this->expectRejected($this->postAs('disp', "{$url}/assign", ['vehicleCode' => $other['code']]), 'TRIP_LOADED_VEHICLE', [422]);
+        $this->assertStringContainsString('أنزل الحمولة أولًا', $body['message']);
+        $this->expectRejected($this->postAs('disp', "{$url}/unassign", ['vehicle' => true]), 'TRIP_LOADED_VEHICLE', [422]);
+        $this->expectRejected($this->postAs('disp', "{$url}/unassign"), 'TRIP_LOADED_VEHICLE', [422]);
+        $this->assertSame(['available', 'assigned'], [Vehicle::where('code', $other['code'])->value('state'), Vehicle::where('code', $vehicle['code'])->value('state')]);
+        // dropping only the driver is allowed (one flag leaves the other side alone)
+        $dropped = $this->expectOk($this->postAs('disp', "{$url}/unassign", ['driver' => true]));
+        $this->assertSame(['loading', null, $vehicle['code']], [$dropped['status'], $dropped['driver'], $dropped['vehicle']['code']]);
+
+        // same in `ready`; once it left, nothing changes any more
+        Trip::where('id', $t['id'])->update(['status' => 'ready']);
+        $this->assertSame('ready', $this->expectOk($this->postAs('disp', "{$url}/assign", ['driverCode' => $driver['code']]))['status']);
+        Trip::where('id', $t['id'])->update(['status' => 'onroute']);
+        $this->expectRejected($this->postAs('disp', "{$url}/assign", ['driverCode' => $second['code']]), 'TRIP_LOCKED', [422]);
+        $this->expectRejected($this->postAs('disp', "{$url}/unassign", ['driver' => true]), 'TRIP_LOCKED', [422]);
+        $this->assertSame($driver['id'], Trip::find($t['id'])->driver_id);
+        Trip::where('id', $t['id'])->update(['status' => 'closed']);
+        Vehicle::where('code', $vehicle['code'])->update(['state' => 'available']);
+
+        // planning stage: "unassign the vehicle" releases the vehicle only
+        $p = $this->mkTrip([$this->mkFo(100)->number], ['vehicleCode' => $other['code'], 'driverCode' => $second['code']]);
+        $this->assertSame('dassigned', $p['status']);
+        $u = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$p['number']}/unassign", ['vehicle' => true]));
+        $this->assertSame([null, $second['code'], 'dassigned'], [$u['vehicle'], $u['driver']['code'], $u['status']]);
+        $this->assertSame('available', Vehicle::where('code', $other['code'])->value('state'));
     }
 
     public function test_full_lifecycle_assign_reorder_close(): void
@@ -397,15 +483,271 @@ class TripsTest extends ApiTestCase
 
             return null;
         };
+        // one rule, the one the dispatch endpoint enforces: the gate (data for the Trip Room) and assertCanDispatch (its first blocker)
+        $gate = fn () => $this->expectOk($this->getAs('disp', "/api/transport/trips/{$t['number']}"))['dispatchGate'];
         $this->assertSame('TRIP_NOT_READY', $code(fn () => $trips->assertCanDispatch($t['number'])));
         Trip::where('id', $t['id'])->update(['status' => 'loading']);
-        $this->assertSame('TRIP_NOT_LOADED', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        $this->assertSame('TRIP_NOT_LOADED', $code(fn () => $trips->assertCanDispatch($t['number'])), 'a packed order that is not loaded blocks');
+        $this->assertSame(['TRIP_NOT_LOADED', 'TRIP_NOTHING_LOADED'], array_column($gate()['blockers'], 'code'));
         TripOrder::where('trip_id', $t['id'])->update(['loaded' => true]);
         $this->assertSame($t['number'], $trips->assertCanDispatch($t['number'])->number);
-        Trip::where('id', $t['id'])->update(['status' => 'planned']);
+
+        // an order that is not packed yet does not block: it leaves the trip at dispatch
+        $picked = $this->mkFo(50, 2, null, 'picked');
+        $stop = TripStop::create(['trip_id' => $t['id'], 'seq' => 2, 'customer_ar' => 'عميل لاحق', 'fo_id' => $picked->id]);
+        TripOrder::create(['trip_id' => $t['id'], 'fo_id' => $picked->id, 'stop_id' => $stop->id]);
+        $g = $gate();
+        $this->assertSame([true, [], [$picked->number], 1], [$g['ok'], $g['packedNotLoaded'], $g['leaving'], count($g['loaded'])]);
+        FulfillmentOrder::whereKey($picked->id)->update(['status' => 'packed']);
+        $this->assertSame([false, [$picked->number]], [$gate()['ok'], $gate()['packedNotLoaded']]);
+        TripOrder::where('trip_id', $t['id'])->where('fo_id', $picked->id)->update(['loaded' => true]);
+
+        // the driver must be able to drive: blocked / off shift / licence or iqama expired
+        foreach ([['blocked' => true], ['state' => 'off'], ['license_expiry' => now()->subDays(2)], ['iqama_expiry' => now()->subDays(2)]] as $bad) {
+            $before = Driver::where('code', $driver['code'])->first()->only(array_keys($bad));
+            Driver::where('code', $driver['code'])->update($bad);
+            $this->assertSame('DRIVER_BLOCKED', $code(fn () => $trips->assertCanDispatch($t['number'])), json_encode(array_keys($bad)));
+            Driver::where('code', $driver['code'])->update($before);
+        }
+        // a vehicle that is out of service does not leave
+        Vehicle::where('code', $vehicle['code'])->update(['state' => 'breakdown']);
+        $this->assertSame('VEHICLE_STATE', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        Vehicle::where('code', $vehicle['code'])->update(['state' => 'assigned']);
+        // an open critical loading exception on the trip blocks until it is resolved
+        $exception = OpsException::create(['number' => self::code('EXC-T'), 'kind' => 'wrongveh', 'severity' => 'c', 'owner_role' => 'disp', 'entity_type' => 'Trip', 'entity_id' => $t['id'], 'entity_number' => $t['number'], 'text_ar' => 'مسح شاحنة خاطئة']);
+        $this->assertSame('TRIP_EXCEPTIONS', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        $exception->update(['status' => 'resolved']);
+        // without a driver, without a vehicle
+        Trip::where('id', $t['id'])->update(['driver_id' => null]);
+        $this->assertSame('TRIP_NO_DRIVER', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        Trip::where('id', $t['id'])->update(['driver_id' => $t['driver']['id'], 'vehicle_id' => null]);
+        $this->assertSame('TRIP_NO_VEHICLE', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        Trip::where('id', $t['id'])->update(['vehicle_id' => $t['vehicle']['id']]);
+        // nothing loaded and nothing packed either
         TripOrder::where('trip_id', $t['id'])->update(['loaded' => false]);
+        FulfillmentOrder::whereIn('id', TripOrder::where('trip_id', $t['id'])->pluck('fo_id'))->update(['status' => 'picked']);
+        $this->assertSame('TRIP_NOTHING_LOADED', $code(fn () => $trips->assertCanDispatch($t['number'])));
+        // a trip on the road has no gate any more
+        Trip::where('id', $t['id'])->update(['status' => 'onroute']);
+        $this->assertNull($gate());
+        $this->assertSame('TRIP_NOT_READY', $code(fn () => $trips->assertCanDispatch($t['number'])));
+
+        Trip::where('id', $t['id'])->update(['status' => 'dassigned']);
         $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/unassign", ['vehicle' => true, 'driver' => true]));
         $this->assertSame('available', Vehicle::where('code', $vehicle['code'])->value('state'));
+    }
+
+    public function test_orders_join_a_planned_trip_and_leave_it_while_they_are_not_loaded(): void
+    {
+        $small = $this->mkVehicle('dry', 1000, 16, 8);
+        $fo1 = $this->mkFo(300, 8);
+        $fo2 = $this->mkFo(200, 8);
+        $t = $this->mkTrip([$fo1->number, $fo2->number], ['vehicleCode' => $small['code']]);
+        $url = "/api/transport/trips/{$t['number']}/orders";
+
+        // ── add: same checks as creation, and the assigned vehicle must still fit
+        $this->expectRejected($this->postAs('disp', "{$url}/add"), 'INVALID_INPUT', [400]);
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => 'FO-NOPE-9']), 'FO_NOT_FOUND', [404]);
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $fo1->number]), 'FO_ON_TRIP', [422]);
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $this->mkFo(50, 1, null, 'alloc')->number]), 'FO_NOT_READY', [422]);
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $this->mkFo(50, 1, null, 'packed', 'JED')->number]), 'FO_OTHER_WH', [422]);
+        $heavy = $this->mkFo(600, 8);
+        $body = $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $heavy->number]), 'VEHICLE_UNFIT', [422]);
+        $this->assertStringContainsString('تجاوز الوزن الأقصى (1100 > 1000 كجم)', $body['message']);
+        $frozen = $this->mkFo(50, 1, 'frozen');
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $frozen->number]), 'VEHICLE_UNFIT', [422]);
+        $this->assertSame([null, null], [FulfillmentOrder::find($heavy->id)->trip_id, FulfillmentOrder::find($frozen->id)->trip_id]);
+        $this->expectRejected($this->postAs('sales', "{$url}/add", ['foNumber' => $heavy->number]), 'FORBIDDEN', [403]);
+
+        $fo3 = $this->mkFo(150, 4, null, 'picked');
+        $res = $this->postAs('disp', "{$url}/add", ['foNumber' => $fo3->number]);
+        $this->assertSame(201, $res->getStatusCode());
+        $added = $this->expectOk($res);
+        $this->assertSame([3, 650.0, 3, 'dry'], [count($added['stops']), (float) $added['kg'], $added['pallets'], $added['tempNeed']]);
+        $this->assertSame([$fo3->number, 3], [$added['stops'][2]['fo']['number'], $added['stops'][2]['seq']]);
+        $this->assertNotNull($added['stops'][2]['eta'], 'the new stop is planned like the others');
+        $this->assertSame([$t['id'], 3], [FulfillmentOrder::find($fo3->id)->trip_id, FulfillmentOrder::find($fo3->id)->seq]);
+        $this->assertSame(1, AuditLog::where('action', 'TRIP.ADD_ORDER')->where('entity_id', $t['id'])->count());
+        $this->assertStringContainsString("أُضيف الطلب {$fo3->number}", collect($added['events'])->last()['textAr']);
+        // without a vehicle, frozen goods raise the trip's temperature need
+        $free = $this->mkTrip([$this->mkFo(100)->number]);
+        $this->assertSame('reefer', $this->expectOk($this->postAs('disp', "/api/transport/trips/{$free['number']}/orders/add", ['foNumber' => $frozen->number]))['tempNeed']);
+
+        // ── remove: the stop goes, the sequence closes up, the order stays packed and free for another trip
+        $this->expectRejected($this->postAs('sales', "{$url}/{$fo1->number}/remove"), 'FORBIDDEN', [403]);
+        $this->expectRejected($this->postAs('disp', "{$url}/{$heavy->number}/remove"), 'FO_NOT_ON_TRIP', [422]);
+        $res = $this->postAs('disp', "{$url}/{$fo1->number}/remove", ['reason' => 'العميل أجّل الاستلام']); // the body is optional
+        $this->assertSame(201, $res->getStatusCode());
+        $removed = $this->expectOk($res);
+        $this->assertSame([[$fo2->number, 1], [$fo3->number, 2]], array_map(fn ($s) => [$s['fo']['number'], $s['seq']], $removed['stops']));
+        $this->assertSame([350.0, 2, 2], [(float) $removed['kg'], $removed['pallets'], count($removed['orders'])]);
+        $freed = FulfillmentOrder::find($fo1->id);
+        $this->assertSame([null, 'packed'], [$freed->trip_id, $freed->status]);
+        $this->assertSame([1, 2], [FulfillmentOrder::find($fo2->id)->seq, FulfillmentOrder::find($fo3->id)->seq]);
+        $this->assertSame(0, TripStop::where('trip_id', $t['id'])->where('fo_id', $fo1->id)->count());
+        $this->assertSame(1, AuditLog::where('action', 'TRIP.REMOVE_ORDER')->where('entity_id', $t['id'])->count());
+        $this->assertStringContainsString('العميل أجّل الاستلام', collect($removed['events'])->last()['textAr']);
+        $this->assertSame('planned', $this->mkTrip([$fo1->number])['status'], 'the removed order is plannable again');
+
+        // ── while loading: only what is NOT on the vehicle may leave; adding is over
+        Trip::where('id', $t['id'])->update(['status' => 'loading']);
+        TripOrder::where('trip_id', $t['id'])->where('fo_id', $fo2->id)->update(['loaded' => true]);
+        FulfillmentOrder::whereKey($fo2->id)->update(['status' => 'loaded', 'loaded' => true]);
+        $this->assertTrue($this->expectOk($this->getAs('disp', "/api/transport/trips/{$t['number']}"))['canRemoveOrders']);
+        $body = $this->expectRejected($this->postAs('disp', "{$url}/{$fo2->number}/remove"), 'ORDER_LOADED', [422]);
+        $this->assertStringContainsString('أنزله أولًا', $body['message']);
+        $this->expectRejected($this->postAs('disp', "{$url}/add", ['foNumber' => $heavy->number]), 'TRIP_LOCKED', [422]);
+        $left = $this->expectOk($this->postAs('disp', "{$url}/{$fo3->number}/remove"));
+        $this->assertSame(['loading', [$fo2->number], 200.0], [$left['status'], array_map(fn ($s) => $s['fo']['number'], $left['stops']), (float) $left['kg']]);
+        // the last order never leaves — the trip is cancelled (or unloaded) instead
+        $this->assertFalse($left['canRemoveOrders']);
+        $this->expectRejected($this->postAs('disp', "{$url}/{$fo2->number}/remove"), 'ORDER_LOADED', [422]);
+        TripOrder::where('trip_id', $t['id'])->update(['loaded' => false]);
+        FulfillmentOrder::whereKey($fo2->id)->update(['status' => 'packed', 'loaded' => false]);
+        $this->expectRejected($this->postAs('disp', "{$url}/{$fo2->number}/remove"), 'TRIP_LAST_ORDER', [422]);
+        Trip::where('id', $t['id'])->update(['status' => 'onroute']);
+        $this->expectRejected($this->postAs('disp', "{$url}/{$fo2->number}/remove"), 'TRIP_LOCKED', [422]);
+        $this->assertSame($t['id'], FulfillmentOrder::find($fo2->id)->trip_id);
+        Trip::where('id', $t['id'])->update(['status' => 'closed']);
+        Vehicle::where('code', $small['code'])->update(['state' => 'available']);
+    }
+
+    public function test_planned_arrival_follows_the_stop_order_and_never_touches_the_customer_window(): void
+    {
+        $trips = $this->app->make(TripsService::class);
+        $settings = $this->app->make(SettingsService::class);
+        $ryd = Warehouse::where('code', 'RYD')->firstOrFail();
+        [$lat, $lng] = [$ryd->lat, $ryd->lng];
+        // the first order was promised between 08:00 and 08:30 — the window comes from the sales order
+        $so = SalesOrder::create(['number' => self::code('SO-T'), 'customer_id' => Customer::orderBy('code')->firstOrFail()->id, 'warehouse_id' => $ryd->id, 'status' => 'packed', 'window' => '08:00–08:30']);
+        $fo1 = $this->mkFo(100);
+        $fo1->update(['so_id' => $so->id]);
+        $t = $this->mkTrip([$fo1->number, $this->mkFo(100)->number, $this->mkFo(100)->number], ['plannedStart' => '07:30']);
+        [$s1, $s2, $s3] = array_column($t['stops'], 'id');
+        $this->assertSame(['08:00–08:30', null, null], array_column($t['stops'], 'window'));
+        // three stops on a line north of the warehouse, 0.09° (≈ 10 km) apart: 10 km × 1.3 ÷ 40 km/h = 20 min per leg, 59 min back
+        foreach ([$s1, $s2, $s3] as $i => $id) {
+            TripStop::whereKey($id)->update(['lat' => $lat + 0.09 * ($i + 1), 'lng' => $lng]);
+        }
+        TripStop::whereKey($s2)->update(['window' => '06:00–23:00']);
+        $plan = fn () => TripStop::where('trip_id', $t['id'])->orderBy('seq')->get()->map(fn ($s) => [$s->id, $s->eta, $s->eta_source, $s->window_ok])->all();
+
+        try {
+            // start 07:30 → 07:50 · +15 min service +20 → 08:25 · +15 +20 → 09:00 · +15 +59 → back at 10:14
+            $this->assertSame(['source' => 'estimate', 'planned' => 3, 'unlocated' => 0, 'late' => 1, 'plannedEnd' => '10:14'], $trips->recomputeEtas($t['number']));
+            $this->assertSame([[$s1, '07:50', 'estimate', false], [$s2, '08:25', 'estimate', true], [$s3, '09:00', 'estimate', null]], $plan(), 'before the window opens is outside the window too');
+
+            // reorder (the endpoint that had no screen): arrivals move, the promise to the customer does not
+            $re = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/stops/reorder", ['stopIds' => [$s3, $s2, $s1]]));
+            $this->assertSame([[$s3, '08:29', 'estimate', null], [$s2, '09:04', 'estimate', true], [$s1, '09:39', 'estimate', false]], $plan());
+            $this->assertSame(['08:29', '09:04', '09:39'], array_column($re['stops'], 'eta'));
+            $this->assertSame([[null, null], ['06:00–23:00', null], ['08:00–08:30', '08:00–08:30']], array_map(fn ($s) => [$s['window'], $s['plannedTime']], $re['stops']));
+            $this->assertSame('10:14', $re['plannedEnd']);
+            $row = $this->expectOk($this->getAs('disp', "/api/transport/trips?q={$t['number']}"))['items'][0];
+            $this->assertSame([['next' => '08:29', 'source' => 'estimate', 'late' => 1], ['done' => 0, 'total' => 3]], [$row['plannedEta'], $row['progress']]);
+            $this->assertArrayNotHasKey('stops', $row);
+
+            // the two policies behind the estimate
+            $settings->set('fleet.avgSpeedKph', 80);
+            $settings->set('delivery.serviceMinutes', 5);
+            $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/stops/reorder", ['stopIds' => [$s1, $s2, $s3]]));
+            $this->assertSame(['07:40', '07:55', '08:10'], array_column($plan(), 1));
+            $settings->set('fleet.avgSpeedKph', 40);
+            $settings->set('delivery.serviceMinutes', 15);
+
+            // a stop the map does not know: no arrival is invented for it, and the chain goes on from the last known point
+            TripStop::whereKey($s2)->update(['lat' => null, 'lng' => null, 'customer_id' => null]);
+            $this->assertSame(['source' => 'estimate', 'planned' => 2, 'unlocated' => 1, 'late' => 1, 'plannedEnd' => '10:13'], $trips->recomputeEtas($t['number']));
+            $this->assertSame([[$s1, '07:50', 'estimate', false], [$s2, null, null, null], [$s3, '08:59', 'estimate', null]], $plan());
+
+            // a warehouse without a pin: nothing can be planned, nothing is guessed
+            $ryd->update(['lat' => null, 'lng' => null]);
+            $this->assertSame(['source' => null, 'planned' => 0, 'unlocated' => 1, 'late' => 0, 'plannedEnd' => null], $trips->recomputeEtas($t['number']));
+            $this->assertSame([null, null, null], array_column($plan(), 1));
+        } finally {
+            $ryd->update(['lat' => $lat, 'lng' => $lng]);
+            $settings->set('fleet.avgSpeedKph', 40);
+            $settings->set('delivery.serviceMinutes', 15);
+        }
+        // an arrival after midnight says so, and a window is then missed
+        Trip::where('id', $t['id'])->update(['planned_start' => '23:50']);
+        TripStop::whereKey($s1)->update(['window' => '23:00–23:59']);
+        $trips->recomputeEtas($t['number']);
+        $this->assertSame([$s1, '00:10 +1', 'estimate', false], $plan()[0]);
+    }
+
+    public function test_close_takes_an_odometer_reading_and_never_depends_on_costing(): void
+    {
+        $onRoute = function (int $km): array {
+            $vehicle = $this->mkVehicle('dry');
+            $driver = $this->mkDriver();
+            $t = $this->mkTrip([$this->mkFo(100)->number], ['km' => $km, 'vehicleCode' => $vehicle['code'], 'driverCode' => $driver['code']]);
+            Trip::where('id', $t['id'])->update(['status' => 'onroute', 'actual_start' => now()->subHours(3)]);
+            Vehicle::where('code', $vehicle['code'])->update(['state' => 'onroute']);
+            Driver::where('code', $driver['code'])->update(['state' => 'onroute']);
+            TripStop::where('trip_id', $t['id'])->update(['status' => 'delivered']);
+
+            return [$t, $vehicle['code']];
+        };
+        $costing = fn (callable $compute) => $this->app->bind(TripCostService::class, fn () => new class($compute)
+        {
+            public function __construct(private $compute) {}
+
+            public function compute(Trip|string $trip): array
+            {
+                return ($this->compute)($trip);
+            }
+        });
+        $odometer = fn (string $code) => Vehicle::where('code', $code)->value('odometer');
+
+        // the reading at the return: never below what the vehicle already shows; preferred over the planned distance
+        [$t, $code] = $onRoute(30);
+        $body = $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$t['number']}/close", ['odometer' => 900]), 'ODOMETER_BACKWARDS', [422]);
+        $this->assertStringContainsString('أقل من عداد المركبة الحالي 1000', $body['message']);
+        $this->expectRejected($this->postAs('disp', "/api/transport/trips/{$t['number']}/close", ['odometer' => 'far']), 'INVALID_INPUT', [400]);
+        $this->assertSame(['onroute', 1000], [Trip::find($t['id'])->status, $odometer($code)]);
+
+        // costing breaks: the trip closes all the same, the message does not claim a cost, and an activity line reports it
+        $costing(fn () => throw new RuntimeException('no rate table'));
+        $closed = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/close", ['odometer' => 1300]));
+        $this->assertSame(['closed', false, 1300], [$closed['status'], $closed['costComputed'], $odometer($code)]);
+        $this->assertStringContainsString('تعذّر حساب التكلفة', $closed['message']);
+        $this->assertStringContainsString('قراءة فعلية', $closed['message']);
+        $this->assertStringNotContainsString('KPIs', $closed['message']);
+        $this->assertSame(1, ActivityLog::where('entity_number', $t['number'])->where('text_ar', 'like', '%تعذّر حساب تكلفة الرحلة%')->where('text_ar', 'like', '%no rate table%')->count());
+        $this->assertSame('available', Vehicle::where('code', $code)->value('state'));
+        $this->assertStringContainsString('"odometerReading":1300', AuditLog::where('action', 'TRIP.CLOSE')->where('entity_id', $t['id'])->value('new_value'));
+
+        // costing answers with a computed sheet: the message says what it is — and only then
+        [$t, $code] = $onRoute(42);
+        $costing(function (Trip|string $trip) {
+            Assert::assertNotNull($trip->actual_end, 'the cost is computed on the closed trip (driver hours need the end time)');
+
+            return ['fuel' => '120.50', 'driver' => 80, 'tolls' => 0, 'computedAt' => now()->toJSON()];
+        });
+        $closed = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/close"));
+        $this->assertTrue($closed['costComputed']);
+        $this->assertStringContainsString('حُسبت التكلفة: 200.50 ر.س', $closed['message']);
+        $this->assertStringContainsString('cost computed: 200.50 SAR', $closed['messageEn']);
+        $this->assertSame(1042, $odometer($code), 'no reading → the planned distance is added, as before');
+
+        // a sheet that carries no computation stamp is not announced as a computed cost
+        [$t] = $onRoute(10);
+        $costing(fn () => ['fuel' => 0, 'computedAt' => null]);
+        $closed = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/close"));
+        $this->assertSame(['closed', false], [$closed['status'], $closed['costComputed']]);
+        $this->assertStringContainsString('لم تُحسب التكلفة بعد', $closed['message']);
+
+        // … and neither is a computed sheet of zeros: nothing was recorded to compute from, and the message says that
+        [$t] = $onRoute(10);
+        $costing(fn () => ['fuel' => 0, 'driver' => 0, 'computedAt' => now()->toJSON(), 'basis' => ['fuel' => ['source' => 'not_configured'], 'driver' => ['source' => 'not_configured']]]);
+        $closed = $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/close"));
+        $this->assertStringContainsString('لا تكلفة محسوبة', $closed['message']);
+        $this->assertStringNotContainsString('حُسبت التكلفة', $closed['message']);
+        // a real figure with components that had no source says both
+        [$t] = $onRoute(10);
+        $costing(fn () => ['fuel' => 90, 'computedAt' => now()->toJSON(), 'basis' => ['fuel' => ['source' => 'actual'], 'driver' => ['source' => 'not_configured'], 'dep' => ['source' => 'not_configured']]]);
+        $this->assertStringContainsString('حُسبت التكلفة: 90.00 ر.س (2 بنود بلا مصدر', $this->expectOk($this->postAs('disp', "/api/transport/trips/{$t['number']}/close"))['message']);
     }
 
     public function test_list_filters_detail_and_tower(): void

@@ -4,6 +4,8 @@ namespace App\Integration\Services;
 
 use App\Integration\Support\Signature;
 use App\Integration\Support\Systems;
+use App\Services\Core\OpsHousekeeping;
+use App\Services\Procurement\ProcurementHousekeeping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -34,7 +36,9 @@ class IntegrationRunner
             $out['systems'] = $this->triggerSystemCycles(); // one scheduler drives every connected system
             $out['reconciliation'] = app(ReconciliationService::class)->runIfDue();
             // follow-up alerts that need no person (late POs, expiring supplier documents) ride on the same heartbeat, once an hour
-            $out['housekeeping'] = app(\App\Services\Procurement\ProcurementHousekeeping::class)->run();
+            $out['housekeeping'] = app(ProcurementHousekeeping::class)->run();
+            // our own waiting orders (every 10 min) and the daily upkeep: expired quotations, driver / vehicle documents, customer balances
+            $out['ops'] = app(OpsHousekeeping::class)->run();
             $out['ms'] = (int) round((microtime(true) - $t0) * 1000);
             $out['at'] = now()->toIso8601ZuluString('millisecond');
             Cache::put(self::LAST_KEY, $out, now()->addDays(7));

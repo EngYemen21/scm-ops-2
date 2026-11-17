@@ -1,9 +1,9 @@
 <script setup>
 // One inbound shipment, with EVERY action of its lifecycle in one place (receiving drawer + /shipments/:number):
 //   expected   → register the truck's arrival (carrier) · cancel the shipment
-//   arrived    → start the inspection
-//   inspecting → scan products / fill quantities per line → post the GRN
-//   putaway    → go to its putaway tasks
+//   arrived    → start the inspection · undo the arrival (wrong click) · refuse the delivery at the gate (reason)
+//   inspecting → scan products / fill quantities per line (several batches per line) → post the GRN · refuse the delivery
+//   putaway    → go to its putaway tasks (a wrong receipt is voided from the GRN page while nothing is put away)
 //   done / cancelled / partially received → open the follow-up shipment for what is still due on the purchase order
 // The "next step" box always says what happens next and who may do it, so a missing button is never a mystery.
 //   <ShipmentPanel :shipment="s" closable @changed="refetch" @grn-posted="refetch" @close="sel = null" @open="(n) => …" />
@@ -13,9 +13,9 @@ import { Btn, Chip, DateInput, ErrorBanner, ScanInput, SectionCard, Stepper, Tex
 import { fmtDate, fmtDateOnly, fmtNum, lang, t } from '@/i18n';
 import { SHIPMENT_LABELS } from '@/shared';
 import { useAuth } from '@/stores/auth';
-import { confirm, showLabel, toast } from '@/stores/ui';
+import { ask, confirm, showLabel, toast } from '@/stores/ui';
 import ReceiveLinesGrid from './ReceiveLinesGrid.vue';
-import { SHIPMENT_STEPS, draftLines, draftSum, emptyDraft, pn, shipmentStep, useShipmentActions } from './shared';
+import { SHIPMENT_STEPS, draftLines, emptyDraft, lineReady, liveGrn, pn, shipmentStep, splitProblem, useShipmentActions } from './shared';
 
 const props = defineProps({
   shipment: { type: Object, required: true },
@@ -26,7 +26,7 @@ const emit = defineEmits(['changed', 'close', 'grn-posted', 'open']);
 
 const auth = useAuth();
 const router = useRouter();
-const { act, arrive, inspect, postGrn, cancel, backorder } = useShipmentActions((s) => emit('changed', s));
+const { act, arrive, inspect, postGrn, cancel, unarrive, refuse, backorder } = useShipmentActions((s) => emit('changed', s));
 
 const drafts = ref({});
 const carrier = ref('');
@@ -37,8 +37,16 @@ watch(() => props.shipment.id, () => { drafts.value = {}; postedGrn.value = null
 
 const S = computed(() => props.shipment.status);
 const editable = computed(() => S.value === 'inspecting' && auth.can('grn.post'));
-/** Every line has an accepted quantity and nothing exceeds the open quantity. */
-const ready = computed(() => editable.value && props.shipment.lines.every((l) => { const d = drafts.value[l.lineNo]; return d && d.acceptedQty != null && draftSum(d) <= l.openQty; }));
+/** Every line has an accepted quantity, nothing exceeds the open quantity and every batch split adds up. */
+const ready = computed(() => editable.value && props.shipment.lines.every((l) => lineReady(l, drafts.value[l.lineNo])));
+const badSplits = computed(() => props.shipment.lines.filter((l) => splitProblem(l, drafts.value[l.lineNo])).length);
+/** The receipt in force (a voided one is history). */
+const grnNo = computed(() => liveGrn(props.shipment));
+const staysOpen = computed(() => props.shipment.policy?.rejectedStaysOpen !== false);
+/** The truck is here and nothing was received yet: the delivery can still be turned away. */
+const gateOpen = computed(() => ['arrived', 'inspecting'].includes(S.value) && !grnNo.value && !props.shipment.locked);
+const canRefuse = computed(() => gateOpen.value && auth.can('shipment.receive'));
+const canUnarrive = computed(() => S.value === 'arrived' && !props.shipment.locked && auth.can('shipment.receive'));
 const entered = computed(() => props.shipment.lines.filter((l) => drafts.value[l.lineNo]?.acceptedQty != null).length);
 const bo = computed(() => props.shipment.backorder || null);
 /** The follow-up shipment matters once this one no longer waits for goods. */
@@ -56,7 +64,11 @@ const next = computed(() => {
   if (S.value === 'inspecting') return { tone: 'amber', title: t('الخطوة التالية: إدخال الكميات وإصدار GRN', 'Next: enter quantities and post the GRN'), text: t('امسح باركود المنتج لتعبئة سطره، أو أدخل الكميات يدويًا. التالف والمرفوض لا يدخلان المخزون المتاح، ولا يُقبل ما يزيد على المتبقي.', 'Scan a product to fill its line, or type the quantities. Damaged and rejected goods never enter available stock, and nothing above the open quantity is accepted.'), perm: 'grn.post' };
   if (S.value === 'putaway') return { tone: 'purple', title: t('الخطوة التالية: التخزين Putaway', 'Next: putaway'), text: t('البضاعة السليمة في منطقة الاستلام. أكّد مهام التخزين بمسح الموقع والمنتج لتصبح متاحة للبيع.', 'Accepted goods are in inbound staging. Confirm the putaway tasks (scan bin + product) to make them available.') };
   if (S.value === 'done') return { tone: 'green', title: t('اكتملت الشحنة ✓', 'Shipment completed ✓'), text: t('استُلمت وخُزّنت بالكامل.', 'Received and put away.') };
-  return { tone: 'red', title: t('الشحنة ملغاة', 'Shipment cancelled'), text: t('لا يمكن الاستلام على شحنة ملغاة.', 'A cancelled shipment cannot be received.') };
+  if (s.refusedAt) {
+    return { tone: 'red', title: t('رُفضت الشحنة عند البوابة', 'Delivery refused at the gate'),
+      text: t(`السبب: ${s.refusedReason || '—'} · ${s.refusedBy || ''} · ${fmtDate(s.refusedAt)}. أمر الشراء ما زال مفتوحًا — افتح شحنة جديدة عندما يحدد المورد موعد إعادة التوريد.`, `Reason: ${s.refusedReason || '—'} · ${s.refusedBy || ''} · ${fmtDate(s.refusedAt)}. The purchase order stays open — open a new shipment once the supplier gives a redelivery date.`) };
+  }
+  return { tone: 'red', title: t('الشحنة ملغاة', 'Shipment cancelled'), text: t('لا يمكن الاستلام على شحنة ملغاة. يبقى أمر الشراء مفتوحًا ويمكن فتح شحنة جديدة للمتبقي.', 'A cancelled shipment cannot be received. The purchase order stays open and a new shipment can be opened for what is due.') };
 });
 const allowed = computed(() => !next.value.perm || auth.can(next.value.perm));
 
@@ -82,11 +94,28 @@ async function doCancel() {
   if (!(await confirm({ title: { ar: `إلغاء الشحنة ${n}؟`, en: `Cancel shipment ${n}?` }, sub: { ar: 'لن يمكن الاستلام عليها بعد الإلغاء. يبقى أمر الشراء مفتوحًا ويمكن فتح شحنة جديدة للكمية نفسها.', en: 'It can no longer be received. The purchase order stays open and a new shipment can be opened for the same quantity.' }, tone: 'danger', okLabel: { ar: 'إلغاء الشحنة', en: 'Cancel shipment' }, cancelLabel: { ar: 'تراجع', en: 'Back' } }))) return;
   await cancel(n);
 }
+async function doUnarrive() {
+  const n = props.shipment.number;
+  if (!(await confirm({ title: { ar: `التراجع عن تسجيل وصول ${n}؟`, en: `Undo the arrival of ${n}?` }, sub: { ar: 'تعود الشحنة «متوقعة» ويُمحى وقت الوصول والناقل. استخدمه عند تسجيل الوصول على شحنة خاطئة.', en: 'The shipment goes back to expected; the arrival time and carrier are cleared. Use it when the arrival was registered on the wrong shipment.' }, tone: 'dark', okLabel: { ar: 'تراجع عن الوصول', en: 'Undo arrival' }, cancelLabel: { ar: 'إبقاء', en: 'Keep' } }))) return;
+  await unarrive(n);
+}
+async function doRefuse() {
+  const n = props.shipment.number;
+  const reason = await ask({
+    title: { ar: `رفض الشحنة ${n} عند البوابة`, en: `Refuse shipment ${n} at the gate` },
+    sub: { ar: 'تُعاد الشحنة كاملة للمورد دون استلام أي كمية، ويُفتح استثناء للمشتريات. يبقى أمر الشراء مفتوحًا ويمكن فتح شحنة جديدة.', en: 'The whole delivery goes back to the supplier, nothing is received and procurement gets an exception. The purchase order stays open and a new shipment can be opened.' },
+    label: { ar: 'سبب الرفض', en: 'Reason' }, placeholder: { ar: 'مثال: سلسلة التبريد مقطوعة، بضاعة غير مطابقة، لا مستندات', en: 'e.g. broken cold chain, wrong goods, no documents' },
+    required: true, tone: 'danger', okLabel: { ar: 'رفض الشحنة', en: 'Refuse delivery' },
+  });
+  if (reason === null) return;
+  if (reason.length < 3) { toast.say(t('اكتب سبب الرفض (3 أحرف على الأقل)', 'Write the reason (at least 3 characters)'), 3500); return; }
+  await refuse(n, reason);
+}
 async function doBackorder() {
   const s = await backorder(props.shipment.po.number, eta.value);
   if (s?.number) emit('open', s.number);
 }
-const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURIComponent(props.shipment.grns[0]?.number || '')}`);
+const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURIComponent(grnNo.value || '')}`);
 </script>
 
 <template>
@@ -121,6 +150,7 @@ const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURICompo
             <Btn tone="primary" class="!h-10 !text-[11.5px]" :loading="act.pending.value" :label="{ ar: 'تسجيل وصول الشاحنة', en: 'Register truck arrival' }" @click="arrive(shipment.number, carrier)" />
           </template>
           <Btn v-if="S === 'arrived'" tone="primary" class="!h-10 !text-[11.5px]" :loading="act.pending.value" :label="{ ar: 'بدء الفحص', en: 'Start inspection' }" @click="inspect(shipment.number)" />
+          <Btn v-if="canUnarrive" tone="outline" class="!h-10" :loading="act.pending.value" :label="{ ar: 'تراجع عن الوصول', en: 'Undo arrival' }" @click="doUnarrive" />
           <template v-if="S === 'inspecting'">
             <ScanInput small field-class="next-input" :placeholder="{ ar: 'امسح باركود المنتج / SKU', en: 'Scan product barcode / SKU' }" @submit="onScanProduct" />
             <Btn tone="soft" :label="{ ar: 'تعبئة المتبقي كمستلم', en: 'Fill open qty as accepted' }" @click="fillAll" />
@@ -131,6 +161,7 @@ const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURICompo
       </div>
       <div v-if="S === 'inspecting' && allowed && !ready" class="mt-1.5 text-[10px] font-bold text-warn">
         {{ t(`أُدخلت كميات ${fmtNum(entered)} من ${fmtNum(shipment.lines.length)} سطر — أكمل كل الأسطر (يمكن إدخال 0) لتفعيل إصدار GRN.`, `${fmtNum(entered)} of ${fmtNum(shipment.lines.length)} lines entered — complete every line (0 is allowed) to enable the GRN.`) }}
+        <template v-if="badSplits"> {{ t(`${fmtNum(badSplits)} سطر دفعاته غير مكتملة — راجع كميات وأرقام الدفعات.`, `${fmtNum(badSplits)} line(s) have an incomplete batch split — check the batch quantities and numbers.`) }}</template>
       </div>
 
       <ErrorBanner :error="act.error.value" class="mt-3" @close="act.clearError()" />
@@ -159,7 +190,7 @@ const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURICompo
         </div>
       </div>
 
-      <div class="mt-3.5"><ReceiveLinesGrid v-model:drafts="drafts" :lines="shipment.lines" :editable="editable" /></div>
+      <div class="mt-3.5"><ReceiveLinesGrid v-model:drafts="drafts" :lines="shipment.lines" :editable="editable" :rejected-stays-open="staysOpen" /></div>
       <div v-if="editable" class="mt-2.5"><TextInput v-model="notes" small :placeholder="{ ar: 'ملاحظات GRN (اختياري)', en: 'GRN notes (optional)' }" /></div>
 
       <div class="row wrap mt-2.5 !gap-3.5 text-[10px] text-sec">
@@ -168,11 +199,17 @@ const goPutaway = () => router.push(`/receiving?tab=putaway&grn=${encodeURICompo
         <span>{{ t('تالف', 'Damaged') }} <b class="num text-bad">{{ fmtNum(shipment.totals.damaged) }}</b></span>
         <span>{{ t('مرفوض', 'Rejected') }} <b class="num text-warn">{{ fmtNum(shipment.totals.rejected) }}</b></span>
         <span>{{ t('متبقٍ على هذه الشحنة', 'Open on this shipment') }} <b class="num">{{ fmtNum(shipment.totals.open) }}</b></span>
-        <span v-if="shipment.grns.length > 0">GRN: <RouterLink v-for="g in shipment.grns" :key="g.number" :to="`/grn/${encodeURIComponent(g.number)}`" class="num ms-1 !text-ok">{{ g.number }}</RouterLink></span>
+        <span v-if="shipment.grns.length > 0">GRN: <RouterLink v-for="g in shipment.grns" :key="g.number" :to="`/grn/${encodeURIComponent(g.number)}`" class="num ms-1" :class="g.voidedAt ? '!text-faint line-through' : '!text-ok'" :title="g.voidedAt ? t('إذن استلام ملغى', 'Voided receipt') : null">{{ g.number }}</RouterLink></span>
         <span class="grow" />
         <Btn v-if="S === 'expected' && !shipment.locked && auth.can('po.cancel')" tone="dangerOutline" size="sm" :loading="act.pending.value" :label="{ ar: 'إلغاء الشحنة', en: 'Cancel shipment' }" @click="doCancel" />
+        <Btn v-if="canRefuse" tone="dangerOutline" size="sm" :loading="act.pending.value" :label="{ ar: 'رفض الشحنة عند البوابة', en: 'Refuse at the gate' }" @click="doRefuse" />
+        <span v-else-if="gateOpen" class="text-[9.5px] text-faint">{{ t('رفض الشحنة عند البوابة يتطلب صلاحية الاستلام (shipment.receive)', 'Refusing at the gate needs the receiving permission (shipment.receive)') }}</span>
       </div>
-      <div class="hint amber mt-[11px]">{{ t('مرفقات إلزامية مع GRN: فاتورة المورد · بوليصة الشحن · صور التلف (رفع الملفات Integration Pending). لا سياسة Over-Receipt — أي كمية تتجاوز المتبقي على أمر الشراء تُرفض من النظام.', 'Required GRN attachments: supplier invoice · bill of lading · damage photos (file upload: Integration Pending). No over-receipt policy — any quantity above the open PO quantity is rejected by the server.') }}</div>
+      <div v-if="S === 'putaway' && grnNo" class="mt-1.5 text-[10px] text-muted">
+        {{ t('استُلمت بالخطأ؟ يُلغى إذن الاستلام من صفحته ما دام لم يُخزَّن منه شيء، فتعود الشحنة للفحص:', 'Received by mistake? The receipt is voided from its page while nothing of it is put away — the shipment goes back to inspection:') }}
+        <RouterLink :to="`/grn/${encodeURIComponent(grnNo)}`" class="num !text-violet">{{ grnNo }}</RouterLink>
+      </div>
+      <div class="hint amber mt-[11px]">{{ t('مرفقات إلزامية مع GRN: فاتورة المورد · بوليصة الشحن · صور التلف (رفع الملفات Integration Pending). لا سياسة Over-Receipt — أي كمية تتجاوز المتبقي على أمر الشراء تُرفض من النظام. المرفوض عند الفحص لا يدخل المخزون ويبقى مفتوحًا على أمر الشراء لإعادة توريده بشحنة متابعة.', 'Required GRN attachments: supplier invoice · bill of lading · damage photos (file upload: Integration Pending). No over-receipt policy — any quantity above the open PO quantity is rejected by the server. Goods rejected at inspection never enter stock and stay open on the purchase order for a follow-up shipment.') }}</div>
     </div>
   </SectionCard>
 </template>

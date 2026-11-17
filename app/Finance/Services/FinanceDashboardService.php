@@ -19,6 +19,7 @@ class FinanceDashboardService
         private readonly CustomerInvoiceService $customerInvoices,
         private readonly SupplierInvoiceService $supplierInvoices,
         private readonly CostingService $costing,
+        private readonly DebitNoteService $debitNotes,
     ) {}
 
     public function board(): array
@@ -46,7 +47,8 @@ class FinanceDashboardService
         return [
             'cash' => round((float) $cashRow->d - (float) $cashRow->c, 2),
             'receivables' => ['gl' => $balanceOf(['ar']), 'open' => $ar['openTotal'], 'overdue' => $ar['overdue'], 'count' => $ar['openCount']],
-            'payables' => ['gl' => -$balanceOf(['ap']), 'open' => $ap['openTotal'], 'overdue' => $ap['overdue'], 'awaitingApproval' => $ap['awaitingApproval'], 'disputed' => $ap['disputed'], 'grni' => -$balanceOf(['grni']), 'accrued' => -$balanceOf(['accrued_expenses'])],
+            'payables' => ['gl' => -$balanceOf(['ap']), 'open' => $ap['openTotal'], 'overdue' => $ap['overdue'], 'awaitingApproval' => $ap['awaitingApproval'], 'disputed' => $ap['disputed'], 'grni' => -$balanceOf(['grni']), 'accrued' => -$balanceOf(['accrued_expenses']),
+                'returnCredits' => round(array_sum(array_map(fn (array $c) => $c['notes'] + $c['unclaimed'], $this->debitNotes->supplierCredits())), 2)], // debit notes + returned goods awaiting one: not yet taken off `open`
             'monthToDate' => ['from' => $monthStart->toDateString(), 'revenue' => $pl['totals']['revenue'], 'cogs' => $pl['totals']['cogs'], 'grossProfit' => $pl['totals']['grossProfit'], 'grossMarginPct' => $pl['totals']['grossMarginPct'], 'opex' => $pl['totals']['opex'], 'netIncome' => $pl['totals']['netIncome']],
             'inventory' => ['subLedger' => $inventory['subLedger'], 'glBalance' => $inventory['glBalance'], 'difference' => $inventory['difference'], 'unvaluedProducts' => $inventory['unvaluedProducts'], 'goodsInTransit' => $balanceOf(['goods_in_transit']), 'inTransit' => $balanceOf(['inventory_in_transit'])],
             'vat' => ['outputVat' => $vat['outputVat'], 'inputVat' => $vat['inputVat'], 'netPayable' => $vat['netPayable']],
@@ -70,10 +72,16 @@ class FinanceDashboardService
         $unallocIn = round((float) DB::table('fin_payments')->where('direction', 'in')->where('status', 'posted')->selectRaw('coalesce(sum(amount - allocated_amount), 0) as b')->value('b'), 2);
         $apSub = round((float) SupplierInvoice::whereIn('status', ['approved', 'paid'])->selectRaw('coalesce(sum(total - paid_amount), 0) as b')->value('b'), 2);
         $unallocOut = round((float) DB::table('fin_payments')->where('direction', 'out')->where('status', 'posted')->selectRaw('coalesce(sum(amount - allocated_amount), 0) as b')->value('b'), 2);
+        // goods sent back to suppliers lower the payable too: a standing debit note by its total, goods whose note was
+        // cancelled (or that were returned before notes existed) by the cost their stock movement posted
+        $returned = $this->debitNotes->supplierCredits();
+        $debitNotes = round(array_sum(array_column($returned, 'notes')), 2);
+        $unclaimed = round(array_sum(array_column($returned, 'unclaimed')), 2);
         $inv = $this->reports->inventoryValuation();
         $checks = [
             ['key' => 'ar', 'labelAr' => 'ذمم العملاء', 'labelEn' => 'Accounts receivable', 'subLedger' => round($arSub - $unallocIn, 2), 'gl' => $glOf('ar')],
-            ['key' => 'ap', 'labelAr' => 'ذمم الموردين', 'labelEn' => 'Accounts payable', 'subLedger' => round($apSub - $unallocOut, 2), 'gl' => -$glOf('ap')],
+            ['key' => 'ap', 'labelAr' => 'ذمم الموردين', 'labelEn' => 'Accounts payable', 'subLedger' => round($apSub - $unallocOut - $debitNotes - $unclaimed, 2), 'gl' => -$glOf('ap'),
+                'parts' => ['invoices' => $apSub, 'unallocatedPayments' => $unallocOut, 'debitNotes' => $debitNotes, 'returnsUnclaimed' => $unclaimed]],
             ['key' => 'inventory', 'labelAr' => 'المخزون', 'labelEn' => 'Inventory', 'subLedger' => $inv['subLedger'], 'gl' => $inv['glBalance']],
         ];
         foreach ($checks as &$c) {

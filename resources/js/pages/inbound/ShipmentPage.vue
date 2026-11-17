@@ -9,7 +9,7 @@ import { showLabel } from '@/stores/ui';
 import PutawayList from './PutawayList.vue';
 import ShipmentHistory from './ShipmentHistory.vue';
 import ShipmentPanel from './ShipmentPanel.vue';
-import { pn } from './shared';
+import { liveGrn, pn } from './shared';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,13 +38,13 @@ const historySub = computed(() => {
 
   <template v-if="s">
     <div class="-mt-3.5"><ShipmentPanel :shipment="s" @changed="q.refetch()" @grn-posted="q.refetch()" @open="(n) => router.push(`/shipments/${encodeURIComponent(n)}`)" /></div>
-    <PutawayList v-if="['putaway', 'done'].includes(s.status)" :params="{ grn: s.grns[0]?.number, status: s.status === 'done' ? 'done' : 'open' }" />
+    <PutawayList v-if="['putaway', 'done'].includes(s.status) && liveGrn(s)" :params="{ grn: liveGrn(s), status: s.status === 'done' ? 'done' : 'open' }" />
     <div class="grid-2 mt-3.5">
       <SectionCard :title="{ ar: 'إشعارات الاستلام GRN', en: 'Goods receipts' }" :count="s.grns.length">
         <div v-if="s.grns.length === 0" class="empty">{{ t('لم يُصدر GRN بعد', 'No GRN posted yet') }}</div>
         <div v-else class="col !gap-1.5">
           <RouterLink v-for="g in s.grns" :key="g.number" :to="`/grn/${encodeURIComponent(g.number)}`" class="flex items-center gap-2.5 rounded-[11px] border border-line-2 px-[13px] py-[9px] text-[10.5px] !text-inherit">
-            <span class="num text-ok">{{ g.number }}</span><span class="grow" /><span class="cell-date ltr">{{ fmtDate(g.postedAt) }}</span><span v-if="g.postedBy" class="muted text-[9px]">{{ g.postedBy }}</span>
+            <span class="num" :class="g.voidedAt ? 'text-faint line-through' : 'text-ok'">{{ g.number }}</span><span v-if="g.voidedAt" class="chip bg-bad-soft !text-bad">{{ t('ملغى', 'Voided') }}</span><span class="grow" /><span class="cell-date ltr">{{ fmtDate(g.postedAt) }}</span><span v-if="g.postedBy" class="muted text-[9px]">{{ g.postedBy }}</span>
           </RouterLink>
         </div>
       </SectionCard>

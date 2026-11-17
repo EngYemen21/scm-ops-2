@@ -16,7 +16,7 @@ export const MAINT_KIND_LABELS = {
   tire: { ar: 'إطارات', en: 'Tires', fg: '#55506a', bg: '#F1EFF6' }, oil: { ar: 'زيت', en: 'Oil', fg: '#55506a', bg: '#F1EFF6' }, brake: { ar: 'فرامل', en: 'Brakes', fg: '#55506a', bg: '#F1EFF6' }, engine: { ar: 'محرك', en: 'Engine', fg: '#55506a', bg: '#F1EFF6' },
   elec: { ar: 'كهرباء', en: 'Electrical', fg: '#55506a', bg: '#F1EFF6' }, ac: { ar: 'تكييف / تبريد', en: 'AC / Refrigeration', fg: '#55506a', bg: '#F1EFF6' }, body: { ar: 'هيكل', en: 'Body', fg: '#55506a', bg: '#F1EFF6' },
 };
-export const MAINT_STATUS_LABELS = { open: { ar: 'مفتوح', en: 'Open', fg: '#b26a16', bg: '#fbf0dd' }, closed: { ar: 'مقفل', en: 'Closed', fg: '#1d7a3e', bg: '#e6f9ec' } };
+export const MAINT_STATUS_LABELS = { open: { ar: 'مفتوح', en: 'Open', fg: '#b26a16', bg: '#fbf0dd' }, closed: { ar: 'مقفل', en: 'Closed', fg: '#1d7a3e', bg: '#e6f9ec' }, cancelled: { ar: 'ملغى', en: 'Cancelled', fg: '#7d7990', bg: '#F1EFF6' } };
 export const OPREQ_TYPE_LABELS = { fuel: { ar: 'وقود', en: 'Fuel' }, maint: { ar: 'صيانة', en: 'Maintenance' }, tire: { ar: 'إطار', en: 'Tire' }, vehicle: { ar: 'مشكلة مركبة', en: 'Vehicle issue' }, toll: { ar: 'رسوم طريق', en: 'Toll' }, parking: { ar: 'مواقف', en: 'Parking' }, emergency: { ar: 'طارئ', en: 'Emergency' }, other: { ar: 'أخرى', en: 'Other' } };
 export const OPREQ_STATE_LABELS = {
   submitted: { ar: 'مُرسل', en: 'Submitted', fg: '#b26a16', bg: '#fbf0dd' }, review: { ar: 'قيد المراجعة', en: 'Under review', fg: '#3C79F5', bg: '#e8effe' }, approved: { ar: 'معتمد', en: 'Approved', fg: '#1d7a3e', bg: '#e6f9ec' },
@@ -79,3 +79,32 @@ export const todayIso = () => new Date().toISOString().slice(0, 10);
 export const YES_NO = [['yes', { ar: 'نعم', en: 'Yes' }], ['no', { ar: 'لا', en: 'No' }]];
 /** Label map → select options (`[value, {ar,en}]`). */
 export const optsOf = (map) => Object.entries(map).map(([v, l]) => [v, { ar: l.ar, en: l.en }]);
+
+// ───────────────────────────────────────────── planned arrival, proof of delivery (2026-11)
+/** Where the planned arrival of a stop comes from: the maps provider, or straight-line distance ÷ average speed. */
+export const ETA_SOURCE_LABELS = { maps: { ar: 'خرائط', en: 'maps' }, estimate: { ar: 'تقدير', en: 'estimate' } };
+/** Where a POD file is kept. `integration_pending` only exists on rows written before files were stored. */
+export const ATTACHMENT_STATUS_LABELS = {
+  stored: { ar: 'محفوظ في قاعدة البيانات', en: 'Stored in the database' }, uploaded: { ar: 'محفوظ في التخزين السحابي', en: 'Stored in object storage' },
+  integration_pending: { ar: 'مرجع قديم — لم يُحفظ الملف', en: 'Old reference — the file was never stored' },
+};
+export const POD_FILE_KIND_LABELS = { signature: { ar: 'التوقيع', en: 'Signature' }, photo: { ar: 'صورة التسليم', en: 'Delivery photo' } };
+/** Why a delivery was recorded without a scan (the API's codes; anything else is free text). */
+export const NO_SCAN_REASON_LABELS = {
+  label_damaged: { ar: 'الملصق تالف أو غير مقروء', en: 'Label damaged / unreadable' }, scanner_failed: { ar: 'تعطل الماسح أو الكاميرا', en: 'Scanner / camera failed' },
+  on_behalf: { ar: 'تسجيل بالنيابة عن السائق', en: 'Recorded on behalf of the driver' },
+};
+/** API path of a stored file by its key (`pod/POD-…/signature.png`): every segment encoded, the slashes kept. */
+export const filePath = (key) => `/integrations/files/${String(key).split('/').map(encodeURIComponent).join('/')}`;
+/** Can the file of an attachment row be opened? (rows from before 2026-11 are references without a file) */
+export const hasFile = (a) => !!a?.storageKey && ['stored', 'uploaded'].includes(a.status);
+/**
+ * The PLAN of a trip, never live tracking: planned arrival at its next open stop and how many open stops would miss
+ * their customer window. Works on a list row (`plannedEta` from the API) and on a full trip (its stops).
+ * @returns {{ next: string|null, source: string|null, late: number }}
+ */
+export function plannedEta(trip) {
+  if (trip?.plannedEta) return trip.plannedEta;
+  const open = (trip?.stops || []).filter((s) => !CLOSED_STOP.includes(s.status));
+  return { next: open[0]?.eta || null, source: open[0]?.etaSource || null, late: open.filter((s) => s.windowOk === false).length };
+}

@@ -9,8 +9,8 @@ use App\Support\Paging;
 use Illuminate\Http\Request;
 
 /**
- * Driver app. POD bodies may carry a base64 signature / photo; the request size ceiling is PHP's post_max_size
- * (8M, the same limit the reference API used for these routes).
+ * Driver app. POD bodies carry the signature / photo as data URLs; the service decodes them, enforces their size
+ * (400 KB / 2 MB → ATTACHMENT_TOO_LARGE) and stores them. The request ceiling is PHP's post_max_size (8M).
  */
 class DeliveryController extends Controller
 {
@@ -22,6 +22,11 @@ class DeliveryController extends Controller
         'gpsStatus' => 'nullable|in:captured,denied,unavailable',
         'signature' => 'nullable|string',
         'photo' => 'nullable|string',
+        // what was scanned at the door (order / package / label / carton), or why nothing could be scanned
+        'scans' => 'nullable|array|max:60',
+        'scans.*' => 'nullable|string|max:200',
+        'noScanReason' => 'nullable|string|max:200',
+        'deliveredCartons' => 'nullable|integer|min:0',
     ];
 
     public function __construct(private readonly DeliveryService $delivery) {}
@@ -50,15 +55,30 @@ class DeliveryController extends Controller
         return $this->delivery->arrive(AuthUser::current(), $id, $data['gps'] ?? null);
     }
 
+    public function scan(Request $request, string $id): array
+    {
+        $data = $request->validate(['code' => 'required|string|min:1|max:200']);
+
+        return $this->delivery->scan(AuthUser::current(), $id, $data['code']);
+    }
+
     public function deliver(Request $request, string $id): array
     {
         return $this->delivery->deliver(AuthUser::current(), $id, $request->validate(self::POD));
     }
 
+    /** Per item: `lines: [{lineNo, deliveredQty}]`. The single `deliveredQty` is accepted only for a one-line order. */
     public function partial(Request $request, string $id): array
     {
-        $data = $request->validate(self::POD + ['deliveredQty' => 'required|integer|min:1']);
-        $data['deliveredQty'] = (int) $data['deliveredQty'];
+        $data = $request->validate(self::POD + [
+            'deliveredQty' => 'required_without:lines|nullable|integer|min:1',
+            'lines' => 'required_without:deliveredQty|nullable|array|min:1|max:500',
+            'lines.*.lineNo' => 'required|integer|min:1',
+            'lines.*.deliveredQty' => 'required|integer|min:0',
+        ]);
+        if (isset($data['deliveredQty'])) {
+            $data['deliveredQty'] = (int) $data['deliveredQty'];
+        }
 
         return $this->delivery->partial(AuthUser::current(), $id, $data);
     }

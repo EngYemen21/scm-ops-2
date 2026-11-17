@@ -45,8 +45,16 @@ Route::prefix('transport')->group(function () {
     Route::get('maintenance', [FleetController::class, 'listMaintenance']);
     Route::post('maintenance', [FleetController::class, 'createMaintenance'])->middleware('perm:maintenance.manage');
     Route::post('maintenance/{number}/close', [FleetController::class, 'closeMaintenance'])->middleware('perm:maintenance.manage');
+    Route::patch('maintenance/{number}', [FleetController::class, 'updateMaintenance'])->middleware('perm:maintenance.manage');
+    Route::post('maintenance/{number}/cancel', [FleetController::class, 'cancelMaintenance'])->middleware('perm:maintenance.manage');
     Route::get('fuel', [FleetController::class, 'listFuel']);
     Route::post('fuel', [FleetController::class, 'createFuel'])->middleware('perm:fuel.manage');
+    // a posted fuel record is corrected or voided with a reason — never deleted (no DELETE route on purpose)
+    Route::patch('fuel/{number}', [FleetController::class, 'updateFuel'])->middleware('perm:fuel.manage');
+    Route::post('fuel/{number}/void', [FleetController::class, 'voidFuel'])->middleware('perm:fuel.manage');
+
+    // trip cost sheet (fleet costing — management figures, no journal)
+    Route::post('trips/{number}/cost/recompute', [FleetController::class, 'recomputeTripCost'])->middleware('perm:trip.close');
 
     // alerts
     Route::get('alerts', [FleetController::class, 'listAlerts']);
@@ -74,6 +82,9 @@ Route::prefix('transport')->group(function () {
     Route::post('trips/{number}/assign', [TripsController::class, 'assign'])->middleware('perm:trip.assign');
     Route::post('trips/{number}/unassign', [TripsController::class, 'unassign'])->middleware('perm:trip.assign');
     Route::post('trips/{number}/stops/reorder', [TripsController::class, 'reorder'])->middleware('perm:trip.manage');
+    // an order joins a trip while it is planned; an order that is not loaded leaves it while planning or loading
+    Route::post('trips/{number}/orders/add', [TripsController::class, 'addOrder'])->middleware('perm:trip.manage');
+    Route::post('trips/{number}/orders/{fo}/remove', [TripsController::class, 'removeOrder'])->middleware('perm:trip.manage');
     Route::post('trips/{number}/cancel', [TripsController::class, 'cancel'])->middleware('perm:trip.manage');
     Route::post('trips/{number}/close', [TripsController::class, 'close'])->middleware('perm:trip.close');
     Route::get('trips/{number}/events', [TripsController::class, 'events']);

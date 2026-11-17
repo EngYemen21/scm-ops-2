@@ -1,7 +1,9 @@
 <script setup>
 // Order consolidation: left pool of confirmed / allocated orders grouped by zone / customer / delivery date / warehouse
 // with checkboxes, sticky dark summary → "create consolidation batch"; batches table with status pills and the batch
-// detail card (BatchDetail). Data: /api/sales/orders and /api/sales/consolidations.
+// detail card (BatchDetail: advance, add / remove orders, cancel the batch). Data: /api/sales/orders and
+// /api/sales/consolidations. An order of the pool that still waits for stock is marked: the batch tries to reserve it at
+// "ready for picking" and can go on without it.
 // Deep links: `/consol?q=OC-…` opens a batch, `/consol?pick=SO-…` pre-selects an order in the pool.
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -118,6 +120,7 @@ const columns = [
               <div class="grow">
                 <div class="text-[11px] font-extrabold">{{ custName(r.customer) }}</div>
                 <div class="text-[8.5px] text-faint">{{ r.customer.zone || '—' }} · {{ fmtDateOnly(r.dueDate) }}{{ r.window ? ` · ${r.window}` : '' }} · {{ r.warehouse.code }}</div>
+                <div v-if="r.status === 'confirmed'" class="text-[8.5px] font-extrabold text-warn">{{ r.fulfilStatus === 'partial' ? t('حجز جزئي — ينتظر باقي المخزون', 'Partly reserved — waiting for the rest') : t('ينتظر المخزون — يُحاوَل حجزه عند «جاهز للتجهيز»', 'Waiting for stock — tried again at "Ready for picking"') }}</div>
               </div>
               <div class="num text-[9.5px] text-muted">{{ fmtNum(r.kg) }} {{ t('كجم', 'kg') }}</div>
               <div class="num text-[10px]">{{ fmtNum(itemsOf(r)) }}</div>

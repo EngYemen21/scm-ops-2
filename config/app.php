@@ -71,6 +71,10 @@ return [
 
     'timezone' => 'UTC',
 
+    // Wall-clock strings written by the system on a person's behalf (a trip's planned start "15:58") use this zone;
+    // every stored instant stays UTC and is shown in the viewer's own zone by the client.
+    'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'Asia/Riyadh'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

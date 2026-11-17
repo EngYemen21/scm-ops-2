@@ -25,6 +25,7 @@ class PoLine extends BaseModel
             'received_qty' => 'integer',
             'damaged_qty' => 'integer',
             'rejected_qty' => 'integer',
+            'pr_est_price' => 'decimal:4',
         ];
     }
 

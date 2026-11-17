@@ -1,5 +1,6 @@
 <?php
 
+use App\Finance\Http\DebitNotesController;
 use App\Finance\Http\FinanceController;
 use App\Finance\Http\FinanceReportsController;
 use App\Finance\Http\JournalsController;
@@ -79,4 +80,12 @@ Route::prefix('finance')->group(function () {
     Route::post('assets', [FinanceController::class, 'storeAsset'])->middleware('perm:asset.manage');
     Route::post('assets/depreciate', [FinanceController::class, 'depreciate'])->middleware('perm:asset.manage');
     Route::post('assets/{code}/dispose', [FinanceController::class, 'disposeAsset'])->middleware('perm:asset.manage');
+});
+
+// supplier debit notes — issued by the returns flow when goods go back to a supplier (POST /returns/{id}/ship | decide);
+// finance reads them here and cancels one by reversing its journal
+Route::prefix('finance')->group(function () {
+    Route::get('debit-notes', [DebitNotesController::class, 'index'])->middleware('perm:gl.view');
+    Route::get('debit-notes/{id}', [DebitNotesController::class, 'show'])->middleware('perm:gl.view');
+    Route::post('debit-notes/{id}/cancel', [DebitNotesController::class, 'cancel'])->middleware('perm:gl.approve');
 });

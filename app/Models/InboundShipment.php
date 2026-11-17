@@ -22,6 +22,7 @@ class InboundShipment extends BaseModel
             'inspection_started_at' => 'datetime',
             'completed_at' => 'datetime',
             'locked' => 'boolean',
+            'refused_at' => 'datetime',
         ];
     }
 

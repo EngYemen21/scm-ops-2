@@ -22,6 +22,8 @@ class ReturnLine extends BaseModel
             'qty' => 'integer',
             'expiry_date' => 'datetime',
             'inspected_qty' => 'integer',
+            'received_qty' => 'integer',
+            'unit_price' => 'decimal:4',
         ];
     }
 
@@ -43,5 +45,10 @@ class ReturnLine extends BaseModel
     public function bin(): BelongsTo
     {
         return $this->belongsTo(Bin::class, 'bin_id', 'id');
+    }
+
+    public function fromBin(): BelongsTo
+    {
+        return $this->belongsTo(Bin::class, 'from_bin_id', 'id');
     }
 }

@@ -20,16 +20,27 @@ const act = useAction();
 const f = ref({ supplierInvoiceNo: '', invoiceDate: todayIso(), dueDate: '', discount: 0, shippingCost: 0, vatPct: 15, notes: '' });
 /** lineNo → { qty, price } */
 const rows = ref({});
+/** `po.charges[k]` = { po, invoiced, remaining }; a payload without it falls back to the order's own figure. */
+function chargeOf(k) {
+  const own = Number(k === 'discount' ? props.po?.discount : props.po?.shippingCost) || 0;
+  return props.po?.charges?.[k] || { po: own, invoiced: 0, remaining: own };
+}
+function left(k) { return Number(chargeOf(k).remaining) || 0; }
 watch(() => props.open, (open) => {
   if (!open || !props.po) return;
   const po = props.po;
-  f.value = { supplierInvoiceNo: '', invoiceDate: todayIso(), dueDate: plusDays(30), discount: Number(po.discount) || 0, shippingCost: Number(po.shippingCost) || 0, vatPct: po.vatPct != null ? Number(po.vatPct) : 15, notes: '' };
+  // discount / shipping default to what is LEFT of the order's charges after its earlier invoices (never the full figure
+  // again — a repeated shipping charge is a double billing and the server disputes it)
+  f.value = { supplierInvoiceNo: '', invoiceDate: todayIso(), dueDate: plusDays(30), discount: left('discount'), shippingCost: left('shipping'), vatPct: po.vatPct != null ? Number(po.vatPct) : 15, notes: '' };
   const r = {};
   (po.lines || []).forEach((l) => { r[l.lineNo] = { qty: billable(l), price: Number(l.price) }; });
   rows.value = r;
   act.clearError();
 }, { immediate: true });
 
+/** Charges typed above what is left of the order's: the invoice will be registered as disputed. */
+const overCharge = computed(() => ['shipping', 'discount'].filter((k) => (Number(k === 'shipping' ? f.value.shippingCost : f.value.discount) || 0) > left(k) + 0.005));
+const hasCharges = computed(() => Number(chargeOf('discount').po) > 0 || Number(chargeOf('shipping').po) > 0);
 /** Accepted on GRNs minus what earlier (non-cancelled) invoices already cover; falls back to the PO-line counters. */
 const billable = (l) => (l.acceptedQty != null ? Math.max(0, (l.acceptedQty || 0) - (l.invoicedQty || 0)) : Math.max(0, (l.receivedQty || 0) - (l.damagedQty || 0) - (l.rejectedQty || 0)));
 const lines = computed(() => props.po?.lines || []);
@@ -55,16 +66,23 @@ async function submit() {
 
 <template>
   <ActionDrawer :open="open && !!po" :width="620" :title="{ ar: `تسجيل فاتورة مورد — ${po?.number || ''}`, en: `Register supplier invoice — ${po?.number || ''}` }"
-                :sub="{ ar: 'تُطابق آليًا مع أمر الشراء وإشعارات الاستلام (كمية ≤ المقبول · السعر ضمن التسامح · الخصم والشحن)', en: 'Matched automatically against the PO and the GRNs (qty ≤ accepted · price within tolerance · charges)' }"
+                :sub="{ ar: 'تُطابق آليًا مع أمر الشراء وإشعارات الاستلام (كمية ≤ المقبول · السعر ضمن التسامح · الخصم والشحن ضمن المتبقي على الأمر)', en: 'Matched automatically against the PO and the GRNs (qty ≤ accepted · price within tolerance · charges within what is left on the order)' }"
                 :pending="act.pending.value" :error="act.error.value" :disabled="!ok" :submit-label="{ ar: 'تسجيل الفاتورة', en: 'Register invoice' }" @submit="submit" @close="emit('close')" @clear-error="act.clearError()">
     <div class="form-grid">
       <TextInput v-model="f.supplierInvoiceNo" :label="{ ar: 'رقم فاتورة المورد', en: 'Supplier invoice no.' }" required dir="ltr" />
       <DateInput v-model="f.invoiceDate" :label="{ ar: 'تاريخ الفاتورة', en: 'Invoice date' }" required />
       <DateInput v-model="f.dueDate" :label="{ ar: 'تاريخ الاستحقاق', en: 'Due date' }" :hint="{ ar: 'فارغ = يُحسب من شروط دفع المورد', en: 'Blank = derived from the supplier terms' }" />
       <NumberInput v-model="f.vatPct" :label="{ ar: 'ضريبة القيمة المضافة %', en: 'VAT %' }" :min="0" :max="100" />
-      <NumberInput v-model="f.discount" :label="{ ar: 'خصم على الفاتورة ر.س', en: 'Invoice discount SAR' }" :min="0" />
-      <NumberInput v-model="f.shippingCost" :label="{ ar: 'شحن ر.س', en: 'Shipping SAR' }" :min="0" />
+      <NumberInput v-model="f.discount" :label="{ ar: 'خصم على الفاتورة ر.س', en: 'Invoice discount SAR' }" :min="0" :hint="hasCharges ? { ar: `المتبقي من خصم الأمر ${fmtMoney(left('discount'))}`, en: `Left of the order's discount ${fmtMoney(left('discount'))}` } : null" />
+      <NumberInput v-model="f.shippingCost" :label="{ ar: 'شحن ر.س', en: 'Shipping SAR' }" :min="0" :hint="hasCharges ? { ar: `المتبقي من شحن الأمر ${fmtMoney(left('shipping'))}`, en: `Left of the order's shipping ${fmtMoney(left('shipping'))}` } : null" />
       <TextArea v-model="f.notes" :label="{ ar: 'ملاحظات', en: 'Notes' }" :rows="2" full />
+    </div>
+    <div v-if="hasCharges" class="hint !mt-2.5">
+      {{ t(`خصم الأمر ${fmtMoney(chargeOf('discount').po)} (فُوتر منه ${fmtMoney(chargeOf('discount').invoiced)}) · شحن الأمر ${fmtMoney(chargeOf('shipping').po)} (فُوتر منه ${fmtMoney(chargeOf('shipping').invoiced)}). الفاتورة الجزئية تحمل نصيبها فقط؛ ما يزيد على المتبقي يجعل الفاتورة «مختلفًا عليها».`,
+           `Order discount ${fmtMoney(chargeOf('discount').po)} (invoiced ${fmtMoney(chargeOf('discount').invoiced)}) · order shipping ${fmtMoney(chargeOf('shipping').po)} (invoiced ${fmtMoney(chargeOf('shipping').invoiced)}). A partial invoice carries its share only; anything above what is left makes the invoice disputed.`) }}
+    </div>
+    <div v-if="overCharge.length" class="banner amber mt-2.5">
+      <div>{{ t(`${overCharge.includes('shipping') ? 'الشحن' : ''}${overCharge.length === 2 ? ' و' : ''}${overCharge.includes('discount') ? 'الخصم' : ''} يتجاوز المتبقي على أمر الشراء — ستُسجَّل الفاتورة «مختلفًا عليها» وتحتاج قرارًا مكتوبًا من المالية.`, `${overCharge.join(' & ')} exceed what is left on the order — the invoice will be registered as disputed and needs a written finance decision.`) }}</div>
     </div>
     <div class="mt-3.5 overflow-hidden rounded-xl border border-line-2">
       <div class="grid grid-cols-[minmax(120px,1.5fr)_70px_80px_90px] gap-1.5 bg-soft px-2.5 py-[7px] text-[9.5px] font-extrabold text-muted">

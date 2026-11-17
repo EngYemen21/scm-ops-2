@@ -1,5 +1,7 @@
 <script setup>
 // New quotation drawer: customer, validity, terms, multi-line editor with discount, notes, save as draft or save & send.
+// Discount rule (policy `sales.maxDiscountPct`): a draft may carry any discount; above the limit it waits for a holder of
+// `discount.approve` before it can be sent — so "save & send" is refused here for a user who cannot approve it himself.
 //   <QuotationForm :open="open" :initial-customer="code" @close="…" @done="(quotation) => …" />
 import { computed, reactive, ref, watch } from 'vue';
 import { api, useAction } from '@/api/client';
@@ -7,7 +9,7 @@ import { Btn, DateInput, Drawer, ErrorBanner, Field, SelectInput, TextArea } fro
 import { t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import LinesEditor from './LinesEditor.vue';
-import { DELIVERY, TERMS, customerOptions, isoDatePlus, linesBody, newLine, useLookups, validateLines } from './shared';
+import { DELIVERY, TERMS, customerOptions, isoDatePlus, linesBody, maxLineDiscount, newLine, useLookups, usePolicy, validateLines } from './shared';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -17,6 +19,7 @@ const emit = defineEmits(['close', 'done']);
 
 const auth = useAuth();
 const lookups = useLookups();
+const policy = usePolicy();
 const act = useAction();
 
 const blank = () => ({ customerCode: props.initialCustomer || '', validUntil: isoDatePlus(14), terms: '', delivery: '', notes: '', action: 'draft' });
@@ -40,15 +43,27 @@ watch(() => act.error.value, (e) => { if (e) errors.value = { ...errors.value, .
 const customers = computed(() => customerOptions(lookups.data.value));
 const ACTIONS = [['draft', { ar: 'حفظ كمسودة', en: 'Save as draft' }], ['sent', { ar: 'حفظ وإرسال للعميل', en: 'Save & send to customer' }]];
 
+// discount above the limit: stamped at once for a holder of discount.approve; otherwise the draft waits for the approval
+const maxPct = computed(() => policy.value?.maxDiscountPct ?? null);
+const aboveMax = computed(() => maxPct.value != null && maxLineDiscount(lines.value) > Number(maxPct.value));
+const mayApprove = computed(() => auth.can('discount.approve'));
+const sendBlocked = computed(() => aboveMax.value && !mayApprove.value && v.action === 'sent');
+const subText = computed(() => (maxPct.value == null
+  ? { ar: 'مرتبط بالعميل والمخزون', en: 'Linked to the customer and stock' }
+  : { ar: `مرتبط بالعميل والمخزون — الخصم فوق ${maxPct.value}% يحتاج اعتماد صاحب صلاحية اعتماد الخصم قبل الإرسال`, en: `Linked to the customer and stock — a discount above ${maxPct.value}% needs discount approval before sending` }));
+
 async function submit() {
-  const errs = { ...validateLines(lines.value, true) };
+  const block = sendBlocked.value ? { maxPct: maxPct.value, message: t('لا يُرسل قبل اعتماد الخصم — احفظه كمسودة', 'Cannot be sent before the discount is approved — save it as a draft') } : null;
+  const errs = { ...validateLines(lines.value, true, block) };
   if (!v.customerCode) errs.customerCode = t('هذا الحقل إلزامي', 'Required');
   if (!v.validUntil) errs.validUntil = t('هذا الحقل إلزامي', 'Required');
   errors.value = errs;
   if (Object.keys(errs).length) return;
   const body = { customerCode: v.customerCode, validUntil: v.validUntil, terms: v.terms || undefined, delivery: v.delivery || undefined, notes: v.notes || undefined, action: v.action, lines: linesBody(lines.value, true) };
   const r = await act.run(() => api.postIdempotent('/sales/quotations', body), {
-    success: (q) => t(`أُنشئ عرض السعر ${q.number}${v.action === 'sent' ? ' وأُرسل للعميل' : ''}`, `Quotation ${q.number} created`),
+    success: (q) => (q.discount?.needsApproval
+      ? t(`حُفظ عرض السعر ${q.number} كمسودة — بانتظار اعتماد الخصم قبل إرساله`, `Quotation ${q.number} saved as a draft — waiting for discount approval before it can be sent`)
+      : t(`أُنشئ عرض السعر ${q.number}${q.status === 'sent' ? ' وأُرسل للعميل' : ''}`, `Quotation ${q.number} created`)),
     invalidate: ['sales'],
   });
   if (r) { emit('done', r); emit('close'); }
@@ -56,8 +71,7 @@ async function submit() {
 </script>
 
 <template>
-  <Drawer :open="open" :width="680" :z-index="70" :title="{ ar: 'عرض سعر جديد', en: 'New quotation' }"
-          :sub="{ ar: 'مرتبط بالعميل والمخزون — الخصم فوق 30% يحتاج اعتماد مدير المبيعات', en: 'Linked to the customer and stock — discount above 30% needs approval' }" @close="emit('close')">
+  <Drawer :open="open" :width="680" :z-index="70" :title="{ ar: 'عرض سعر جديد', en: 'New quotation' }" :sub="subText" @close="emit('close')">
     <div class="form-grid">
       <SelectInput v-model="v.customerCode" :label="{ ar: 'العميل', en: 'Customer' }" required :options="customers" :placeholder="{ ar: '— اختر —', en: '— select —' }" :error="errors.customerCode" />
       <DateInput v-model="v.validUntil" :label="{ ar: 'صالح حتى', en: 'Valid until' }" required :error="errors.validUntil" />
@@ -68,6 +82,13 @@ async function submit() {
       <div class="field-l mb-1.5">{{ t('الأسطر', 'Lines') }} *</div>
       <LinesEditor v-model:lines="lines" discount :errors="errors" />
     </div>
+    <div v-if="aboveMax" class="hint" :class="sendBlocked ? 'amber' : 'purple'">{{
+      mayApprove
+        ? t(`في العرض خصم فوق الحد ${maxPct}% — سيُسجَّل باعتمادك للخصم (${auth.user?.username || ''}).`, `The quotation carries a discount above the ${maxPct}% limit — it will be recorded as approved by you (${auth.user?.username || ''}).`)
+        : sendBlocked
+          ? t(`في العرض خصم فوق الحد ${maxPct}% — لا يُرسل للعميل قبل اعتماد الخصم. اختر «حفظ كمسودة» ثم اطلب الاعتماد من صاحب صلاحية اعتماد الخصم.`, `The quotation carries a discount above the ${maxPct}% limit — it cannot be sent before the discount is approved. Choose "Save as draft", then ask a holder of the discount approval.`)
+          : t(`في العرض خصم فوق الحد ${maxPct}% — يُحفظ كمسودة ولا يُرسل أو يُعتمد إلا بعد اعتماد الخصم من صاحب الصلاحية.`, `The quotation carries a discount above the ${maxPct}% limit — it is saved as a draft and can be sent or approved only after the discount is approved.`)
+    }}</div>
     <div class="form-grid mt-3">
       <TextArea v-model="v.notes" :full="false" :label="{ ar: 'ملاحظات', en: 'Notes' }" />
       <SelectInput v-model="v.action" :label="{ ar: 'الإجراء', en: 'Action' }" :options="ACTIONS" />

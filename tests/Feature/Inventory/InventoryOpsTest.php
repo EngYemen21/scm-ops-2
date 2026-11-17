@@ -5,6 +5,7 @@ namespace Tests\Feature\Inventory;
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Models\InventoryMovement;
+use App\Models\Warehouse;
 use Tests\ApiTestCase;
 
 /** Port of inventory-query.spec.ts over HTTP: balances, adjustments, moves, quarantine flags and the read views. */
@@ -275,5 +276,36 @@ class InventoryOpsTest extends ApiTestCase
         $this->assertFalse($this->balance(self::$fx['pid'], self::$fx['b1']->id, self::$fx['batchId'])->quarantine);
         $this->assertSame($denied + 4, AuditLog::where('action', 'SECURITY.UNAUTHORIZED')->count());
         $this->assertSame(401, $this->getJson('/api/inventory/balances')->getStatusCode(), 'reads still need a session');
+    }
+
+    /** Stock in PACK / STG-OUT / STG-IN / RET-01 belongs to a document in progress: only that document's own step takes it out. */
+    public function test_a_manual_move_cannot_take_stock_out_of_a_bin_owned_by_a_document_in_progress(): void
+    {
+        $tag = 'G'.self::uid();
+        $p = $this->makeProduct($tag);
+        $wh = self::$fx['b1']->warehouse_id;
+        $ryd = Warehouse::findOrFail($wh);
+        $movements = InventoryMovement::count();
+        foreach (['PACK' => 'unpack', 'STG-OUT' => 'put back', 'STG-IN' => 'putaway', 'RET-01' => 'decision'] as $code => $wayOut) {
+            $bin = $this->engine()->bin($wh, $code);
+            $this->stock($p['product'], $p['batch'], $ryd, $bin, 3, "OPEN-{$tag}-{$code}");
+            $movements++;
+            $body = ['sku' => $p['product']->sku, 'warehouseCode' => 'RYD', 'fromBin' => strtolower($code), 'toBin' => self::$fx['b3']->code, 'batchNo' => $p['batch']->batch_no, 'qty' => 1, 'reason' => 'slot'];
+            $res = $this->expectRejected($this->postAs('wm', '/api/inventory/move', $body), 'MOVE_FROM_STAGING', [422]);
+            $this->assertSame(['bin' => $code], $res['details']);
+            $this->assertStringContainsString($code, $res['message']);
+            $this->assertStringContainsString($wayOut, $res['messageEn'], "the refusal for {$code} names the way out");
+            // the same refusal whatever the reason given, and even when the bin holds nothing of the product
+            $this->expectRejected($this->postAs('wm', '/api/inventory/move', ['reason' => 'damage', 'toBin' => 'DMG-01'] + $body), 'MOVE_FROM_STAGING', [422]);
+            $this->expectRejected($this->postAs('wm', '/api/inventory/move', ['sku' => self::$fx['sku'], 'batchNo' => self::$fx['batchNo']] + $body), 'MOVE_FROM_STAGING', [422]);
+            $this->assertSame(3, $this->balance($p['product']->id, $bin->id, $p['batch']->id)->on_hand);
+        }
+        $this->assertSame($movements, InventoryMovement::count(), 'a refused move writes no ledger row');
+        $this->assertNull($this->balance($p['product']->id, self::$fx['b3']->id, $p['batch']->id));
+
+        // an ordinary move still works, and its stored reference reads source → destination
+        $mv = $this->expectOk($this->postAs('wm', '/api/inventory/move', $this->moveBody(1, ['toBin' => self::$fx['b3']->code])));
+        $this->assertSame('MOVE · '.self::$fx['b1']->code.' → '.self::$fx['b3']->code, $mv['referenceNumber']);
+        $this->assertReconciled();
     }
 }

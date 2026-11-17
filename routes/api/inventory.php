@@ -30,8 +30,10 @@ Route::prefix('inventory')->group(function () {
     Route::post('transfers', [TransfersController::class, 'store'])->middleware('perm:inventory.transfer');
     Route::post('transfers/{id}/approve', [TransfersController::class, 'approve'])->middleware('perm:inventory.transfer.approve');
     Route::post('transfers/{id}/reject', [TransfersController::class, 'reject'])->middleware('perm:inventory.transfer.approve');
+    Route::post('transfers/{id}/ship', [TransfersController::class, 'ship'])->middleware('perm:inventory.transfer');
     Route::post('transfers/{id}/receive', [TransfersController::class, 'receive'])->middleware('perm:inventory.transfer');
-    // submit | cancel | start-picking | picking-done | ship | close
+    Route::post('transfers/{id}/resolve-variance', [TransfersController::class, 'resolveVariance'])->middleware('perm:inventory.transfer.approve');
+    // submit | cancel | start-picking | picking-done | close
     Route::post('transfers/{id}/{action}', [TransfersController::class, 'action'])->middleware('perm:inventory.transfer');
 
     // counts

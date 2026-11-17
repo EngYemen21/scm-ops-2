@@ -13,6 +13,7 @@ import PoForm from './PoForm.vue';
 import PoTab from './PoTab.vue';
 import PrForm from './PrForm.vue';
 import PrTab from './PrTab.vue';
+import PurchaseReturnsTab from './PurchaseReturnsTab.vue';
 import RfqForm from './RfqForm.vue';
 import RfqTab from './RfqTab.vue';
 import SupQuoteForm from './SupQuoteForm.vue';
@@ -26,7 +27,7 @@ const auth = useAuth();
 const route = useRoute();
 const router = useRouter();
 
-const TAB_KEYS = ['po', 'pr', 'rfq', 'sq', 'sup', 'sugg', 'inv'];
+const TAB_KEYS = ['po', 'pr', 'rfq', 'sq', 'sup', 'sugg', 'inv', 'ret'];
 const tab = computed(() => { const k = qs(route.query.tab); return TAB_KEYS.includes(k) ? k : 'po'; });
 const setTab = (k) => router.replace({ query: { ...route.query, tab: k, page: undefined } });
 
@@ -51,6 +52,7 @@ const tabs = computed(() => [
   { k: 'sup', label: { ar: 'الموردون', en: 'Suppliers' } },
   { k: 'sugg', label: { ar: 'اقتراحات الشراء', en: 'Suggestions' }, badge: dash.value?.urgentSuggestions },
   { k: 'inv', label: { ar: 'فواتير الموردين', en: 'Supplier invoices' }, badge: (dash.value?.payables?.disputed || 0) + (dash.value?.payables?.awaitingApproval || 0) },
+  { k: 'ret', label: { ar: 'مرتجعات الشراء', en: 'Purchase returns' } },
 ]);
 /** Follow-up board: open commitments, late deliveries, what arrived this month, PR→PO cycle time, payables. */
 const followUp = computed(() => {
@@ -97,6 +99,7 @@ const followUp = computed(() => {
     <SuppliersTab v-else-if="tab === 'sup'" @new-po="openForm('po', { supplierCode: $event.code })" @edit="editSupplier" @quote="openForm('sq', { supplierCode: $event.code })" />
     <SuggestionsTab v-else-if="tab === 'sugg'" />
     <InvoicesTab v-else-if="tab === 'inv'" />
+    <PurchaseReturnsTab v-else-if="tab === 'ret'" />
   </div>
 
   <PoForm :open="form?.kind === 'po'" :initial="form?.init" @close="closeForm" @done="setTab('po')" />

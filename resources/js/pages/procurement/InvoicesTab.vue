@@ -78,7 +78,7 @@ const columns = [
       <template #cell-act="{ row }"><div @click.stop><InvoiceActions :invoice="row" /></div></template>
     </DataTable>
   </div>
-  <div class="hint">{{ t('المطابقة الثلاثية: كمية الفاتورة ≤ المقبول في إشعارات الاستلام، والسعر ضمن نسبة التسامح عن سعر أمر الشراء، والخصم والشحن كما في الأمر — أي فرق يجعل الفاتورة «مختلفًا عليها» ويحتاج قرارًا مكتوبًا من المالية. مسجّل الفاتورة لا يعتمدها، والسداد يُسجَّل بمرجع التحويل.', 'Three-way match: invoiced qty ≤ accepted on GRNs, price within the tolerance of the PO price, discount/shipping as ordered — any variance marks the invoice disputed and needs a written finance decision. The registrar never approves; payment is recorded with the transfer reference.') }}</div>
+  <div class="hint">{{ t('المطابقة الثلاثية: كمية الفاتورة ≤ المقبول في إشعارات الاستلام، والسعر ضمن نسبة التسامح عن سعر أمر الشراء، والخصم والشحن ضمن المتبقي على الأمر بعد فواتيره السابقة (الفاتورة الجزئية تحمل نصيبها، وتكرار شحن الأمر كاملًا على فاتورة ثانية يُعدّ فرقًا) — أي فرق يجعل الفاتورة «مختلفًا عليها» ويحتاج قرارًا مكتوبًا من المالية. إشعار الاستلام الملغى لا يدخل في المطابقة. مسجّل الفاتورة لا يعتمدها، والسداد يُسجَّل بمرجع التحويل.', 'Three-way match: invoiced qty ≤ accepted on GRNs, price within the tolerance of the PO price, discount/shipping within what is left of the order after its earlier invoices (a partial invoice carries its share; repeating the full shipping on a second invoice is a variance) — any variance marks the invoice disputed and needs a written finance decision. A voided receipt never counts. The registrar never approves; payment is recorded with the transfer reference.') }}</div>
 
   <InvoiceDrawer :number="sel" @close="setSel(null)" />
 </template>

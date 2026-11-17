@@ -8,6 +8,7 @@ use App\Models\SalesOrder;
 use App\Models\Supplier;
 use App\Services\Core\AuditService;
 use App\Services\Core\NumberingService;
+use App\Services\Sales\CreditService;
 use App\Support\AppError;
 use App\Support\AuthUser;
 use App\Support\Paging;
@@ -256,10 +257,17 @@ class PartnersService
                 return ['id' => $o->id, 'number' => $o->number, 'status' => $o->status, 'dueDate' => $row['dueDate'] ?? null, 'date' => $row['date'] ?? null, 'warehouse' => ['code' => $o->warehouse?->code]];
             })->values()->all();
 
-        return Shape::withCounts($c, $relations) + [
+        // credit is derived from its sources, live: unpaid invoices + accepted orders not yet delivered (CreditService).
+        // `balance` is that exposure — the stored column is only its cache for lists and sorting.
+        $credit = app(CreditService::class)->exposure($c->id);
+        $out = Shape::withCounts($c, $relations);
+        $out['balance'] = number_format($credit['exposure'], 2, '.', '');
+
+        return $out + [
             'openSosCount' => SalesOrder::where('customer_id', $c->id)->whereNotIn('status', self::CLOSED_SO)->count(),
             'recentOrders' => $recentOrders,
-            'availableCredit' => self::availableCredit($c),
+            'availableCredit' => $credit['available'],
+            'credit' => $credit,
         ];
     }
 
@@ -301,10 +309,7 @@ class PartnersService
         $creditLimit = (float) ($dto['creditLimit'] ?? $c->credit_limit);
         if (isset($dto['terms']) || isset($dto['creditLimit'])) {
             $this->checkCredit($terms, $creditLimit);
-        }
-        $balance = (float) $c->balance;
-        if (isset($dto['creditLimit']) && $creditLimit > 0 && $balance > $creditLimit) {
-            throw AppError::rule('CUSTOMER_LIMIT_BELOW_BALANCE', 'الحد الائتماني ('.self::num($creditLimit).') أقل من الرصيد الحالي ('.self::num($balance).')', 'Credit limit below current balance');
+            $this->checkExposure($c, $terms, $creditLimit);
         }
         $data = [];
         foreach (['nameAr', 'city', 'zone', 'contact', 'priceList', 'address', 'lat', 'lng', 'active', 'terms', 'creditLimit'] as $k) {
@@ -371,6 +376,34 @@ class PartnersService
         }
     }
 
+    /**
+     * Credit terms are never tightened under what the customer already owes (exposure = unpaid invoices + accepted
+     * orders not yet delivered, from CreditService — not the stored balance): no switch to cash terms or to a zero limit
+     * while there is exposure, and no limit lowered below it.
+     */
+    private function checkExposure(Customer $c, ?string $terms, float $creditLimit): void
+    {
+        $x = app(CreditService::class)->exposure($c->id);
+        if ($x['exposure'] <= 0.005) {
+            return;
+        }
+        $toCash = ($terms ?: self::CASH_TERMS) === self::CASH_TERMS && ($c->terms ?: self::CASH_TERMS) !== self::CASH_TERMS;
+        $toZero = ! ($creditLimit > 0) && (float) $c->credit_limit > 0;
+        $owed = 'مستحق '.self::num($x['receivables']).' + طلبات مفتوحة '.self::num($x['openOrders']);
+        if ($toCash || $toZero) {
+            throw AppError::rule('CUSTOMER_HAS_BALANCE', 'لا يُحوَّل العميل إلى نقدي / حد ائتماني صفر وعليه التزام قائم ('.self::num($x['exposure'])." = {$owed}) — يُسدَّد المستحق وتُغلق الطلبات المفتوحة أولًا",
+                'The customer cannot be switched to cash terms / a zero credit limit while it has exposure', ['exposure' => $x['exposure'], 'receivables' => $x['receivables'], 'openOrders' => $x['openOrders']]);
+        }
+        // an unchanged limit, or one raised towards the exposure, is not a tightening and is left alone
+        $old = (float) $c->credit_limit;
+        $tightened = $creditLimit > 0 && ($old <= 0 || $creditLimit < $old);
+        if ($tightened && $x['exposure'] > $creditLimit + 0.005) {
+            throw AppError::rule('CUSTOMER_LIMIT_BELOW_BALANCE', 'الحد الائتماني ('.self::num($creditLimit).') أقل من التزام العميل الحالي ('.self::num($x['exposure'])." = {$owed})",
+                'Credit limit below the customer\'s current exposure', ['exposure' => $x['exposure'], 'receivables' => $x['receivables'], 'openOrders' => $x['openOrders'], 'limit' => $creditLimit]);
+        }
+    }
+
+    /** List rows: from the stored balance (kept equal to the exposure by CreditService::sync). The detail computes it live. */
     private static function availableCredit(Customer $c): ?float
     {
         return (float) $c->credit_limit > 0 ? (float) $c->credit_limit - (float) $c->balance : null;

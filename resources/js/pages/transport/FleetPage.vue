@@ -121,7 +121,7 @@ function editRouteRow(r) { editRoute.value = r; form.value = 'route'; }
   <!-- keyed by the filter so a KPI click re-seeds the tab's own filter state -->
   <FleetVehiclesTab v-if="tab === 'veh'" :key="`veh-${filter}`" :filter="filter" :initial-q="initialQ" @open="vehicle = $event" />
   <FleetDriversTab v-else-if="tab === 'drv'" :key="`drv-${filter}`" :filter="filter" :initial-q="initialQ" @open="driver = $event" />
-  <FleetMaintFuelTab v-else-if="tab === 'maint'" :key="`maint-${filter}`" :filter="filter" @open-vehicle="vehicle = $event" @new-maint="form = 'maint'" @new-fuel="form = 'fuel'" />
+  <FleetMaintFuelTab v-else-if="tab === 'maint'" :key="`maint-${filter}`" :filter="filter" @open-vehicle="vehicle = $event" @open-trip="trip = $event" @new-maint="form = 'maint'" @new-fuel="form = 'fuel'" />
   <FleetAlertsTab v-else-if="tab === 'alerts'" :key="`alerts-${filter}`" :filter="filter" @open-vehicle="vehicle = $event" @open-driver="driver = $event" @open-trip="trip = $event" />
   <FleetOpsRequestsTab v-else-if="tab === 'opreq'" @new="form = 'opreq'" @open-trip="trip = $event" @open-vehicle="vehicle = $event" />
   <FleetRoutesTab v-else-if="tab === 'routes'" @new="newRoute" @edit="editRouteRow" />

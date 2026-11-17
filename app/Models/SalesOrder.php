@@ -23,6 +23,7 @@ class SalesOrder extends BaseModel
             'kg' => 'float',
             'cbm' => 'float',
             'commercial' => 'array', // the source system's commercial snapshot (integration)
+            'has_shortage' => 'boolean',
         ];
     }
 
@@ -64,5 +65,15 @@ class SalesOrder extends BaseModel
     public function stops(): HasMany
     {
         return $this->hasMany(TripStop::class, 'so_id', 'id');
+    }
+
+    public function backorderOf(): BelongsTo
+    {
+        return $this->belongsTo(SalesOrder::class, 'backorder_of_id', 'id');
+    }
+
+    public function backorders(): HasMany
+    {
+        return $this->hasMany(SalesOrder::class, 'backorder_of_id', 'id');
     }
 }

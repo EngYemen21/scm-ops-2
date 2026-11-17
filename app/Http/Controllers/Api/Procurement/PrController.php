@@ -67,6 +67,8 @@ class PrController extends ProcurementBaseController
         $data = $request->validate([
             'supplierCode' => 'required|string|min:1', 'dueDate' => Rules::date(true), 'paymentTerms' => 'nullable|string', 'notes' => 'nullable|string',
             'prices' => 'nullable|array', 'prices.*.sku' => 'required|string|min:1', 'prices.*.price' => 'required|numeric|gt:0',
+            // required by the service (PR_PRICE_REASON) when a price exceeds the requisition estimate beyond the tolerance
+            'priceReason' => 'nullable|string|max:500',
         ] + Rules::scoreOverride());
 
         return $this->created($this->pr->toPo(AuthUser::current(), $id, $data));

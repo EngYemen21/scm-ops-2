@@ -94,4 +94,9 @@ class FulfillmentOrder extends BaseModel
     {
         return $this->hasMany(ReturnOrder::class, 'fo_id', 'id');
     }
+
+    public function cartonRows(): HasMany
+    {
+        return $this->hasMany(Carton::class, 'fo_id', 'id');
+    }
 }

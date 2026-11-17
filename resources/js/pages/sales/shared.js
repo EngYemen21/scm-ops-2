@@ -9,11 +9,16 @@
 //   Totals       { sub, vatPct, vat, total }
 //   Hist         { fromStatus?, toStatus, username?, note?, at }
 //   Qt           { number, status, date, validUntil?, terms?, delivery?, notes?, createdBy?, attachments?: string[], customer,
-//                  lines: [{ lineNo, qty, price, discPct?, product: { sku, nameAr, nameEn?, baseUom?: {code}|null } }], so?, totals, history? }
-//   So           { number, status, date, dueDate?, window?, priority, kg, cbm, createdBy?, customer, warehouse: { code, nameAr },
-//                  lines: [{ id, lineNo, qty, price, discPct?, reservedQty, allocatedQty, pickedQty, deliveredQty?, product, allocations? }],
-//                  totals, fos?, quotation?, consolidation?, pods?, returns?, history? }
+//                  lines: [{ lineNo, qty, price, discPct?, product: { sku, nameAr, nameEn?, baseUom?: {code}|null } }], so?, totals, history?,
+//                  discount: { maxPct, linePct, aboveMax, approvedBy, needsApproval }, validity: { expired, daysLeft } }
+//   So           { number, status, fulfilStatus?, hasShortage, discountApprovedBy?, date, dueDate?, window?, priority, kg, cbm, createdBy?,
+//                  customer, warehouse: { code, nameAr },
+//                  lines: [{ id, lineNo, qty, orderedQty?, shortQty, price, discPct?, reservedQty, allocatedQty, pickedQty, deliveredQty?, product, allocations? }],
+//                  totals, fos?, quotation?, consolidation?, backorderOf?: { number, status }, backorders?: [{ number, status, fulfilStatus }],
+//                  waiting?: [{ sku, nameAr, nameEn, need, available }], pods?, returns?, history? }
 //   Lookups      { warehouses: [{ code, nameAr, nameEn }], customers: CustomerLite[] }
+//   Policy       { maxDiscountPct, vatPct, allowBackorder, zeroCreditLimitUnlimited }   (GET /sales/policy)
+import { computed } from 'vue';
 import { useGet } from '@/api/client';
 import { lang, nm, num, t } from '@/i18n';
 import { QT_LABELS } from '@/shared';
@@ -30,8 +35,19 @@ export const PRICE_LIST_NAMES = { A: { ar: 'مطاعم', en: 'Restaurants' }, F:
 export const PRIORITIES = [['normal', { ar: 'عادية', en: 'Normal' }], ['high', { ar: 'عالية', en: 'High' }]];
 export const SO_STEPS = ['confirmed', 'preparing', 'picking', 'packed', 'readydisp', 'outfordel', 'delivered'];
 export const SAR = { ar: 'ر.س', en: 'SAR' };
-export const VAT_PCT = 15;
-export const MAX_DISC = 30;
+/** Order states a plain cancel accepts (nothing has left its bin). After that the way back is the warehouse's put-back. */
+export const SO_CANCELLABLE = ['draft', 'confirmed', 'reserved', 'allocated', 'preparing'];
+
+// ---------------------------------------------------------------- policy (configurable rules — never hard-coded here)
+/**
+ * The sales rules as the server applies them: `const policy = usePolicy(); policy.value?.maxDiscountPct`.
+ * `null` until the answer arrives — the forms then show no VAT / total and skip the client-side discount pre-check
+ * (the server checks everything anyway).
+ */
+export function usePolicy() {
+  const q = useGet('/sales/policy', undefined, { staleTime: 60_000 });
+  return computed(() => q.data.value || null);
+}
 
 // ---------------------------------------------------------------- lookups + names
 export const useLookups = () => useGet('/master/lookups', undefined, { staleTime: 60_000 });
@@ -58,19 +74,29 @@ export const lineNetOf = (l) => num(l.qty) * num(l.price) * (1 - num(l.discPct) 
 let lineSeq = 1;
 export const newLine = () => ({ key: lineSeq++, sku: '', qty: null, price: null, discPct: 0 });
 export const lineNet = lineNetOf;
-export function linesTotals(lines) {
+/** Totals of the draft lines; `vatPct` comes from the policy (null while it loads → VAT and total are not shown yet). */
+export function linesTotals(lines, vatPct) {
   const sub = Math.round(lines.reduce((s, l) => s + lineNet(l), 0) * 100) / 100;
-  const vat = Math.round(sub * VAT_PCT) / 100;
-  return { sub, vatPct: VAT_PCT, vat, total: Math.round((sub + vat) * 100) / 100 };
+  if (vatPct == null) return { sub, vatPct: null, vat: null, total: null };
+  const vat = Math.round(sub * num(vatPct)) / 100;
+  return { sub, vatPct: num(vatPct), vat, total: Math.round((sub + vat) * 100) / 100 };
 }
-/** Client-side line validation (the server remains the authority). Returns `{ 'lines.0.qty': 'message' }`. */
-export function validateLines(lines, discount) {
+/** Highest line discount of the draft lines. */
+export const maxLineDiscount = (lines) => lines.reduce((m, l) => Math.max(m, num(l.discPct)), 0);
+/**
+ * Client-side line validation (the server remains the authority). Returns `{ 'lines.0.qty': 'message' }`.
+ * `discountBlock`: `{ maxPct, message }` when a discount above `maxPct` cannot be submitted from this form by this user
+ * (null = no pre-check: the user may approve it, or a draft is being saved and waits for the approval).
+ */
+export function validateLines(lines, discount, discountBlock = null) {
   const errs = {};
   lines.forEach((l, i) => {
     if (!l.sku.trim()) errs[`lines.${i}.sku`] = t('اختر المنتج', 'Pick a product');
     if (!l.qty || l.qty <= 0) errs[`lines.${i}.qty`] = t('الكمية > 0', 'Qty > 0');
     if (!l.price || l.price <= 0) errs[`lines.${i}.price`] = t('السعر > 0', 'Price > 0');
-    if (discount && num(l.discPct) > MAX_DISC) errs[`lines.${i}.discPct`] = t(`الخصم فوق ${MAX_DISC}% يحتاج اعتماد مدير المبيعات`, `Discount above ${MAX_DISC}% needs sales-manager approval`);
+    if (!discount) return;
+    if (num(l.discPct) < 0 || num(l.discPct) > 100) errs[`lines.${i}.discPct`] = t('الخصم بين 0 و100%', 'Discount 0–100%');
+    else if (discountBlock && discountBlock.maxPct != null && num(l.discPct) > num(discountBlock.maxPct)) errs[`lines.${i}.discPct`] = discountBlock.message;
   });
   return errs;
 }

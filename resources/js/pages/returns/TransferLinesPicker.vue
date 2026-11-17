@@ -1,6 +1,7 @@
 <script setup>
 // Lines picker of the new-transfer form: available balances of the source warehouse (GET /api/inventory/balances) →
-// checked rows become transfer lines { key, sku, name, fromBin, batchNo, available, qty, toBin }.
+// checked rows become transfer lines { key, sku, name, fromBin, batchNo, available, qty, toBin } (`toBin` is optional:
+// the destination bin is chosen or confirmed at receipt).
 import { computed, ref } from 'vue';
 import { useList } from '@/api/client';
 import { ErrorBanner, NumberInput, TextInput } from '@/components';
@@ -29,7 +30,7 @@ function toggle(b) {
 }
 const set = (k, patch) => emit('update:modelValue', props.modelValue.map((l) => (l.key === k ? { ...l, ...patch } : l)));
 const remove = (k) => emit('update:modelValue', props.modelValue.filter((x) => x.key !== k));
-const GRID = 'grid grid-cols-[minmax(120px,1.4fr)_70px_70px_90px_32px] gap-1.5';
+const GRID = 'grid grid-cols-[minmax(120px,1.4fr)_70px_70px_112px_32px] gap-1.5';
 /** On a phone the column header row is hidden, so every field carries its own caption. */
 const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
 </script>
@@ -55,15 +56,16 @@ const cap = (ar, en) => (isMobile.value ? { ar, en } : null);
     </template>
 
     <div v-if="modelValue.length > 0" class="mt-2 overflow-hidden rounded-[10px] border border-line-2">
-      <div :class="GRID" class="le-head bg-soft px-2.5 py-1.5 text-[9px] font-extrabold text-faint"><div>{{ t('الصنف · من موقع', 'Item · from bin') }}</div><div>{{ t('المتاح', 'Avail.') }}</div><div>{{ t('الكمية', 'Qty') }}</div><div>{{ t('إلى موقع', 'To bin') }}</div><div /></div>
+      <div :class="GRID" class="le-head bg-soft px-2.5 py-1.5 text-[9px] font-extrabold text-faint"><div>{{ t('الصنف · من موقع', 'Item · from bin') }}</div><div>{{ t('المتاح', 'Avail.') }}</div><div>{{ t('الكمية', 'Qty') }}</div><div>{{ t('إلى موقع (اختياري)', 'To bin (optional)') }}</div><div /></div>
       <div v-for="l in modelValue" :key="l.key" :class="GRID" class="le-row items-center border-t border-[#F7F6FA] px-2.5 py-[5px]">
         <div class="min-w-0"><div class="ellipsis text-[10.5px] font-extrabold">{{ l.name }}</div><div class="cell-sub num">{{ l.sku }} · {{ l.fromBin }}{{ l.batchNo ? ` · ${l.batchNo}` : '' }}</div></div>
         <div class="num text-[10px] text-ok" :data-label="t('المتاح', 'Available')">{{ fmtNum(l.available) }}</div>
         <NumberInput :label="cap('الكمية', 'Qty')" :model-value="l.qty" small :min="1" :max="l.available" :error="Number(l.qty) > l.available ? t('يتجاوز المتاح', 'Exceeds available') : null" @update:model-value="set(l.key, { qty: $event })" />
-        <TextInput scan :label="cap('إلى موقع', 'To bin')" :model-value="l.toBin" small dir="ltr" mono :placeholder="{ ar: 'Bin *', en: 'Bin *' }" @update:model-value="set(l.key, { toBin: $event })" />
+        <TextInput scan :label="cap('إلى موقع (اختياري)', 'To bin (optional)')" :model-value="l.toBin" small dir="ltr" mono :placeholder="{ ar: 'عند الاستلام', en: 'at receipt' }" @update:model-value="set(l.key, { toBin: $event })" />
         <button type="button" class="x-btn" aria-label="remove" @click="remove(l.key)">✕</button>
       </div>
     </div>
+    <div v-if="modelValue.length > 0" class="cell-sub mt-1">{{ t('موقع الوجهة اختياري: يُحدَّد أو يُؤكَّد عند الاستلام، ويقترح النظام الموقع الذي يحوي المنتج.', 'The destination bin is optional: it is chosen or confirmed at receipt, where the system suggests the bin that already holds the product.') }}</div>
     <div v-if="error" class="field-err mt-1">{{ error }}</div>
   </div>
 </template>

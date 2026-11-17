@@ -58,7 +58,9 @@
   "supret",
   "move",
   "restock",
-  "transit"
+  "transit",
+  "unload",
+  "grnvoid"
  ],
  "PR_STATES": [
   "draft",
@@ -128,11 +130,13 @@
   "sent": [
    "confirmed",
    "partial",
-   "received"
+   "received",
+   "closed"
   ],
   "confirmed": [
    "partial",
-   "received"
+   "received",
+   "closed"
   ],
   "partial": [
    "partial",
@@ -159,15 +163,21 @@
    "cancelled"
   ],
   "arrived": [
-   "inspecting"
+   "inspecting",
+   "cancelled",
+   "expected"
   ],
   "inspecting": [
-   "putaway"
+   "putaway",
+   "cancelled"
   ],
   "putaway": [
-   "done"
+   "done",
+   "inspecting"
   ],
-  "done": [],
+  "done": [
+   "inspecting"
+  ],
   "cancelled": []
  },
  "QC_RESULTS": [
@@ -202,7 +212,9 @@
   ],
   "rejected": [],
   "converted": [],
-  "expired": []
+  "expired": [
+   "draft"
+  ]
  },
  "SO_STATES": [
   "draft",
@@ -249,20 +261,26 @@
   ],
   "picking": [
    "picked",
-   "picking"
+   "picking",
+   "confirmed",
+   "cancelled"
   ],
   "picked": [
-   "packed"
+   "packed",
+   "confirmed",
+   "cancelled"
   ],
   "packed": [
    "readydisp",
-   "loaded"
+   "loaded",
+   "picked"
   ],
   "readydisp": [
    "loaded"
   ],
   "loaded": [
-   "outfordel"
+   "outfordel",
+   "packed"
   ],
   "outfordel": [
    "delivered",
@@ -324,16 +342,20 @@
   ],
   "picking": [
    "picking",
-   "picked"
+   "picked",
+   "cancelled"
   ],
   "picked": [
-   "packed"
+   "packed",
+   "cancelled"
   ],
   "packed": [
-   "loaded"
+   "loaded",
+   "picked"
   ],
   "loaded": [
-   "onroute"
+   "onroute",
+   "packed"
   ],
   "onroute": [
    "delivered",
@@ -392,12 +414,18 @@
   "loading": [
    "ready",
    "onroute",
-   "cancelled"
+   "cancelled",
+   "planned",
+   "vassigned",
+   "dassigned"
   ],
   "ready": [
    "onroute",
    "loading",
-   "cancelled"
+   "cancelled",
+   "planned",
+   "vassigned",
+   "dassigned"
   ],
   "dispatched": [
    "onroute"
@@ -568,7 +596,8 @@
  ],
  "MAINT_STATES": [
   "open",
-  "closed"
+  "closed",
+  "cancelled"
  ],
  "RETURN_TYPES": [
   "cust",
@@ -582,15 +611,20 @@
   "rejected",
   "received",
   "inspect",
-  "closed"
+  "closed",
+  "shipped",
+  "cancelled"
  ],
  "RETURN_TRANSITIONS": {
   "pending": [
    "approved",
-   "rejected"
+   "rejected",
+   "cancelled"
   ],
   "approved": [
-   "received"
+   "received",
+   "cancelled",
+   "shipped"
   ],
   "received": [
    "inspect"
@@ -599,7 +633,11 @@
    "closed"
   ],
   "closed": [],
-  "rejected": []
+  "rejected": [],
+  "shipped": [
+   "closed"
+  ],
+  "cancelled": []
  },
  "RETURN_DECISIONS": [
   "restock",
@@ -662,7 +700,8 @@
    "done"
   ],
   "partial": [
-   "done"
+   "partial",
+   "received"
   ],
   "done": [],
   "rejected": [],
@@ -997,6 +1036,18 @@
   "qtn": {
    "ar": "حجر",
    "en": "Quarantine",
+   "fg": "#b23b3b",
+   "bg": "#fdecec"
+  },
+  "unload": {
+   "ar": "إنزال من الشاحنة",
+   "en": "Truck unload",
+   "fg": "#b26a16",
+   "bg": "#fbf0dd"
+  },
+  "grnvoid": {
+   "ar": "إلغاء إذن استلام",
+   "en": "Receipt void",
    "fg": "#b23b3b",
    "bg": "#fdecec"
   }
@@ -1673,6 +1724,18 @@
    "en": "Completed",
    "fg": "#1d7a3e",
    "bg": "#e6f9ec"
+  },
+  "shipped": {
+   "ar": "شُحن للمورد",
+   "en": "Shipped to supplier",
+   "fg": "#0d7f93",
+   "bg": "#d9f4f9"
+  },
+  "cancelled": {
+   "ar": "ملغى",
+   "en": "Cancelled",
+   "fg": "#7d7990",
+   "bg": "#f1eff6"
   }
  },
  "RETURN_DECISION_LABELS": {
@@ -1774,8 +1837,8 @@
    "fg": "#b26a16",
    "bg": "#fbf0dd",
    "act": [
-    "إقفال بالفروقات",
-    "Close with variance"
+    "استلام ما وصل",
+    "Receive what arrived"
    ]
   },
   "done": {
@@ -2032,7 +2095,14 @@
   "bank.manage",
   "expense.create",
   "asset.manage",
-  "fin.report"
+  "fin.report",
+  "pick.override",
+  "load.override",
+  "discount.approve",
+  "grn.void",
+  "invoice.register",
+  "invoice.approve",
+  "invoice.pay"
  ],
  "ROLE_PERMISSIONS": {
   "super": [
@@ -2124,7 +2194,14 @@
    "bank.manage",
    "expense.create",
    "asset.manage",
-   "fin.report"
+   "fin.report",
+   "pick.override",
+   "load.override",
+   "discount.approve",
+   "grn.void",
+   "invoice.register",
+   "invoice.approve",
+   "invoice.pay"
   ],
   "sales": [
    "page.dash",
@@ -2139,7 +2216,8 @@
    "consol.manage",
    "customer.manage",
    "return.create",
-   "report.export"
+   "report.export",
+   "so.allocate"
   ],
   "wm": [
    "page.dash",
@@ -2181,7 +2259,11 @@
    "exception.create",
    "warehouse.manage",
    "audit.view",
-   "report.export"
+   "report.export",
+   "pick.override",
+   "load.override",
+   "grn.void",
+   "so.allocate"
   ],
   "inv": [
    "page.dash",
@@ -2222,7 +2304,10 @@
    "exception.manage",
    "inventory.view_cost",
    "report.export",
-   "expense.create"
+   "expense.create",
+   "return.create",
+   "page.returns",
+   "invoice.register"
   ],
   "disp": [
    "page.dash",
@@ -2251,7 +2336,8 @@
    "exception.create",
    "return.create",
    "report.export",
-   "expense.create"
+   "expense.create",
+   "load.override"
   ],
   "worker": [
    "page.wreceive",
@@ -2287,7 +2373,10 @@
    "gl.view",
    "gl.approve",
    "gl.close",
-   "fin.report"
+   "fin.report",
+   "discount.approve",
+   "invoice.approve",
+   "page.sales"
   ],
   "finance": [
    "page.dash",
@@ -2309,7 +2398,10 @@
    "bank.manage",
    "expense.create",
    "asset.manage",
-   "fin.report"
+   "fin.report",
+   "invoice.register",
+   "invoice.approve",
+   "invoice.pay"
   ],
   "auditor": [
    "page.dash",
@@ -2409,6 +2501,7 @@
   "gm": [
    "dash",
    "tower",
+   "sales",
    "procurement",
    "inv",
    "reports",

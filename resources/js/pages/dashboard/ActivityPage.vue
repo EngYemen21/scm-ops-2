@@ -18,7 +18,20 @@ import { useNotifications } from './useNotifications';
 
 const FILTER_KEYS = ['q', 'entity', 'user', 'from', 'to', 'entityType', 'action'];
 const actionColor = (a) => (/DELETE|CANCEL|REJECT|FAIL/.test(a) ? '#b23b3b' : /CREATE|RAISE|POST|APPROVE/.test(a) ? '#1d7a3e' : /STATUS|UPDATE|SETTING|PERMISSIONS/.test(a) ? '#3C79F5' : /SECURITY/.test(a) ? '#654e92' : '#55506a');
-const short = (v, n = 80) => (v == null || v === '' ? '—' : v.length > n ? `${v.slice(0, n)}…` : v);
+/** Audit values are JSON text: keys that carry nothing (`"carrier":null`) are left out of the cell — the tooltip keeps the full value. */
+const compact = (v) => {
+  if (typeof v !== 'string' || !/^[[{]/.test(v) || !v.includes('null')) return v;
+  try {
+    return JSON.stringify(JSON.parse(v), (k, x) => (x === null ? undefined : x));
+  } catch {
+    return v;
+  }
+};
+const short = (v, n = 80) => {
+  if (v == null || v === '') return '—';
+  const s = compact(v);
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+};
 
 const auth = useAuth();
 const qs = useQueryState();
