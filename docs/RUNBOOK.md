@@ -220,14 +220,15 @@ Watching it: Integration tower → «أودو» — overview (connection, progre
 warehouse, lot and expiry; a view, never the OPS ledger), master data (what is linked, what waits, preview and apply),
 models, changes, records, sync log.
 
-Measured on the company's Odoo 17 (2026-11-22, 673 models, about 1.3 million records):
+Measured on the company's Odoo 17 (2026-11-22, 673 models, 1.38 million records in the 242 models that are copied):
 
 | What | Figure |
 |---|---|
 | A change in Odoo reaching OPS, runs every minute | median 28 s, 98% within a minute, slowest 116 s (131 real changes) |
 | First copy | 5,000 to 45,000 records a minute, depending on the model; the journal items are the slowest and largest |
-| Size of the copy | about 1.2 KB a record: 906,000 records = 1.13 GB of payload (1.6 GB on disk in MySQL); complete ≈ 1.4 GB |
-| Share of accounting | `account.move` + `account.move.line` are about 70% of the whole copy |
+| Size of the complete copy | 1,379,334 records = 1.4 GB of payload, about 1 KB a record (2.0 GB data + 0.1 GB indexes on disk in MySQL) |
+| Share of accounting | the `account.*` models are 64% of the size (0.9 GB, 730,000 records) |
+| Of the 673 models | 242 copied · 256 technical · 76 computed reports · 65 held back as people's files · 34 the Odoo user cannot read |
 
 A server that received the code before `php artisan migrate` ran does not fail: the «أودو» tab shows one line and the
 endpoints answer `ODOO_NOT_INSTALLED`. `scm:odoo-sync` exits quietly where the mirror is not switched on.

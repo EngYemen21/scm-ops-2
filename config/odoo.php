@@ -39,7 +39,8 @@ return [
     // registered but NOT copied, even when the Odoo user can read them — until a person with integration.manage takes a
     // model in from the screen, or it is listed under ODOO_INCLUDE. Of HR only the directory is copied (who works
     // here, in which job and department), and without the personal part of an employee's file (`personal_fields`).
-    'private' => ['hr.', 'hr_', 'res.partner.bank', 'resource.calendar.leaves'],
+    // (`attendance.` and `penalty.` are the attendance-sheet and staff-penalty modules installed on the company's Odoo)
+    'private' => ['hr.', 'hr_', 'attendance.', 'penalty.', 'res.partner.bank', 'resource.calendar.leaves'],
     'private_allow' => ['hr.employee', 'hr.employee.category', 'hr.department', 'hr.job', 'hr.work.location'],
     // an employee's private file: identity papers, family, home address and phone, bank account, pay
     'personal_fields' => '/^(private_|ssnid$|sinid$|identification_id$|passport_id$|visa_|permit_no$|work_permit|has_work_permit|birthday$|place_of_birth$|country_of_birth$|country_id$|gender$|marital$|spouse_|children$|emergency_|bank_account_id$|salary_|wage|study_|km_home_work|distance_home_work|is_non_resident$|additional_note$|notes$)/i',

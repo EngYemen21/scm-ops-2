@@ -144,6 +144,10 @@ class OdooMirrorTest extends ApiTestCase
         $this->odoo->model('hr.payslip', ['name' => 'char', 'employee_id' => $m2o('hr.employee'), 'net_wage' => 'monetary'], 'Pay Slip');
         $this->odoo->model('hr.contract', ['name' => 'char', 'wage' => 'monetary'], 'Contract');
         $this->odoo->model('res.partner.bank', ['acc_number' => 'char'], 'Bank Accounts');
+        $this->odoo->model('attendance.sheet', ['name' => 'char'], 'Hr Attendance Sheet');
+        $this->odoo->model('penalty.request', ['name' => 'char'], 'Penalty Request');
+        $this->odoo->create('attendance.sheet', ['name' => 'SHEET-NOV']);
+        $this->odoo->create('penalty.request', ['name' => 'PENALTY-1']);
         $this->odoo->model('fleet.vehicle', ['name' => 'char'], 'Vehicle');
         $this->odoo->create('hr.department', ['name' => 'المستودع']);
         $this->odoo->create('hr.employee', ['name' => 'سائق أول', 'job_title' => 'سائق', 'work_email' => 'd1@co.example', 'department_id' => [1, 'x'], 'pin' => 'PIN-4321',
@@ -160,14 +164,16 @@ class OdooMirrorTest extends ApiTestCase
         $this->assertSame(['active', 'active', 'active', 'skipped', 'skipped', 'skipped'], array_map(fn ($m) => $models[$m]->status,
             ['hr.employee', 'hr.department', 'fleet.vehicle', 'hr.payslip', 'hr.contract', 'res.partner.bank']));
         $this->assertSame([OdooSync::PRIVATE, OdooSync::PRIVATE], [$models['hr.payslip']->reason, $models['res.partner.bank']->reason]);
-        $this->assertSame(0, OdooRecord::whereIn('model', ['hr.payslip', 'hr.contract', 'res.partner.bank'])->count());
+        // attendance sheets and staff penalties come from add-on modules whose names do not start with "hr."
+        $this->assertSame([OdooSync::PRIVATE, OdooSync::PRIVATE], [$models['attendance.sheet']->reason, $models['penalty.request']->reason]);
+        $this->assertSame(0, OdooRecord::whereIn('model', ['hr.payslip', 'hr.contract', 'res.partner.bank', 'attendance.sheet', 'penalty.request'])->count());
         // of an employee, the work part only
         $this->assertSame(['active', 'department_id', 'display_name', 'job_title', 'name', 'work_email', 'write_date'], collect($models['hr.employee']->fields)->keys()->sort()->values()->all());
         $this->assertSame(['bank_account_id' => 'personal', 'birthday' => 'personal', 'country_id' => 'personal', 'emergency_contact' => 'personal', 'identification_id' => 'personal',
             'marital' => 'personal', 'pin' => 'credential', 'private_phone' => 'personal', 'private_street' => 'personal'], collect($models['hr.employee']->skipped_fields)->sortKeys()->all());
         $copy = json_encode(OdooRecord::pluck('data'), JSON_UNESCAPED_UNICODE);
         $this->assertStringContainsString('سائق أول', $copy);
-        foreach (['PIN-4321', 'HOME-STREET', 'HOME-PHONE', 'ID-1090', 'IBAN-SA00', 'EMERGENCY', '91234', 'SLIP/001', '1990-01-01'] as $private) {
+        foreach (['PIN-4321', 'HOME-STREET', 'HOME-PHONE', 'ID-1090', 'IBAN-SA00', 'EMERGENCY', '91234', 'SLIP/001', '1990-01-01', 'SHEET-NOV', 'PENALTY-1'] as $private) {
             $this->assertStringNotContainsString($private, $copy);
         }
 
