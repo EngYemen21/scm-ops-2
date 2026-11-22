@@ -2,6 +2,7 @@
 
 namespace App\Integration\Services;
 
+use App\Integration\Odoo\OdooSync;
 use App\Integration\Support\Signature;
 use App\Integration\Support\Systems;
 use App\Services\Core\OpsHousekeeping;
@@ -39,6 +40,8 @@ class IntegrationRunner
             $out['housekeeping'] = app(ProcurementHousekeeping::class)->run();
             // our own waiting orders (every 10 min) and the daily upkeep: expired quotations, driver / vehicle documents, customer balances
             $out['ops'] = app(OpsHousekeeping::class)->run();
+            // the Odoo mirror reads what changed since its cursor (read-only; a no-op unless ODOO_ENABLED)
+            $out['odoo'] = $this->odoo();
             $out['ms'] = (int) round((microtime(true) - $t0) * 1000);
             $out['at'] = now()->toIso8601ZuluString('millisecond');
             Cache::put(self::LAST_KEY, $out, now()->addDays(7));
@@ -46,6 +49,23 @@ class IntegrationRunner
             return $out;
         } finally {
             $lock->release();
+        }
+    }
+
+    /** One bounded run of the Odoo mirror; a fault there never fails the integration cycle. */
+    private function odoo(): array
+    {
+        if (! config('odoo.enabled')) {
+            return ['ran' => false];
+        }
+        try {
+            $r = app(OdooSync::class)->run((int) config('odoo.run_seconds', 20), 'heartbeat');
+
+            return array_intersect_key($r, array_flip(['ran', 'reason', 'ms', 'calls', 'pulled', 'created', 'updated', 'deleted', 'errors', 'error']));
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['ran' => false, 'error' => class_basename($e)];
         }
     }
 

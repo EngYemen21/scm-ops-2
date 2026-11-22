@@ -302,7 +302,7 @@ class PartnersService
         if ($c->source_system) {
             $owned = array_values(array_intersect(array_keys($dto), ['nameAr', 'nameEn', 'city', 'active', 'terms', 'creditLimit', 'priceList']));
             if ($owned) {
-                throw AppError::rule('CUSTOMER_OWNED_BY_SOURCE', 'بيانات هذا العميل التجارية تُدار من منصة المبيعات — عدّلها هناك', "Commercial data of this customer is owned by {$c->source_system}", ['fields' => $owned]);
+                throw AppError::rule('CUSTOMER_OWNED_BY_SOURCE', $c->source_system === 'odoo' ? 'بيانات هذا العميل التجارية تُدار من أودو — عدّلها هناك' : 'بيانات هذا العميل التجارية تُدار من منصة المبيعات — عدّلها هناك', "Commercial data of this customer is owned by {$c->source_system}", ['fields' => $owned]);
             }
         }
         $terms = $dto['terms'] ?? $c->terms;
