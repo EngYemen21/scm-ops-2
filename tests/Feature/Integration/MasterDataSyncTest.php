@@ -5,9 +5,11 @@ namespace Tests\Feature\Integration;
 use App\Integration\Models\IntException;
 use App\Integration\Models\IntMirror;
 use App\Integration\Services\ExternalRefs;
+use App\Integration\Support\PackEstimator;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\CustomerSite;
+use App\Models\InventoryBalance;
 use App\Models\Product;
 use Tests\ApiTestCase;
 use Tests\Feature\Sales\SalesFixtures;
@@ -139,12 +141,45 @@ class MasterDataSyncTest extends ApiTestCase
         $this->assertSame('resolved', $x->refresh()->status);
         $audit = AuditLog::where('action', 'PRODUCT.CREATE')->where('entity_id', $p->id)->where('username', 'admin')->first();
         $this->assertStringContainsString("adopted from sales:{$pid}", (string) json_encode($audit->new_value, JSON_UNESCAPED_UNICODE));
-        $this->assertSame(0, (int) \App\Models\InventoryBalance::where('product_id', $p->id)->count()); // a new product has no stock
+        $this->assertSame(0, (int) InventoryBalance::where('product_id', $p->id)->count()); // a new product has no stock
 
         // once only; an order line for it is now understood by OPS
         $this->expectRejected($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => $pid, 'weightKg' => 10, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'ALREADY_MAPPED', [409]);
         $this->expectRejected($this->postAs('admin', '/api/integration/mappings/product/adopt', ['externalId' => 'P-NEVER-SENT', 'weightKg' => 10, 'lengthCm' => 40, 'widthCm' => 30, 'heightCm' => 20]), 'EXTERNAL_RECORD_UNKNOWN', [404]);
         $this->assertSame(['processed', true, $p->sku], [($u = $this->send($this->envelope('product.updated', $pid, ['id' => $pid, 'name' => 'بطاطس مقلية مجمدة 9مم'], 2))->json('results.0'))['status'], $u['result']['mapped'], $u['result']['sku']]);
+    }
+
+    public function test_adopting_a_sales_product_links_existing_ops_product_when_sku_matches_case_insensitively(): void
+    {
+        $existing = $this->makeProduct();
+        $pid = 'P-EX-'.self::uid();
+        $this->send($this->envelope('product.created', $pid, ['id' => $pid, 'name' => 'صنف مطابق بالرمز القائم'], 1));
+        $beforeCount = Product::count();
+
+        $r = $this->expectOk($this->postAs('admin', '/api/integration/mappings/product/adopt', [
+            'externalId' => $pid, 'sku' => mb_strtolower($existing->sku),
+            'weightKg' => 5, 'lengthCm' => 20, 'widthCm' => 15, 'heightCm' => 10,
+        ]));
+
+        $this->assertSame([false, $existing->sku, $existing->id, $existing->sku], [$r['created'], $r['sku'], $r['internalId'], $r['internalCode']]);
+        $this->assertSame($beforeCount, Product::count());
+        $this->assertSame($existing->id, app(ExternalRefs::class)->internalId('sales', 'product', $pid));
+        $this->assertSame('resolved', IntException::where('code', 'PRODUCT_UNMAPPED')->where('entity_ref', $pid)->value('status'));
+
+        // omitting dto.sku falls back to externalId normalized to uppercase when matching an existing SKU
+        $pidLower = 'p-case-'.mb_strtolower(self::uid());
+        $existingByExternal = $this->makeProduct();
+        $existingByExternal->update(['sku' => mb_strtoupper($pidLower)]);
+        $this->send($this->envelope('product.created', $pidLower, ['id' => $pidLower, 'name' => 'صنف مطابق بالمعرف الخارجي'], 1));
+        $beforeSecondCount = Product::count();
+
+        $r2 = $this->expectOk($this->postAs('admin', '/api/integration/mappings/product/adopt', [
+            'externalId' => $pidLower, 'weightKg' => 2, 'lengthCm' => 10, 'widthCm' => 10, 'heightCm' => 10,
+        ]));
+
+        $this->assertSame([false, $existingByExternal->sku, $existingByExternal->id], [$r2['created'], $r2['sku'], $r2['internalId']]);
+        $this->assertSame($beforeSecondCount, Product::count());
+        $this->assertSame($existingByExternal->id, app(ExternalRefs::class)->internalId('sales', 'product', $pidLower));
     }
 
     public function test_the_pilot_bootstrap_creates_every_unmapped_product_with_a_trial_opening_balance(): void
@@ -162,7 +197,7 @@ class MasterDataSyncTest extends ApiTestCase
         foreach ([[$dry, 'ambient', 50.0], [$frozen, 'frozen', 10.0]] as [$pid, $class, $kg]) {
             $p = Product::where('sku', mb_strtoupper($pid))->first();
             $this->assertSame([$class, $kg, $p->id], [$p->storage_class, (float) $p->weight_kg, app(ExternalRefs::class)->internalId('sales', 'product', $pid)]);
-            $rows = \App\Models\InventoryBalance::with('bin.zone')->where('product_id', $p->id)->get();
+            $rows = InventoryBalance::with('bin.zone')->where('product_id', $p->id)->get();
             $this->assertSame([1, 100, $class], [$rows->count(), (int) $rows[0]->on_hand, $rows[0]->bin->zone->type]); // stored in a zone of its storage class
             $this->assertTrue(AuditLog::where('action', 'INVENTORY.ADJUST')->where('username', 'svc.sales')->where('new_value', 'like', '%تجريبي%')->exists());
             $this->assertSame(0, IntException::where('code', 'PRODUCT_UNMAPPED')->where('entity_ref', $pid)->where('status', 'open')->count());
@@ -180,7 +215,7 @@ class MasterDataSyncTest extends ApiTestCase
 
     public function test_pack_texts_are_read_into_weight_estimates(): void
     {
-        $w = fn (string $name, ?string $pack) => \App\Integration\Support\PackEstimator::estimate($name, $pack);
+        $w = fn (string $name, ?string $pack) => PackEstimator::estimate($name, $pack);
         $this->assertSame([40.0, 'pack', 'bag'], [$w('أرز بسمتي هندي', 'كيس 40 كجم')['weightKg'], $w('أرز بسمتي هندي', 'كيس 40 كجم')['basis'], $w('أرز بسمتي هندي', 'كيس 40 كجم')['uomCode']]);
         $this->assertSame(16.0, $w('زيت دوار الشمس', 'كرتون 4×4 لتر')['weightKg']);
         $this->assertSame(7.92, $w('مشروب غازي — علب', 'كرتون 24×330 مل')['weightKg']);

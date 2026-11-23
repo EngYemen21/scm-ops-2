@@ -53,7 +53,7 @@ class MappingService
         $catalog = null;
         $out['items'] = array_map(function ($model) use ($entity, &$catalog) {
             $m = $model->toArray(); // camelCase keys, joined columns included
-            $row =['externalId' => $m['externalId'], 'label' => $m['label'], 'data' => $m['data'], 'updatedAt' => $m['updatedAt'],
+            $row = ['externalId' => $m['externalId'], 'label' => $m['label'], 'data' => $m['data'], 'updatedAt' => $m['updatedAt'],
                 'mapped' => $m['internalId'] !== null, 'internalId' => $m['internalId'], 'internalCode' => $m['internalCode'],
                 'mappedBy' => $m['mappedBy'], 'mappedAt' => $m['mappedAt']];
             if (! $row['mapped']) {
@@ -112,8 +112,18 @@ class MappingService
         $uom = trim((string) ($dto['uomCode'] ?? '')) ?: null;
 
         return DB::transaction(function () use ($user, $system, $externalId, $mirror, $data, $dto, $uom) {
+            $sku = mb_strtoupper(trim((string) ($dto['sku'] ?? '')) ?: trim($externalId));
+            $existing = Product::where('sku', $sku)->first();
+            if ($existing) {
+                $out = $this->map($user, $system, 'product', $externalId, $existing->id);
+
+                return ['created' => false, 'sku' => $existing->sku,
+                    'messageAr' => "رُبط الصنف القائم {$existing->sku} بـ {$externalId}".($out['replayed'] ? " — أُعيد تنفيذ {$out['replayed']} حدث كان بانتظاره" : ''),
+                    'messageEn' => "Existing product {$existing->sku} linked to {$externalId}".($out['replayed'] ? "; {$out['replayed']} waiting event(s) replayed" : '')] + $out;
+            }
+
             $product = $this->products->create($user, [
-                'sku' => trim((string) ($dto['sku'] ?? '')) ?: $externalId,
+                'sku' => $sku,
                 'nameAr' => (string) $mirror->label, 'nameEn' => (string) ($data['nameEn'] ?? $mirror->label),
                 'weightKg' => (float) $dto['weightKg'], 'lengthCm' => (float) $dto['lengthCm'], 'widthCm' => (float) $dto['widthCm'], 'heightCm' => (float) $dto['heightCm'],
                 'storageClass' => $dto['storageClass'] ?? 'ambient', 'tracksExpiry' => false, 'reorderMin' => 0,
