@@ -197,3 +197,51 @@ Under a real scheduler the same work also has its own commands (`php artisan sch
 
 Proof-of-delivery files are kept in the database table `stored_files` until object storage (S3) is configured; they
 grow with every delivery — connect object storage before the volume does.
+
+## 8. Odoo → OPS live mirror
+
+Design and guarantees: `docs/odoo/ARCHITECTURE.ar.md`. OPS only reads from Odoo; nothing is installed or changed there.
+
+Set-up on a server (once):
+
+1. In Odoo create a dedicated user whose access rights are read-only on the apps to mirror, and an API key for it
+   (user → Account Security → New API Key). A person's password works but breaks the mirror the day it is changed.
+2. Environment: `ODOO_ENABLED=true`, `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY`. Check: `php artisan scm:odoo-status`.
+3. `php artisan migrate --force` (tables `odoo_*`).
+4. First copy, from a machine with time (never a web request): `php artisan scm:odoo-sync --loop`. It can be stopped and
+   started again; it resumes. Measure the size before pointing it at a small production database.
+5. Keep it current: a scheduler that runs `scm:odoo-sync` (or calls the signed heartbeat) every minute. Without one the
+   mirror only moves when the heartbeat arrives or a screen is open.
+6. Optional: `php artisan scm:odoo-master` (the plan, changes nothing), then `--apply`, then `ODOO_PROJECT_MASTER=true`
+   for the continuous refresh of products, customers and suppliers. The first `--apply` creates thousands of records:
+   it belongs to the command line. The screen applies at most 150 records at a time and says so above that.
+
+Watching it: Integration tower → «أودو» — overview (connection, progress, last run), Odoo stock (Odoo's own figures per
+warehouse, lot and expiry; a view, never the OPS ledger), master data (what is linked, what waits, preview and apply),
+models, changes, records, sync log.
+
+Measured on the company's Odoo 17 (2026-11-22, 673 models, 1.38 million records in the 242 models that are copied):
+
+| What | Figure |
+|---|---|
+| A change in Odoo reaching OPS, runs every minute | median 28 s, 98% within a minute, slowest 116 s (131 real changes) |
+| First copy | 5,000 to 45,000 records a minute, depending on the model; the journal items are the slowest and largest |
+| Size of the complete copy | 1,379,334 records = 1.4 GB of payload, about 1 KB a record (2.0 GB data + 0.1 GB indexes on disk in MySQL) |
+| Share of accounting | the `account.*` models are 64% of the size (0.9 GB, 730,000 records) |
+| Of the 673 models | 242 copied · 256 technical · 76 computed reports · 65 held back as people's files · 34 the Odoo user cannot read |
+
+A server that received the code before `php artisan migrate` ran does not fail: the «أودو» tab shows one line and the
+endpoints answer `ODOO_NOT_INSTALLED`. `scm:odoo-sync` exits quietly where the mirror is not switched on.
+
+If storage is short, pause the models you can live without from the «النماذج» view (a paused model keeps its copy and is
+not updated) or list them under `ODOO_EXCLUDE` before the first copy.
+
+People's files stay out by default: HR, payroll and partner bank-account models are registered as skipped ("private")
+and an employee's record is copied without its personal part (`config/odoo.php`: `private`, `private_allow`,
+`personal_fields`). A manager takes a held-back model in from its panel on the «النماذج» view; `ODOO_INCLUDE` does the
+same for a deployment. After changing those rules: `php artisan scm:odoo-recopy <model> …` drops the copy of the named
+models and makes it again under the rules as they stand.
+
+A run that was killed leaves its lock for up to `seconds + 120` s; `Cache::lock('odoo:sync')->forceRelease()` frees it.
+While many models still wait for their first copy, one large model takes at most 60% of a run, so the small ones are
+not held back for hours.

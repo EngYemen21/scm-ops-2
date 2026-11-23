@@ -2,6 +2,10 @@
 
 use App\Integration\IntegrationBootstrap;
 use App\Integration\Models\IntMirror;
+use App\Integration\Odoo\Models\OdooModel;
+use App\Integration\Odoo\OdooMasterData;
+use App\Integration\Odoo\OdooMirror;
+use App\Integration\Odoo\OdooSync;
 use App\Integration\Services\IntegrationRunner;
 use App\Integration\Services\MappingService;
 use App\Integration\Support\PackEstimator;
@@ -217,3 +221,75 @@ Artisan::command('scm:fleet-documents', function (\App\Services\Transport\FleetS
     return 0;
 })->purpose('Refresh driver / vehicle document alerts and the blocks that follow from them');
 Schedule::command('scm:fleet-documents')->dailyAt('05:00');
+
+// ── Odoo → OPS live mirror (docs/odoo/ARCHITECTURE.ar.md). Read-only: nothing in Odoo is ever changed from here. ──
+Artisan::command('scm:odoo-status', function (OdooMirror $mirror) {
+    $s = $mirror->status(true);
+    if (! $s['installed']) {
+        $this->warn('the odoo_* tables do not exist on this database yet: run php artisan migrate');
+
+        return 1;
+    }
+    $c = $s['connection'];
+    $this->line('connection: '.($c['ok'] ? "OK — Odoo {$c['version']} ({$c['transport']}) at {$c['host']}, user ".($c['user']['name'] ?? '?') : 'NOT OK — '.($c['error'] ?? 'not configured')));
+    $this->line('models: '.json_encode($s['models']));
+    $this->line('first copy: '.json_encode($s['firstCopy']));
+    $this->line('changes: '.json_encode($s['changes']));
+    $this->line('freshness: '.json_encode($s['freshness']));
+
+    return $c['ok'] ? 0 : 1;
+})->purpose('Odoo mirror: connection, how far the copy is, what changed');
+
+// One run by default (what the scheduler calls). --loop keeps running until nothing is pending: the first full copy,
+// done from a workstation or a server with time, never from a serverless request.
+Artisan::command('scm:odoo-sync {--seconds=50} {--model=*} {--loop} {--max-minutes=240}', function (OdooSync $sync) {
+    $seconds = max(3, (int) $this->option('seconds'));
+    $only = $this->option('model') ?: null;
+    $until = microtime(true) + 60 * max(1, (int) $this->option('max-minutes'));
+    do {
+        $r = $sync->run($seconds, 'command', $only);
+        if (! $r['ran']) {
+            // the scheduler calls this every minute on every installation: where the mirror is not switched on, or
+            // another run still holds the lock, there is simply nothing to do — that is not a failure
+            $this->line('not run: '.$r['reason']);
+
+            return 0;
+        }
+        $p = $r['pending'];
+        $this->line(sprintf('%s  %5d ms  calls %-4d pulled %-6d created %-6d updated %-5d deleted %-4d errors %-2d | to inspect %d · first copy %d · open windows %d%s',
+            now()->format('H:i:s'), $r['ms'], $r['calls'], $r['pulled'], $r['created'], $r['updated'], $r['deleted'], $r['errors'], $p['toInspect'], $p['firstCopy'], $p['windows'],
+            $r['error'] ? ' | '.$r['error'] : ''));
+        $more = $this->option('loop') && ! $r['error'] && ($p['toInspect'] + $p['firstCopy'] + $p['windows']) > 0 && microtime(true) < $until;
+    } while ($more);
+
+    return $r['error'] ? 1 : 0;
+})->purpose('Odoo mirror: read what changed in Odoo since the last run (--loop: until the first copy is complete)');
+Schedule::command('scm:odoo-sync --seconds=50')->everyMinute()->withoutOverlapping();
+
+Artisan::command('scm:odoo-discover', function (OdooSync $sync) {
+    $this->line(json_encode($sync->discover()));
+
+    return 0;
+})->purpose('Odoo mirror: list the models of the Odoo instance and register the new ones');
+
+// After the field policy changed (config odoo.never_fields / personal_fields / private): the copy of a model is dropped
+// and made again under the rules as they stand now. Only the OPS copy is touched; the next runs read the model again.
+Artisan::command('scm:odoo-recopy {model*}', function (OdooSync $sync) {
+    foreach ((array) $this->argument('model') as $name) {
+        $m = OdooModel::where('model', $name)->first();
+        $this->line($m ? "{$name}: ".$sync->recopy($m).' records dropped from the copy — it is read again on the next runs' : "{$name}: not a registered model");
+    }
+
+    return 0;
+})->purpose('Odoo mirror: drop the copy of the given models and copy them again under the current rules');
+
+// Odoo's products, customers and suppliers → OPS master data (OdooMasterData). Without --apply it only prints the plan.
+Artisan::command('scm:odoo-master {--apply}', function (OdooMasterData $master) {
+    $out = $this->option('apply') ? $master->apply() : $master->plan();
+    $this->line(($out['dryRun'] ? 'PLAN (nothing changed)' : 'APPLIED').': '.json_encode($out['counts'], JSON_UNESCAPED_UNICODE));
+    foreach ($out['notes'] as $what => $examples) {
+        $this->line("  {$what}: ".implode(' | ', $examples));
+    }
+
+    return 0;
+})->purpose('Odoo mirror: bring products, customers and suppliers into the OPS master data (--apply to do it)');

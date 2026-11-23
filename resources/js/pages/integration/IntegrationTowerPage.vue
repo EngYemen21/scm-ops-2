@@ -10,12 +10,13 @@ import { fmtAgo, fmtDate, lang, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import { ask } from '@/stores/ui';
 import { useQueryState } from '../dashboard/shared';
+import OdooTab from './OdooTab.vue';
 
 const auth = useAuth();
 const canManage = auth.can('integration.manage');
 const canCreateProduct = canManage && auth.can('product.manage');
 const qs = useQueryState();
-const TABS = ['overview', 'trace', 'inbox', 'deliveries', 'exceptions', 'mappings'];
+const TABS = ['overview', 'trace', 'inbox', 'deliveries', 'exceptions', 'mappings', 'odoo'];
 const tab = computed(() => (TABS.includes(qs.get('tab')) ? qs.get('tab') : 'overview'));
 const setTab = (k) => qs.replace({ tab: k });
 const tabs = computed(() => [
@@ -25,6 +26,7 @@ const tabs = computed(() => [
   { k: 'deliveries', label: { ar: 'الصادر', en: 'Deliveries' } },
   { k: 'exceptions', label: { ar: 'الاستثناءات', en: 'Exceptions' }, badge: ov.data.value?.exceptions ? ((ov.data.value.exceptions.crit || 0) + (ov.data.value.exceptions.warn || 0)) || null : null }, // info items (e.g. unmapped products) are listed, not counted
   { k: 'mappings', label: { ar: 'ربط الأصناف', en: 'Product mapping' } },
+  { k: 'odoo', label: { ar: 'أودو', en: 'Odoo' } }, // the read-only live copy of Odoo: OdooTab.vue and the Odoo*.vue files beside it
 ]);
 const page = computed(() => Number(qs.get('page') || 1));
 const setPage = (p) => qs.setParam('page', p > 1 ? String(p) : null);
@@ -275,6 +277,9 @@ const filter = (k, v) => qs.replace({ tab: tab.value, [k]: v || undefined });
       </template>
     </DataTable>
   </div>
+
+  <!-- ───── Odoo → OPS live mirror (its sub-views and drawers keep their own keys in the query string) ───── -->
+  <OdooTab v-if="tab === 'odoo'" />
 
   <Drawer :open="!!adoptRow" :title="{ ar: 'إنشاء الصنف في العمليات وربطه', en: 'Create the product in OPS and link it' }" :width="460" @close="adoptRow = null">
     <template v-if="adoptRow">
