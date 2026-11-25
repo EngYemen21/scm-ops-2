@@ -46,8 +46,9 @@ return [
     'personal_fields' => '/^(private_|ssnid$|sinid$|identification_id$|passport_id$|visa_|permit_no$|work_permit|has_work_permit|birthday$|place_of_birth$|country_of_birth$|country_id$|gender$|marital$|spouse_|children$|emergency_|bank_account_id$|salary_|wage|study_|km_home_work|distance_home_work|is_non_resident$|additional_note$|notes$)/i',
 
     // Field values that are never copied, whatever the model: binary content, and anything that works as a credential
-    // (portal access tokens on orders and invoices, signup tokens on partners, passwords, keys, an attendance PIN).
-    'never_fields' => '/pass(word|wd)?|secret|token|api_?key|totp|signup_|oauth|private_key|certificate|^pin$/i',
+    // (portal access tokens on orders and invoices, signup tokens on partners, passwords, keys, an attendance PIN, and the
+    // e-invoicing unit's certificate with its secret on a journal: `l10n_sa_*_csid_json`, the certificate request).
+    'never_fields' => '/pass(word|wd)?|secret|token|api_?key|(^|_)key$|totp|signup_|oauth|private_key|certificate|csid(?!_validity)|(^|_)csr($|_)|client_id$|provider_data$|callback_hash$|^pin$/i',
     'skip_types' => ['binary'],
     // One2many id lists are left out: the child model carries the link (many2one), so nothing is lost.
     'skip_one2many' => true,
