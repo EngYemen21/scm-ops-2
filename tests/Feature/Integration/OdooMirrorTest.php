@@ -114,7 +114,7 @@ class OdooMirrorTest extends ApiTestCase
         // what is never copied: credentials, binary content, one2many id lists, values Odoo does not store
         $partner = $models['res.partner'];
         $this->assertSame(['active', 'category_id', 'display_name', 'name', 'phone', 'write_date'], collect($partner->fields)->keys()->sort()->values()->all());
-        $this->assertSame(['image_1920' => 'binary', 'invoice_ids' => 'one2many', 'signup_token' => 'credential'], collect($partner->skipped_fields)->sortKeys()->all());
+        $this->assertSame(['credit' => 'computed', 'image_1920' => 'binary', 'invoice_ids' => 'one2many', 'signup_token' => 'credential'], collect($partner->skipped_fields)->sortKeys()->all());
         $this->assertSame(['access_token' => 'credential'], $models['sale.order']->skipped_fields);
         $this->assertStringNotContainsString('TOKEN', json_encode(OdooRecord::pluck('data')));
 
@@ -134,8 +134,73 @@ class OdooMirrorTest extends ApiTestCase
         $this->assertSame(0, OdooChange::count());
     }
 
+    public function test_the_copy_is_complete_and_peoples_files_are_shown_only_to_who_may_read_them(): void
+    {
+        // the default: the copy is the company's backup, so it holds people's files, the conversation on every document
+        // and the values Odoo keeps per company — and reading people's files needs `odoo.private`
+        $m2o = fn (string $relation) => ['type' => 'many2one', 'relation' => $relation];
+        $this->odoo->model('hr.employee', ['name' => 'char', 'job_title' => 'char', 'pin' => 'char', 'private_street' => 'char', 'identification_id' => 'char'], 'Employee');
+        $this->odoo->model('hr.payslip', ['name' => 'char', 'net_wage' => 'monetary'], 'Pay Slip');
+        $this->odoo->model('mail.message', ['body' => 'html', 'model' => 'char', 'res_id' => 'integer'], 'Message');
+        $this->odoo->model('mail.followers', ['res_id' => 'integer'], 'Followers');
+        $this->odoo->model('product.product', ['name' => 'char', 'standard_price' => ['type' => 'float', 'store' => false, 'company_dependent' => true],
+            'qty_available' => ['type' => 'float', 'store' => false]], 'Product');
+        $this->odoo->create('hr.employee', ['name' => 'سائق أول', 'job_title' => 'سائق', 'pin' => 'PIN-4321', 'private_street' => 'HOME-STREET', 'identification_id' => 'ID-1090']);
+        $this->odoo->create('hr.payslip', ['name' => 'SLIP/001', 'net_wage' => 91234.5]);
+        $this->odoo->create('mail.message', ['body' => '<p>تم الاتفاق على السعر</p>', 'model' => 'sale.order', 'res_id' => 3]);
+        $this->odoo->create('mail.followers', ['res_id' => 3]);
+        $this->odoo->create('product.product', ['name' => 'أرز', 'standard_price' => 42.5, 'qty_available' => 7.0]);
+
+        $this->assertSame(0, $this->sync()['errors']);
+        $models = OdooModel::all()->keyBy('model');
+        $this->assertSame(['active', 'active', 'active', 'active', 'skipped'], array_map(fn ($m) => $models[$m]->status, ['hr.employee', 'hr.payslip', 'mail.message', 'product.product', 'mail.followers']));
+        $this->assertSame(1, OdooRecord::where('model', 'hr.payslip')->count());
+        // a key is never data: the attendance PIN stays out whatever the rules are
+        $employee = OdooRecord::where('model', 'hr.employee')->firstOrFail();
+        $this->assertSame(['HOME-STREET', false], [$employee->data['private_street'], array_key_exists('pin', $employee->data)]);
+        // a value kept per company is data; a value Odoo works out when asked is not, and the copy says why it is absent
+        $product = OdooRecord::where('model', 'product.product')->firstOrFail();
+        $this->assertSame([42.5, false], [(float) $product->data['standard_price'], array_key_exists('qty_available', $product->data)]);
+        $this->assertSame('computed', $models['product.product']->skipped_fields['qty_available']);
+
+        // who may open the tower but not people's files: no payslips, no correspondence, an employee without the personal part
+        $this->expectRejected($this->getAs('gm', '/api/integration/odoo/records?model=hr.payslip'), 'ODOO_PRIVATE', [403]);
+        $this->expectRejected($this->getAs('gm', '/api/integration/odoo/records/hr.payslip/1'), 'ODOO_PRIVATE', [403]);
+        $this->expectRejected($this->getAs('gm', '/api/integration/odoo/records?model=mail.message'), 'ODOO_PRIVATE', [403]);
+        $this->expectRejected($this->getAs('gm', '/api/integration/odoo/changes?model=hr.payslip'), 'ODOO_PRIVATE', [403]);
+        $seen = $this->expectOk($this->getAs('gm', '/api/integration/odoo/records/hr.employee/1'));
+        $this->assertSame(['سائق', false, false], [$seen['data']['job_title'], array_key_exists('private_street', $seen['data']), array_key_exists('identification_id', $seen['data'])]);
+        $panel = $this->expectOk($this->getAs('gm', '/api/integration/odoo/models/hr.payslip'));
+        $this->assertSame([true, false, []], [$panel['restricted'], $panel['readable'], $panel['recentChanges']]);
+        // the feed of everything leaves them out for him, and shows them to who may read them
+        $this->odoo->write('hr.payslip', 1, ['net_wage' => 95000.0]);
+        $this->odoo->write('product.product', 1, ['standard_price' => 44.0]);
+        $this->sync();
+        $this->assertSame(['product.product'], array_column($this->expectOk($this->getAs('gm', '/api/integration/odoo/changes'))['items'], 'model'));
+        $this->assertEqualsCanonicalizing(['hr.payslip', 'product.product'], array_column($this->expectOk($this->getAs('admin', '/api/integration/odoo/changes'))['items'], 'model'));
+        $full = $this->expectOk($this->getAs('admin', '/api/integration/odoo/records/hr.employee/1'));
+        $this->assertSame('HOME-STREET', $full['data']['private_street']);
+        $this->assertSame(1, $this->expectOk($this->getAs('admin', '/api/integration/odoo/records?model=hr.payslip'))['total']);
+
+        // Odoo gained a field (or the rules changed): the records are read again in place, nothing is dropped meanwhile
+        $this->odoo->models['product.product']['fields']['barcode'] = ['type' => 'char', 'string' => 'barcode', 'store' => true];
+        $this->odoo->models['product.product']['rows'][1]['barcode'] = '6281000000017';
+        $sync = $this->app->make(OdooSync::class);
+        $this->assertFalse($sync->reinspect(OdooModel::where('model', 'hr.payslip')->firstOrFail()), 'nothing changed for this model');
+        $this->assertTrue($sync->reinspect(OdooModel::where('model', 'product.product')->firstOrFail()));
+        $this->assertSame(1, OdooRecord::where('model', 'product.product')->count(), 'the copy stays readable while it is read again');
+        $feed = OdooChange::count();
+        $this->sync();
+        $again = OdooRecord::where('model', 'product.product')->firstOrFail();
+        $this->assertSame(['6281000000017', 44.0, 'done'], [$again->data['barcode'], (float) $again->data['standard_price'], OdooModel::where('model', 'product.product')->value('full_state')]);
+        $this->assertSame($feed, OdooChange::count(), 'reading the copy again is not something that happened in Odoo');
+        $this->assertSame([], $this->odoo->writes);
+    }
+
     public function test_peoples_files_are_not_copied_unless_a_person_decides_so(): void
     {
+        // a deployment that must not hold people's files at all
+        config(['odoo.copy_private' => false]);
         $m2o = fn (string $relation) => ['type' => 'many2one', 'relation' => $relation];
         $this->odoo->model('hr.employee', ['name' => 'char', 'active' => 'boolean', 'job_title' => 'char', 'work_email' => 'char', 'department_id' => $m2o('hr.department'),
             'pin' => 'char', 'private_street' => 'char', 'private_phone' => 'char', 'identification_id' => 'char', 'birthday' => 'date', 'marital' => 'selection',
@@ -197,6 +262,13 @@ class OdooMirrorTest extends ApiTestCase
         $this->app->make(OdooSync::class)->recopy($slips);
         $this->sync();
         $this->assertSame(['active', 1], [$slips->refresh()->status, OdooRecord::where('model', 'hr.payslip')->count()]);
+
+        // the owner decides the copy is to be complete after all: what the rule kept out is taken in by itself
+        $this->assertSame('skipped', OdooModel::where('model', 'hr.contract')->value('status'));
+        config(['odoo.copy_private' => true]);
+        $this->assertSame(4, $this->app->make(OdooSync::class)->discover()['admitted']); // contracts, bank accounts, attendance sheets, penalties
+        $this->sync();
+        $this->assertSame(['active', 1], [OdooModel::where('model', 'hr.contract')->value('status'), OdooRecord::where('model', 'hr.contract')->count()]);
         $this->assertSame([], $this->odoo->writes);
     }
 
@@ -370,6 +442,77 @@ class OdooMirrorTest extends ApiTestCase
         $refused = $this->sync();
         $this->assertNotNull($refused['error']);
         $this->assertNotNull(OdooRun::orderByDesc('id')->firstOrFail()->detail['error'] ?? null);
+    }
+
+    public function test_a_credential_is_never_copied_and_what_only_looks_like_one_is(): void
+    {
+        $this->company();
+        // the e-invoicing unit's certificate with its secret sits on a journal; a kiosk key on the website's settings
+        $this->odoo->model('account.journal', ['name' => 'char', 'l10n_sa_production_csid_json' => 'char', 'l10n_sa_compliance_csid_json' => 'char',
+            'l10n_sa_production_csid_validity' => 'datetime', 'l10n_sa_compliance_checks_passed' => 'boolean', 'access_token' => 'char'], 'Journal');
+        $this->odoo->create('account.journal', ['name' => 'فواتير العملاء', 'l10n_sa_production_csid_json' => '{"secret":"CSID-SECRET-1"}', 'l10n_sa_compliance_csid_json' => '{"secret":"CSID-SECRET-2"}',
+            'l10n_sa_production_csid_validity' => '2027-01-31 00:00:00', 'l10n_sa_compliance_checks_passed' => true, 'access_token' => 'PORTAL-TOKEN']);
+        $this->odoo->model('website', ['name' => 'char', 'google_analytics_key' => 'char', 'attendance_kiosk_key' => 'char', 'firebase_project_id' => 'char'], 'Website');
+        $this->odoo->create('website', ['name' => 'الموقع', 'google_analytics_key' => 'GA-KEY-9', 'attendance_kiosk_key' => 'KIOSK-KEY-9', 'firebase_project_id' => 'project-1']);
+        // a passport number and an education level are data of a person, not keys: copied, and personal
+        $this->odoo->model('hr.employee', ['name' => 'char', 'passport_id' => 'char', 'certificate' => 'selection', 'pin' => 'char'], 'Employee');
+        $this->odoo->create('hr.employee', ['name' => 'سائق أول', 'passport_id' => 'PASSPORT-77', 'certificate' => 'bachelor', 'pin' => 'PIN-4321']);
+        // the invitation key of a discussion channel opens the channel: left out by model, the name alone does not say it
+        $this->odoo->model('discuss.channel', ['name' => 'char', 'uuid' => 'char'], 'Channel');
+        $this->odoo->create('discuss.channel', ['name' => 'عام', 'uuid' => 'INVITE-UUID-1']);
+        // an identity number in a model that is not a person's file: copied, shown only with `odoo.private`
+        $this->odoo->model('portal.onboarding.application', ['name' => 'char', 'owner_national_id' => 'char', 'password_hash' => 'char', 'vat_number' => 'char'], 'Onboarding');
+        $this->odoo->create('portal.onboarding.application', ['name' => 'مطعم الواحة', 'owner_national_id' => 'NATIONAL-ID-5', 'password_hash' => 'HASH-OF-A-PASSWORD', 'vat_number' => '300000000000003']);
+
+        $this->assertSame(0, $this->sync()['errors']);
+        $models = OdooModel::all()->keyBy('model');
+        $this->assertSame(['access_token' => 'credential', 'l10n_sa_compliance_csid_json' => 'credential', 'l10n_sa_production_csid_json' => 'credential'],
+            collect($models['account.journal']->skipped_fields)->sortKeys()->all());
+        $journal = OdooRecord::where('model', 'account.journal')->firstOrFail()->data;
+        $this->assertSame(['2027-01-31 00:00:00', true], [$journal['l10n_sa_production_csid_validity'], $journal['l10n_sa_compliance_checks_passed']], 'the validity date and a "…passed" flag are not keys');
+        $this->assertSame(['attendance_kiosk_key' => 'credential', 'google_analytics_key' => 'credential'], collect($models['website']->skipped_fields)->sortKeys()->all());
+        $this->assertSame('project-1', OdooRecord::where('model', 'website')->firstOrFail()->data['firebase_project_id']);
+        $this->assertSame(['pin' => 'credential'], $models['hr.employee']->skipped_fields);
+        $employee = OdooRecord::where('model', 'hr.employee')->firstOrFail()->data;
+        $this->assertSame(['PASSPORT-77', 'bachelor'], [$employee['passport_id'], $employee['certificate']]);
+        $this->assertSame(['uuid' => 'credential'], $models['discuss.channel']->skipped_fields);
+        $this->assertSame(['password_hash' => 'credential'], $models['portal.onboarding.application']->skipped_fields);
+        $copy = json_encode(OdooRecord::pluck('data'), JSON_UNESCAPED_UNICODE);
+        foreach (['CSID-SECRET-1', 'CSID-SECRET-2', 'PORTAL-TOKEN', 'GA-KEY-9', 'KIOSK-KEY-9', 'PIN-4321', 'INVITE-UUID-1', 'HASH-OF-A-PASSWORD'] as $secret) {
+            $this->assertStringNotContainsString($secret, $copy);
+        }
+
+        // who may open the tower but not people's files sees the application without the owner's identity number,
+        // and the employee without the passport and the education level
+        $seen = $this->expectOk($this->getAs('gm', '/api/integration/odoo/records/portal.onboarding.application/1'))['data'];
+        $this->assertSame(['مطعم الواحة', '300000000000003', false], [$seen['name'], $seen['vat_number'], array_key_exists('owner_national_id', $seen)]);
+        $staff = $this->expectOk($this->getAs('gm', '/api/integration/odoo/records/hr.employee/1'))['data'];
+        $this->assertSame([false, false], [array_key_exists('passport_id', $staff), array_key_exists('certificate', $staff)]);
+        $this->assertSame('NATIONAL-ID-5', $this->expectOk($this->getAs('admin', '/api/integration/odoo/records/portal.onboarding.application/1'))['data']['owner_national_id']);
+        $this->assertSame([], $this->odoo->writes);
+    }
+
+    public function test_a_model_odoo_refused_enters_the_copy_once_the_access_is_granted(): void
+    {
+        $this->company();
+        $this->odoo->model('b2b.credit.request', ['name' => 'char'], 'Credit Request');
+        $this->odoo->create('b2b.credit.request', ['name' => 'CR-1']);
+        $this->odoo->models['b2b.credit.request']['denied'] = true;
+        $this->sync();
+        $state = fn () => OdooModel::where('model', 'b2b.credit.request')->firstOrFail();
+        $this->assertSame(['skipped', OdooSync::NO_ACCESS], [$state()->status, $state()->reason]);
+
+        // every discovery asks Odoo again — still refused: nothing changes
+        $sync = $this->app->make(OdooSync::class);
+        $this->assertSame(0, $sync->discover()['granted']);
+        $this->assertSame('skipped', $state()->status);
+
+        // an administrator of Odoo gives the connection user the access: the model enters the copy by itself
+        $this->odoo->models['b2b.credit.request']['denied'] = false;
+        $this->assertSame(1, $sync->discover()['granted']);
+        $this->sync();
+        $this->assertSame(['active', 'done', 1, null], [$state()->status, $state()->full_state, OdooRecord::where('model', 'b2b.credit.request')->count(), $state()->reason]);
+        $this->assertSame([], $this->odoo->writes);
     }
 
     public function test_odoo_19_is_read_through_json2(): void

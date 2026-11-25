@@ -56,6 +56,8 @@ class SettingsService
         'transfers.requireCarrier' => ['value' => false, 'group' => 'transfers', 'description' => 'A transfer cannot ship without a vehicle and driver (a trip) or a named carrier'],
         'procurement.rejectedStaysOpen' => ['value' => true, 'group' => 'procurement', 'description' => 'Quantity rejected at receiving stays open on the purchase order for redelivery (off = it counts as fulfilled)'],
         'procurement.prPriceTolerancePct' => ['value' => 10, 'group' => 'procurement', 'description' => 'A purchase order price above the requisition estimate by more than this percentage needs a written reason and finance approval'],
+        // ── the sections built for what Odoo has (docs/odoo/COVERAGE.ar.md)
+        'preq.allowSelfApproval' => ['value' => false, 'group' => 'catalogue', 'description' => 'Allow the person who raised a new-product request to approve it (segregation of duties off)'],
     ];
 
     /** Arabic text of each policy for the settings page (`descriptionAr`); `description` stays the English one. */
@@ -104,6 +106,7 @@ class SettingsService
         'transfers.requireCarrier' => 'لا يُشحن التحويل بلا مركبة وسائق (رحلة) أو ناقل مسمّى',
         'procurement.rejectedStaysOpen' => 'الكمية المرفوضة عند الاستلام تبقى مفتوحة على أمر الشراء لإعادة توريدها (عند التعطيل: تُحتسب منفَّذة)',
         'procurement.prPriceTolerancePct' => 'سعر أمر الشراء الذي يزيد على تقدير طلب الشراء بأكثر من هذه النسبة يتطلب سببًا مكتوبًا واعتماد المالية',
+        'preq.allowSelfApproval' => 'السماح لمن رفع طلب صنف جديد باعتماده بنفسه (يُعطّل فصل المهام)',
     ];
 
     /** @var array<string, mixed> per-process cache; cleared on set() and by flush() (tests). */

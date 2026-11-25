@@ -17,6 +17,7 @@ export const SETTING_GROUP_LABELS = {
   procurement: { ar: 'مصفوفة الاعتماد والمشتريات', en: 'Approval matrix & procurement' }, finance: { ar: 'المالية والمحاسبة', en: 'Finance & accounting' }, receiving: { ar: 'الاستلام', en: 'Receiving' }, inventory: { ar: 'المخزون والصلاحية', en: 'Inventory & expiry' },
   sales: { ar: 'المبيعات', en: 'Sales' }, delivery: { ar: 'التوصيل', en: 'Delivery' }, exceptions: { ar: 'قواعد SLA', en: 'SLA rules' }, fleet: { ar: 'الأسطول', en: 'Fleet' }, loading: { ar: 'التحميل', en: 'Loading' }, general: { ar: 'عام', en: 'General' },
   fulfillment: { ar: 'التجهيز والتعبئة', en: 'Picking & packing' }, returns: { ar: 'المرتجعات', en: 'Returns' }, transfers: { ar: 'التحويلات', en: 'Transfers' },
+  catalogue: { ar: 'كتالوج الأصناف', en: 'Product catalogue' },
 };
 
 /** Permission groups of the matrix: [prefix, label]. */
@@ -25,6 +26,10 @@ export const PERM_GROUPS = [
   ['shipment', { ar: 'الشحنات الواردة', en: 'Inbound' }], ['grn', { ar: 'GRN', en: 'GRN' }], ['putaway', { ar: 'Putaway', en: 'Putaway' }], ['inventory', { ar: 'المخزون', en: 'Inventory' }], ['sales', { ar: 'المبيعات', en: 'Sales' }], ['so', { ar: 'أوامر البيع', en: 'Sales orders' }], ['consol', { ar: 'التجميع', en: 'Consolidation' }], ['customer', { ar: 'العملاء', en: 'Customers' }], ['discount', { ar: 'الخصومات', en: 'Discounts' }],
   ['pick', { ar: 'التجهيز', en: 'Picking' }], ['pack', { ar: 'التعبئة', en: 'Packing' }], ['load', { ar: 'التحميل', en: 'Loading' }], ['trip', { ar: 'الرحلات', en: 'Trips' }], ['delivery', { ar: 'التوصيل', en: 'Delivery' }], ['return', { ar: 'المرتجعات', en: 'Returns' }],
   ['vehicle', { ar: 'المركبات', en: 'Vehicles' }], ['driver', { ar: 'السائقون', en: 'Drivers' }], ['maintenance', { ar: 'الصيانة', en: 'Maintenance' }], ['fuel', { ar: 'الوقود', en: 'Fuel' }], ['alert', { ar: 'التنبيهات', en: 'Alerts' }], ['opreq', { ar: 'طلبات تشغيلية', en: 'Ops requests' }],
+  ['odoo', { ar: 'نسخة أودو', en: 'Odoo copy' }], ['approval', { ar: 'الاعتمادات', en: 'Approvals' }], ['crm', { ar: 'الفرص', en: 'CRM' }], ['hr', { ar: 'الموظفون', en: 'People' }], ['payroll', { ar: 'الرواتب', en: 'Payroll' }], ['leave', { ar: 'الإجازات', en: 'Time off' }], ['attendance', { ar: 'الحضور', en: 'Attendance' }],
+  ['pricelist', { ar: 'قوائم الأسعار', en: 'Price lists' }], ['supplierprice', { ar: 'أسعار الموردين', en: 'Supplier prices' }], ['commission', { ar: 'العمولات', en: 'Commissions' }], ['portal', { ar: 'بوابة العملاء', en: 'Customer portal' }], ['preq', { ar: 'طلبات الأصناف', en: 'Product requests' }], ['pos', { ar: 'نقطة البيع', en: 'Point of sale' }],
+  ['ticket', { ar: 'تذاكر الدعم', en: 'Helpdesk' }], ['project', { ar: 'المشاريع', en: 'Projects' }], ['doc', { ar: 'المستندات', en: 'Documents' }], ['forecast', { ar: 'توقع الطلب', en: 'Demand forecast' }], ['purchaseplan', { ar: 'خطط الشراء', en: 'Purchase plans' }], ['credit', { ar: 'حسابات الائتمان', en: 'Credit accounts' }],
+  ['bankstatement', { ar: 'كشوف البنك', en: 'Bank statements' }], ['vatreturn', { ar: 'الإقرار الضريبي', en: 'VAT return' }], ['einvoice', { ar: 'الفوترة الإلكترونية', en: 'E-invoicing' }], ['brandowner', { ar: 'مالكو العلامات', en: 'Brand owners' }], ['expiryalert', { ar: 'تنبيهات الصلاحية', en: 'Expiry alerts' }],
   ['exception', { ar: 'الاستثناءات', en: 'Exceptions' }], ['product', { ar: 'المنتجات', en: 'Products' }], ['category', { ar: 'الفئات', en: 'Categories' }], ['warehouse', { ar: 'المستودعات', en: 'Warehouses' }], ['user', { ar: 'المستخدمون', en: 'Users' }], ['settings', { ar: 'الإعدادات', en: 'Settings' }], ['audit', { ar: 'التدقيق', en: 'Audit' }], ['report', { ar: 'التقارير', en: 'Reports' }],
 ];
 

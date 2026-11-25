@@ -30,7 +30,7 @@ const OUT = process.env.OUT || path.join(require('os').tmpdir(), `ui-sweep-${USE
 const ONLY = (process.env.ONLY || '').split(',').filter(Boolean);
 const FORMS = process.env.FORMS !== '0' && !MOBILE;
 const ROWS = process.env.ROWS !== '0' && !MOBILE;
-const NAV = (process.env.NAV || 'dash,tower,sales,consol,products,whs,inv,ledger,batches,receiving,procurement,finance,picking,dispatch,trips,fleet,ttower,returns,counts,reports,activity,settings,wreceive,driver,itower').split(',');
+const NAV = (process.env.NAV || 'dash,tower,sales,consol,products,whs,inv,ledger,batches,receiving,procurement,finance,picking,dispatch,trips,fleet,ttower,returns,counts,reports,activity,settings,wreceive,driver,itower,approvals,crm,hr,odoo,pricing,commissions,portal,preq,workspace,payroll,pos,planning,credit,banking,tax,insights').split(',');
 const CHROME = process.env.CHROME || [
   'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium',

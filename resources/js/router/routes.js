@@ -1,7 +1,7 @@
 // Route metadata: sidebar pages (`/<key>`, guarded by `page.<key>`) and entity deep links (`/po/:number` …).
 import { NAV_LABELS } from '../shared';
 
-export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'finance', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver', 'itower'];
+export const NAV_KEYS = ['dash', 'tower', 'sales', 'consol', 'products', 'whs', 'inv', 'ledger', 'batches', 'receiving', 'procurement', 'finance', 'picking', 'dispatch', 'trips', 'fleet', 'ttower', 'returns', 'counts', 'reports', 'activity', 'settings', 'wreceive', 'driver', 'approvals', 'crm', 'hr', 'odoo', 'pricing', 'commissions', 'portal', 'preq', 'workspace', 'payroll', 'pos', 'planning', 'credit', 'banking', 'tax', 'insights', 'itower'];
 
 /** Pages guarded by something other than `page.<key>` (the integration tower uses the integration layer's permission). */
 const PAGE_PERMISSION = { itower: 'integration.view' };
@@ -19,6 +19,10 @@ export const PAGE_FILES = {
   returns: 'returns/ReturnsPage.vue', rtn: 'returns/ReturnPage.vue', exc: 'dashboard/ExceptionPage.vue',
   itower: 'integration/IntegrationTowerPage.vue',
   finance: 'finance/FinancePage.vue', jv: 'finance/JournalPage.vue',
+  // sections Odoo had and OPS lacked (docs/odoo/COVERAGE.ar.md), and the archive of everything Odoo holds
+  approvals: 'approvals/ApprovalsPage.vue', crm: 'crm/CrmPage.vue', hr: 'hr/HrPage.vue', odoo: 'odoo/OdooArchivePage.vue',
+  pricing: 'pricing/PricingPage.vue', commissions: 'commissions/CommissionsPage.vue', portal: 'portal/PortalPage.vue', preq: 'preq/ProductRequestsPage.vue', workspace: 'workspace/WorkspacePage.vue', payroll: 'payroll/PayrollPage.vue',
+  pos: 'pos/PosPage.vue', planning: 'planning/PlanningPage.vue', credit: 'credit/CreditPage.vue', banking: 'banking/BankingPage.vue', tax: 'tax/TaxPage.vue', insights: 'insights/InsightsPage.vue',
 };
 
 export const NAV_ROUTES = NAV_KEYS.map((key) => ({ key, path: `/${key}`, title: NAV_LABELS[key] || { ar: key, en: key }, permission: PAGE_PERMISSION[key] || `page.${key}`, nav: true }));
@@ -64,6 +68,23 @@ export function entityPath(type, number) {
   if (k === 'expense') return `/finance?tab=expenses&expense=${encodeURIComponent(number)}`;
   if (k === 'fixedasset' || k === 'asset') return `/finance?tab=assets&asset=${encodeURIComponent(number)}`;
   if (k === 'supplierinvoice') return `/procurement?tab=inv&invoice=${encodeURIComponent(number)}`;
+  // sections that came with the Odoo work (docs/odoo/WAVE2.md, WAVE3.md): each opens its record in a drawer of its page
+  if (k === 'crmlead' || k === 'opp') return `/crm?lead=${encodeURIComponent(number)}`;
+  if (k === 'approvalrequest') return `/approvals?request=${encodeURIComponent(number)}`;
+  if (k === 'employee') return `/hr?emp=${encodeURIComponent(number)}`;
+  if (k === 'expenseclaim') return `/hr?tab=claims&claim=${encodeURIComponent(number)}`;
+  if (k === 'productrequest') return `/preq?open=${encodeURIComponent(number)}`;
+  if (k === 'commissionstatement') return `/commissions?statement=${encodeURIComponent(number)}`;
+  if (k === 'commissionplan') return `/commissions?tab=plans&plan=${encodeURIComponent(number)}`;
+  if (k === 'wsticket') return `/workspace?tab=tickets&ticket=${encodeURIComponent(number)}`;
+  if (k === 'wstask') return `/workspace?tab=tasks&task=${encodeURIComponent(number)}`;
+  if (k === 'wsdocument') return `/workspace?tab=docs&doc=${encodeURIComponent(number)}`;
+  if (k === 'creditrequest') return `/credit?req=${encodeURIComponent(number)}`;
+  if (k === 'payrollrun') return `/payroll?tab=payroll&run=${encodeURIComponent(number)}`;
+  if (k === 'posorder') return `/pos?view=orders&order=${encodeURIComponent(number)}`;
+  if (k === 'planningrun') return `/planning?run=${encodeURIComponent(number)}`;
+  if (k === 'purchaseplan') return `/planning?tab=plans&plan=${encodeURIComponent(number)}`;
+  if (k === 'bankstatement') return `/banking?tab=statements&st=${encodeURIComponent(number)}`;
   const page = { customer: '/sales', vehicle: '/fleet', driver: '/fleet', bin: '/whs', warehouse: '/whs', batch: '/batches', count: '/counts', pr: '/procurement', rfq: '/procurement', quotation: '/sales', qt: '/sales', oc: '/consol', consolidation: '/consol', maintenance: '/fleet', alert: '/ttower' };
   return page[k] ? `${page[k]}?q=${encodeURIComponent(number)}` : null;
 }

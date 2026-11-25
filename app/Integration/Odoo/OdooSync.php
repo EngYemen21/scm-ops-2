@@ -45,9 +45,27 @@ class OdooSync
 
     public const BY_PERSON = 'included by a person';
 
+    /** Odoo refused the connection user this model's records. Asked again at every discovery: access can be granted. */
+    public const NO_ACCESS = 'no read access for the Odoo user';
+
+    /** Why the copy put a model on hold by itself (see guardHolds()). */
+    public const GUARD = 'held: many records disappeared from Odoo at once — resume to confirm they are deleted';
+
+    /** The part that indexes the copy for the archive screens; optional — the mirror works without it. */
+    private const INDEXER = 'App\\Integration\\Odoo\\Archive\\ArchiveIndexer';
+
+    /**
+     * "Every record": a condition on the id that is always true. Some Odoo models narrow a question that does not
+     * mention the id (attachments hide the ones that belong to a field); with it every question means the same thing.
+     */
+    private const ALL = [['id', '>', 0]];
+
     private float $deadline = 0.0;
 
     private ?OdooRun $run = null;
+
+    /** @var array<string, int> per model, the highest id Odoo shows — asked once per run for the models walked by id ranges */
+    private array $top = [];
 
     /** @var array{models:int, pulled:int, created:int, updated:int, deleted:int, errors:int, detail:array<string,array>} */
     private array $stats = ['models' => 0, 'pulled' => 0, 'created' => 0, 'updated' => 0, 'deleted' => 0, 'errors' => 0, 'detail' => []];
@@ -74,6 +92,7 @@ class OdooSync
         $calls0 = $this->odoo->calls; // the connector may outlive a run (a looping command)
         $this->deadline = $t0 + max(3, $seconds);
         $this->stats = ['models' => 0, 'pulled' => 0, 'created' => 0, 'updated' => 0, 'deleted' => 0, 'errors' => 0, 'detail' => []];
+        $this->top = [];
         $this->run = OdooRun::create(['trigger' => $trigger, 'started_at' => now()]);
         $fatal = null;
         try {
@@ -81,6 +100,9 @@ class OdooSync
                 $this->discover();
             }
             $this->pass($only);
+            // what this run found reaches the OPS sections before it ends: a few seconds of their own, so a run that
+            // spent all its time reading Odoo does not leave them a whole run behind
+            $this->deadline = max($this->deadline, microtime(true) + max(0.0, (float) config('odoo.project_seconds', 6)));
             $this->project();
             $this->prune();
         } catch (OdooError $e) {
@@ -174,7 +196,7 @@ class OdooSync
             $this->stats['errors']++;
             $this->stats['detail'][$m->model]['error'] = $e->getMessage();
             if ($e->kind === 'access' || ($e->kind === 'missing' && $m->full_state !== 'done')) {
-                $m->update(['status' => 'skipped', 'reason' => $e->kind === 'access' ? 'no read access for the Odoo user' : 'not available in this Odoo', 'last_error' => $e->getMessage()]);
+                $m->update(['status' => 'skipped', 'reason' => $e->kind === 'access' ? self::NO_ACCESS : 'not available in this Odoo', 'last_error' => $e->getMessage()]);
             } else {
                 $n = $m->consecutive_errors + 1;
                 $steps = (array) config('odoo.backoff_minutes');
@@ -205,7 +227,7 @@ class OdooSync
             if ($model === '' || isset($known[$model]) || ! preg_match('/^[a-z0-9_.]+$/', $model)) {
                 continue;
             }
-            $why = self::excluded($model) ? self::TECHNICAL : (self::isPrivate($model) ? self::PRIVATE : null);
+            $why = self::excluded($model) ? self::TECHNICAL : (self::heldBack($model) ? self::PRIVATE : null);
             OdooModel::create([
                 'model' => $model, 'label' => mb_substr((string) ($r['name'] ?? ''), 0, 190) ?: null, 'status' => $why ? 'skipped' : 'new',
                 'reason' => $why, 'page_size' => (int) config('odoo.page_size', 500),
@@ -213,9 +235,37 @@ class OdooSync
             ]);
             $new++;
         }
+        // the rules changed since a model was registered (a deployment now copies people's files, or a model moved into
+        // `content`): what the rules no longer keep out is taken in — inspected and copied on the next runs
+        $admitted = 0;
+        foreach (OdooModel::where('status', 'skipped')->whereIn('reason', [self::TECHNICAL, self::PRIVATE])->get() as $m) {
+            if (! self::excluded($m->model) && ! self::heldBack($m->model)) {
+                $m->update(['status' => 'new', 'reason' => null, 'full_state' => 'pending', 'full_cursor_id' => 0]);
+                $admitted++;
+            }
+        }
+        // …and the models Odoo refused the connection user are asked for again (one small question each): the day an
+        // administrator of Odoo grants the access, they enter the copy by themselves
+        $granted = 0;
+        foreach (OdooModel::where('status', 'skipped')->where('reason', self::NO_ACCESS)->orderBy('model')->get() as $m) {
+            if (self::excluded($m->model) || self::heldBack($m->model)) {
+                continue;
+            }
+            try {
+                $this->odoo->search($m->model, self::ALL, 1);
+            } catch (OdooError $e) {
+                if ($e->kind === 'auth') {
+                    throw $e;
+                }
+
+                continue; // still refused (or Odoo did not answer): asked again at the next discovery
+            }
+            $m->update(['status' => 'new', 'reason' => null, 'last_error' => null, 'consecutive_errors' => 0, 'next_attempt_at' => null, 'full_state' => 'pending', 'full_cursor_id' => 0]);
+            $granted++;
+        }
         Cache::put('odoo:discovered', now()->toJSON(), now()->addHours((int) config('odoo.rediscover_hours', 24)));
 
-        return ['listed' => count($rows), 'new' => $new, 'registered' => OdooModel::count()];
+        return ['listed' => count($rows), 'new' => $new, 'admitted' => $admitted, 'granted' => $granted, 'registered' => OdooModel::count()];
     }
 
     /** A pattern ends with "." or "_" (prefix), starts with "." (suffix), or is a model name (the model and what hangs under it). */
@@ -234,17 +284,60 @@ class OdooSync
         return false;
     }
 
-    /** A technical model: Odoo's own machinery, or a model this deployment leaves out (ODOO_EXCLUDE). */
+    /**
+     * A technical model: Odoo's own machinery, or a model this deployment leaves out (ODOO_EXCLUDE). The models of
+     * `content` are never technical: they carry the history, the attachments list and the dictionary of the copy.
+     */
     public static function excluded(string $model): bool
     {
-        return ! self::matches((array) config('odoo.include'), $model) && self::matches((array) config('odoo.exclude'), $model);
+        return ! self::matches((array) config('odoo.include'), $model) && ! in_array($model, (array) config('odoo.content'), true)
+            && self::matches((array) config('odoo.exclude'), $model);
     }
 
-    /** A model that holds people's files (pay, contracts, leave, bank accounts): not copied unless a person decides so. */
+    /** A model that holds people's files (pay, contracts, leave, bank accounts): shown only to holders of `odoo.private`. */
     public static function isPrivate(string $model): bool
     {
-        return ! in_array($model, (array) config('odoo.private_allow'), true) && ! self::matches((array) config('odoo.include'), $model)
-            && self::matches((array) config('odoo.private'), $model);
+        return ! in_array($model, (array) config('odoo.private_allow'), true) && self::matches((array) config('odoo.private'), $model);
+    }
+
+    /** People's files, or what people wrote to each other: reading its records needs `odoo.private`. */
+    public static function isRestricted(string $model): bool
+    {
+        return self::isPrivate($model) || in_array($model, (array) config('odoo.restricted'), true);
+    }
+
+    /** Where a deployment does not copy people's files (ODOO_COPY_PRIVATE=false): registered, not copied, until a person decides. */
+    public static function heldBack(string $model): bool
+    {
+        return ! config('odoo.copy_private') && self::isPrivate($model) && ! self::matches((array) config('odoo.include'), $model);
+    }
+
+    /** The personal part of a record of the staff directory (`personal_fields`), by field name. Null where there is none. */
+    public static function personalPattern(string $model): ?string
+    {
+        return self::matches((array) config('odoo.private'), $model) ? (string) config('odoo.personal_fields') : null;
+    }
+
+    /**
+     * The field policy changed (config) or Odoo gained fields: reads the model's fields again and, when the set of
+     * copied fields is not what the copy was made with, reads every record again — the copy stays in place and
+     * readable meanwhile. @return bool the records are being read again
+     */
+    public function reinspect(OdooModel $m): bool
+    {
+        if ($m->status !== 'active' || $m->full_state !== 'done') {
+            return false;
+        }
+        $was = (array) $m->fields;
+        $this->inspect($m);
+        $m->refresh();
+        if ($m->status !== 'active' || array_keys((array) $m->fields) == array_keys($was)) {
+            return false;
+        }
+        // the first-copy walk upserts: values that are new are added, the rest is recognised as unchanged
+        $m->update(['full_state' => 'pending', 'full_cursor_id' => 0, 'full_started_at' => null, 'full_finished_at' => null]);
+
+        return true;
     }
 
     /**
@@ -270,32 +363,41 @@ class OdooSync
     /** Reads the model's fields and size and decides what is copied. `new` → `active` or `skipped`. */
     public function inspect(OdooModel $m): void
     {
-        // registered before the rule existed, or never decided by a person: people's files stay out
-        if ($m->reason !== self::BY_PERSON && self::isPrivate($m->model)) {
+        // a deployment that does not copy people's files, and no person decided otherwise for this model: it stays out
+        if ($m->reason !== self::BY_PERSON && self::heldBack($m->model)) {
             $m->update(['status' => 'skipped', 'reason' => self::PRIVATE]);
 
             return;
         }
         $defs = $this->odoo->fieldsGet($m->model);
         $never = (string) config('odoo.never_fields');
-        $personal = self::matches((array) config('odoo.private'), $m->model) ? (string) config('odoo.personal_fields') : null;
+        $personal = config('odoo.copy_private') || $m->reason === self::BY_PERSON ? null : self::personalPattern($m->model);
         $skipTypes = (array) config('odoo.skip_types');
+        $skipNames = (array) (config('odoo.skip_fields')[$m->model] ?? []);
+        $neverNames = (array) (config('odoo.never_model_fields')[$m->model] ?? []);
+        $computedAllow = (array) (config('odoo.computed_allow')[$m->model] ?? []);
         $fields = $skipped = [];
         foreach ($defs as $name => $def) {
             $type = (string) ($def['type'] ?? '');
             if ($name === 'id') {
                 continue;
             }
-            if (preg_match($never, $name)) {
+            if (preg_match($never, $name) || in_array($name, $neverNames, true)) {
                 $skipped[$name] = 'credential';
-            } elseif ($personal && $m->reason !== self::BY_PERSON && preg_match($personal, $name)) {
+            } elseif ($personal && preg_match($personal, $name)) {
                 $skipped[$name] = 'personal';
             } elseif (in_array($type, $skipTypes, true)) {
                 $skipped[$name] = $type;
+            } elseif (in_array($name, $skipNames, true)) {
+                $skipped[$name] = 'derived';
             } elseif ($type === 'one2many' && config('odoo.skip_one2many')) {
                 $skipped[$name] = 'one2many';
-            } elseif (($def['store'] ?? true) || $name === 'display_name') {
+            } elseif (($def['store'] ?? true) || $name === 'display_name' || ! empty($def['company_dependent']) || in_array($name, $computedAllow, true)) {
+                // a value Odoo keeps per company (a product's cost, a partner's accounts and terms) is not "stored" on
+                // the record, yet it is data people entered: it is copied as the Odoo user's company sees it
                 $fields[$name] = $type;
+            } else {
+                $skipped[$name] = 'computed'; // worked out by Odoo from other values each time it is asked: not data of its own
             }
         }
         ksort($fields);
@@ -307,7 +409,7 @@ class OdooSync
             return;
         }
         // a person's decision to take the model in is kept: a later re-copy must not undo it
-        $m->update($update + ['status' => 'active', 'reason' => $m->reason === self::BY_PERSON ? self::BY_PERSON : null, 'remote_count' => $this->odoo->searchCount($m->model)]);
+        $m->update($update + ['status' => 'active', 'reason' => $m->reason === self::BY_PERSON ? self::BY_PERSON : null, 'remote_count' => $this->odoo->searchCount($m->model, self::ALL)]);
     }
 
     // ───────────── 1. first copy ─────────────
@@ -316,12 +418,29 @@ class OdooSync
     private function firstCopy(OdooModel $m, ?float $until = null): void
     {
         if ($m->full_state === 'pending') {
-            $top = $this->odoo->searchRead($m->model, [], ['write_date'], 1, 'write_date desc, id desc');
+            $top = $this->odoo->searchRead($m->model, self::ALL, ['write_date'], 1, 'write_date desc, id desc');
             $m->update(['full_state' => 'running', 'full_cursor_id' => 0, 'full_started_at' => now(), 'full_high_water' => $top[0]['write_date'] ?? null]);
         }
         $detail = &$this->stats['detail'][$m->model];
         $detail['firstCopy'] = ($detail['firstCopy'] ?? 0);
         do {
+            if ($m->ranged) {
+                // Odoo trims this model's answers AFTER limiting them (it drops what the user may not read), so a short
+                // page says nothing: the ids are walked in fixed ranges up to the highest id Odoo shows
+                $top = $this->top[$m->model] ??= $this->topId($m);
+                $more = $m->full_cursor_id < $top;
+                if ($more) {
+                    $span = max(50, $m->page_size);
+                    $page = $this->read($m, [['id', '>', $m->full_cursor_id], ['id', '<=', $m->full_cursor_id + $span]], $span);
+                    if ($page) {
+                        $this->apply($m, $page, feed: false);
+                        $detail['firstCopy'] += count($page);
+                    }
+                    $m->update(['full_cursor_id' => $m->full_cursor_id + $span]);
+                }
+
+                continue;
+            }
             $asked = $m->page_size; // read() may widen the next page
             $page = $this->read($m, [['id', '>', $m->full_cursor_id]]);
             if ($page) {
@@ -330,6 +449,11 @@ class OdooSync
                 $m->update(['full_cursor_id' => (int) end($page)['id']]);
             }
             $more = count($page) >= $asked;
+            if (! $more && $this->odoo->search($m->model, [['id', '>', $m->full_cursor_id]], 50, 'id desc')) {
+                // a short page and still records beyond it: this model is one Odoo trims after limiting — walk it by ranges
+                $m->update(['ranged' => true]);
+                $more = true;
+            }
         } while ($more && $this->timeLeft() > 0 && ($until === null || microtime(true) < $until));
         if (! $more) {
             // an empty model has no high-water mark: its cursor starts "now", one overlap back covers the walk itself
@@ -346,7 +470,7 @@ class OdooSync
             $deep = ! $m->last_deep_at || $m->last_deep_at->lte(now()->subMinutes((int) config('odoo.deep_every_minutes', 15)));
             $overlap = (int) config($deep ? 'odoo.deep_overlap_seconds' : 'odoo.overlap_seconds');
             $since = $m->cursor_write_date ? $this->shift($m->cursor_write_date, -$overlap) : null;
-            $top = $this->odoo->searchRead($m->model, $since ? [['write_date', '>=', $since]] : [], ['write_date'], 1, 'write_date desc, id desc');
+            $top = $this->odoo->searchRead($m->model, $since ? [['write_date', '>=', $since], ...self::ALL] : self::ALL, ['write_date'], 1, 'write_date desc, id desc');
             $high = $top[0]['write_date'] ?? null;
             // nothing newer than the cursor: only a deep pass re-reads (it is the one that catches late commits)
             if ($high === null || (! $deep && $m->cursor_write_date && $high <= $m->cursor_write_date)) {
@@ -369,7 +493,8 @@ class OdooSync
                 $detail['changed'] = ($detail['changed'] ?? 0) + $found;
                 $m->update(['window_cursor_id' => (int) end($page)['id']]);
             }
-            $more = count($page) >= $asked;
+            // a model Odoo trims after limiting: only an empty page is the end
+            $more = $m->ranged ? count($page) > 0 : count($page) >= $asked;
         } while ($more && $this->timeLeft() > 0);
         if (! $more) {
             $m->update(['cursor_write_date' => max((string) $m->cursor_write_date, (string) $m->window_high), 'last_synced_at' => now(),
@@ -385,15 +510,26 @@ class OdooSync
         $detail = &$this->stats['detail'][$m->model];
         do {
             $from = $m->deletion_cursor_id;
-            $remote = $this->odoo->search($m->model, [['id', '>', $from]], $size);
-            $more = count($remote) >= $size;
-            $to = $more ? (int) end($remote) : null;
+            if ($m->ranged) {
+                // fixed id ranges, for the same reason as in the first copy: a short answer is not the end of the model
+                $top = $this->top[$m->model] ??= max($this->topId($m), (int) OdooRecord::where('model', $m->model)->max('odoo_id'));
+                $to = $from + $size;
+                $remote = $this->odoo->search($m->model, [['id', '>', $from], ['id', '<=', $to]], $size);
+                $more = $to < $top;
+            } else {
+                $remote = $this->odoo->search($m->model, [['id', '>', $from]], $size);
+                $more = count($remote) >= $size;
+                $to = $more ? (int) end($remote) : null;
+            }
             $local = OdooRecord::where('model', $m->model)->where('odoo_id', '>', $from)->when($to, fn ($q) => $q->where('odoo_id', '<=', $to))
                 ->get(['odoo_id', 'deleted_at', 'display_name'])->keyBy('odoo_id');
             $remoteSet = array_flip($remote);
 
             // gone from Odoo
             $gone = $local->filter(fn ($r) => $r->deleted_at === null && ! isset($remoteSet[$r->odoo_id]));
+            if ($gone->isNotEmpty() && $this->guardHolds($m, $gone->count(), $local->filter(fn ($r) => $r->deleted_at === null)->count())) {
+                return;
+            }
             if ($gone->isNotEmpty()) {
                 $now = now();
                 foreach ($gone->chunk(500) as $chunk) {
@@ -404,6 +540,7 @@ class OdooSync
                 $this->stats['deleted'] += $gone->count();
                 $detail['deleted'] = ($detail['deleted'] ?? 0) + $gone->count();
                 $m->update(['last_changed_at' => $now]);
+                $this->indexed($m->model, $gone->keys()->all());
             }
             // in Odoo and not in the mirror (or marked deleted here): fetch it — the copy heals itself
             $absent = array_values(array_filter($remote, fn ($id) => ! isset($local[$id]) || $local[$id]->deleted_at !== null));
@@ -411,10 +548,10 @@ class OdooSync
                 $page = $this->read($m, [['id', 'in', $ids]]);
                 $detail['healed'] = ($detail['healed'] ?? 0) + $this->apply($m, $page, feed: true);
             }
-            $m->update(['deletion_cursor_id' => $to ?? 0]);
+            $m->update(['deletion_cursor_id' => $more ? $to : 0]);
         } while ($more && $this->timeLeft() > 0);
         if (! $more) {
-            $m->update(['last_deletion_check_at' => now(), 'remote_count' => $this->odoo->searchCount($m->model),
+            $m->update(['last_deletion_check_at' => now(), 'remote_count' => $this->odoo->searchCount($m->model, self::ALL),
                 'mirrored_count' => OdooRecord::where('model', $m->model)->whereNull('deleted_at')->count()]);
         }
     }
@@ -427,12 +564,12 @@ class OdooSync
      *
      * @return array<int, array<string, mixed>>
      */
-    private function read(OdooModel $m, array $domain): array
+    private function read(OdooModel $m, array $domain, ?int $limit = null): array
     {
         $fields = array_keys((array) $m->fields);
         $t = microtime(true);
         try {
-            $page = $this->odoo->searchRead($m->model, $domain, $fields, $m->page_size, 'id asc', 0, 60);
+            $page = $this->odoo->searchRead($m->model, $domain, $fields, $limit ?? $m->page_size, 'id asc', 0, 60);
         } catch (OdooError $e) {
             if (! in_array($e->kind, ['odoo', 'missing'], true)) {
                 throw $e;
@@ -446,7 +583,7 @@ class OdooSync
             }
             $m->update(['fields' => array_diff_key((array) $m->fields, array_flip($bad)), 'skipped_fields' => ((array) $m->skipped_fields) + array_fill_keys($bad, 'Odoo cannot return it')]);
 
-            return $this->read($m, $domain);
+            return $this->read($m, $domain, $limit);
         }
         $took = microtime(true) - $t;
         $max = (int) config('odoo.max_page_size', 2000);
@@ -482,6 +619,69 @@ class OdooSync
     }
 
     /**
+     * What is kept of a record Odoo returned. Only what has a value: Odoo prints an empty field as `false` (and an empty
+     * list as []), so an absent key means "empty in Odoo". A boolean keeps its false — there it is a value.
+     *
+     * @param  array<string, string>  $types  field name → Odoo type
+     */
+    public static function keep(array $rec, array $types): array
+    {
+        $data = [];
+        foreach ($rec as $k => $v) {
+            if ($k === 'id' || $k === 'display_name' || $v === null || $v === [] || $v === '' || ($v === false && ($types[$k] ?? null) !== 'boolean')) {
+                continue;
+            }
+            $data[$k] = $v;
+        }
+        ksort($data);
+
+        return $data;
+    }
+
+    /**
+     * The highest id Odoo shows for a model. The fifty newest are asked for, so that a few records the user may not
+     * read at the very top do not hide the rest.
+     */
+    private function topId(OdooModel $m): int
+    {
+        $ids = $this->odoo->search($m->model, self::ALL, 50, 'id desc');
+
+        return $ids ? max($ids) : 0;
+    }
+
+    /** The archive's index follows the copy (App\Integration\Odoo\Archive\ArchiveIndexer, where that part is installed). */
+    private function indexed(string $model, array $ids): void
+    {
+        if (! $ids || ! class_exists(self::INDEXER)) {
+            return;
+        }
+        try {
+            app(self::INDEXER)->index($model, array_map('intval', $ids));
+        } catch (\Throwable $e) {
+            report($e); // the index can be rebuilt (scm:odoo-archive-index); the copy must never wait for it
+        }
+    }
+
+    /**
+     * Many records of a model gone from Odoo at once is rarely what happened: far more often the Odoo user lost the
+     * right to see them, or the database behind the address is not the same one any more. The copy is a backup — it
+     * does not follow such a change by itself: nothing is marked, the model is put on hold with the reason, and a
+     * person decides (resuming the model from its panel confirms the deletions).
+     */
+    private function guardHolds(OdooModel $m, int $gone, int $live): bool
+    {
+        if ($gone < (int) config('odoo.deletion_guard.min', 50) || $gone < (float) config('odoo.deletion_guard.share', 0.3) * max(1, $live)
+            || Cache::get("odoo:guard-ok:{$m->model}")) {
+            return false;
+        }
+        $m->update(['status' => 'paused', 'reason' => self::GUARD, 'last_error' => "{$gone} of {$live} records are no longer returned by Odoo"]);
+        $this->stats['errors']++;
+        $this->stats['detail'][$m->model]['error'] = "held: {$gone} of {$live} records disappeared from Odoo at once — nothing was marked deleted";
+
+        return true;
+    }
+
+    /**
      * Writes a page into the mirror and, when asked, into the change feed. @return int records that were new or different
      */
     private function apply(OdooModel $m, array $page, bool $feed): int
@@ -497,16 +697,7 @@ class OdooSync
         foreach ($page as $rec) {
             $id = (int) $rec['id'];
             $name = isset($rec['display_name']) && is_string($rec['display_name']) ? mb_substr($rec['display_name'], 0, 255) : null;
-            // Only what has a value is kept: Odoo prints an empty field as `false` (and an empty list as []), so an absent
-            // key means "empty in Odoo". A boolean keeps its false — there it is a value.
-            $data = [];
-            foreach ($rec as $k => $v) {
-                if ($k === 'id' || $k === 'display_name' || $v === null || $v === [] || $v === '' || ($v === false && ($types[$k] ?? null) !== 'boolean')) {
-                    continue;
-                }
-                $data[$k] = $v;
-            }
-            ksort($data);
+            $data = self::keep($rec, $types);
             $json = json_encode($data ?: new \stdClass, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PRESERVE_ZERO_FRACTION);
             $hash = sha1($json);
             $was = $existing[$id] ?? null;
@@ -556,6 +747,7 @@ class OdooSync
         $this->stats['created'] += $created;
         $this->stats['updated'] += count($changedIds);
         $m->update(['last_changed_at' => $now, 'mirrored_count' => $m->mirrored_count + $created, 'page_size' => $m->page_size]);
+        $this->indexed($m->model, array_column($rows, 'odoo_id'));
 
         return count($rows);
     }
@@ -566,6 +758,45 @@ class OdooSync
      * found); it gets a slice of the run's time, and what it cannot finish waits for the next run.
      */
     private function project(): void
+    {
+        $this->projectMaster();
+        // the OPS sections that follow Odoo (config odoo.projections): each takes from the feed what concerns it
+        foreach ((array) config('odoo.projections') as $key => $class) {
+            $step = "→ OPS {$key}";
+            try {
+                // not installed here, handed over to OPS, or still waiting for its first whole load (a person applies the
+                // plan once: `scm:odoo-project <area> --apply`) — nothing to feed, and that is not an error
+                if (! class_exists($class) || ! ($projection = app($class))->enabled() || ! $projection->applied()) {
+                    continue;
+                }
+                if ($this->timeLeft() <= 0) {
+                    return;
+                }
+                if (! $projection->ready()) {
+                    continue;
+                }
+                $out = $projection->consume(500, max(2.0, min(8.0, $this->timeLeft())));
+                if ($out['changes']) {
+                    $this->stats['errors'] += $out['failed'] ?? 0;
+                    $was = $this->stats['detail'][$step] ?? null;
+                    if ($was && ! isset($was['error'])) { // the second time in one run: one line for both
+                        $out['changes'] += $was['changes'];
+                        $out['failed'] = ($out['failed'] ?? 0) + ($was['failed'] ?? 0);
+                        foreach ($was['counts'] as $what => $n) {
+                            $out['counts'][$what] = ($out['counts'][$what] ?? 0) + $n;
+                        }
+                    }
+                    $this->stats['detail'][$step] = $out;
+                }
+            } catch (\Throwable $e) {
+                report($e);
+                $this->stats['errors']++;
+                $this->stats['detail'][$step] = ['error' => mb_substr($e->getMessage(), 0, 300)];
+            }
+        }
+    }
+
+    private function projectMaster(): void
     {
         $master = app(OdooMasterData::class);
         if (! $master->continuous() || $this->timeLeft() <= 0 || ! $master->ready()) {
@@ -626,7 +857,7 @@ class OdooSync
     {
         $rows = array_filter($this->stats['detail'], fn ($d) => array_filter((array) $d));
         // the detail keeps the first 60 models; what the run did to the OPS master data is never the part that is cut
-        $master = array_intersect_key($rows, [self::MASTER_STEP => 1]);
+        $master = array_filter($rows, fn ($key) => str_starts_with((string) $key, '→ '), ARRAY_FILTER_USE_KEY);
 
         return array_filter(['error' => $fatal, 'models' => $master + array_slice(array_diff_key($rows, $master), 0, 60, true)]);
     }

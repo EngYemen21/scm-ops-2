@@ -6,7 +6,10 @@ use App\Integration\Odoo\Models\OdooChange;
 use App\Integration\Odoo\Models\OdooModel;
 use App\Integration\Odoo\Models\OdooRecord;
 use App\Integration\Odoo\Models\OdooRun;
+use App\Integration\Odoo\Models\OdooVerification;
+use App\Integration\Odoo\Projection\OdooProjection;
 use App\Support\AppError;
+use App\Support\AuthUser;
 use App\Support\Paging;
 use App\Support\Sql;
 use Illuminate\Support\Carbon;
@@ -68,6 +71,15 @@ class OdooMirror
                 'coreLagSeconds' => $coreOldest ? max(0, (int) now()->diffInSeconds(Carbon::parse($coreOldest), true)) : null,
             ],
             'lastRun' => $lastRun?->toArray(),
+            // the copy as a backup: when it was last compared with Odoo and with what result, and how much of the
+            // attachments' content OPS keeps
+            'backup' => [
+                'verification' => Schema::hasTable('odoo_verifications') ? OdooVerification::whereNotNull('finished_at')->orderByDesc('id')->first()?->toArray() : null,
+                'files' => Schema::hasTable('odoo_files') ? app(OdooFiles::class)->status() : null,
+                'onHold' => OdooModel::where('reason', OdooSync::GUARD)->pluck('model')->all(),
+            ],
+            // the OPS sections that follow Odoo: did each take its first whole load, when was it last fed, what waits
+            'sections' => $this->sections(),
             'policy' => [
                 'runSeconds' => (int) config('odoo.run_seconds'), 'overlapSeconds' => (int) config('odoo.overlap_seconds'),
                 'deepEveryMinutes' => (int) config('odoo.deep_every_minutes'), 'deletionCheckMinutes' => (int) config('odoo.deletion_check_minutes'),
@@ -75,6 +87,33 @@ class OdooMirror
                 'readOnlyMethods' => OdooClient::READ_METHODS,
             ],
         ];
+    }
+
+    /**
+     * The OPS sections built for what Odoo has (config odoo.projections) and where each stands. A section whose code is
+     * not installed on this server is left out. Remembered for half a minute: the open screen asks every few seconds.
+     *
+     * @return array<int, array{key:string, follows:bool, copied:bool, loadedAt:?string, lastLoadAt:?string, fedAt:?string, waiting:int}>
+     */
+    private function sections(): array
+    {
+        return Cache::remember('odoo:sections', now()->addSeconds(30), function () {
+            $iso = fn ($at) => $at ? Carbon::parse($at)->toJSON() : null;
+            $states = OdooProjection::states();
+            $out = [];
+            foreach ((array) config('odoo.projections') as $key => $class) {
+                if (! class_exists($class)) {
+                    continue;
+                }
+                $p = app($class);
+                $copied = $p->ready();
+                $state = $states[$key] ?? [];
+                $out[] = ['key' => (string) $key, 'follows' => $p->enabled(), 'copied' => $copied, 'loadedAt' => $iso($state['firstAppliedAt'] ?? null),
+                    'lastLoadAt' => $iso($state['lastAppliedAt'] ?? null), 'fedAt' => $iso($state['lastFedAt'] ?? null), 'waiting' => $copied ? $p->waiting() : 0];
+            }
+
+            return $out;
+        });
     }
 
     /** Is Odoo answering, which version, who is the user behind the key — remembered for a minute. */
@@ -125,9 +164,48 @@ class OdooMirror
     public function model(string $model): array
     {
         $m = $this->find($model);
+        $open = ! OdooSync::isRestricted($m->model) || $this->mayReadPrivate();
 
-        return $this->modelRow($m) + ['fields' => $m->fields, 'skippedFields' => $m->skipped_fields,
-            'recentChanges' => OdooChange::where('model', $m->model)->orderByDesc('id')->limit(20)->get()->toArray()];
+        return $this->modelRow($m) + ['fields' => $m->fields, 'skippedFields' => $m->skipped_fields, 'restricted' => OdooSync::isRestricted($m->model), 'readable' => $open,
+            'recentChanges' => $open ? OdooChange::where('model', $m->model)->orderByDesc('id')->limit(20)->get()->toArray() : []];
+    }
+
+    // ───────────── people's files ─────────────
+
+    /**
+     * People's files (pay, contracts, leave, bank accounts) and what people wrote to each other are part of the copy —
+     * it is the company's backup — and are shown only to a user who holds `odoo.private`.
+     */
+    public function mayReadPrivate(): bool
+    {
+        return (bool) AuthUser::currentOrNull()?->can('odoo.private');
+    }
+
+    private function guard(string $model): void
+    {
+        if (OdooSync::isRestricted($model) && ! $this->mayReadPrivate()) {
+            throw AppError::forbidden('ODOO_PRIVATE', 'سجلات هذا النموذج ملفات أشخاص أو مراسلات — عرضها يحتاج صلاحية odoo.private', 'These records are people\'s files or correspondence — reading them needs odoo.private');
+        }
+    }
+
+    /** The registered models whose records the current user may not read ([] for a holder of `odoo.private`). @return string[] */
+    private function closedModels(): array
+    {
+        return $this->mayReadPrivate() ? [] : OdooModel::pluck('model')->filter(fn ($m) => OdooSync::isRestricted($m))->values()->all();
+    }
+
+    /**
+     * A record without what is personal in it, for a user who may not read people's files: the personal part of the
+     * staff directory, and identity and bank-account numbers in whatever model they stand (`odoo.identity_fields`).
+     */
+    private function withoutPersonal(string $model, array $data): array
+    {
+        if ($this->mayReadPrivate()) {
+            return $data;
+        }
+        $patterns = array_values(array_filter([OdooSync::personalPattern($model), (string) config('odoo.identity_fields')]));
+
+        return $patterns ? array_filter($data, fn ($key) => ! array_filter($patterns, fn (string $p) => preg_match($p, (string) $key)), ARRAY_FILTER_USE_KEY) : $data;
     }
 
     /** Pause, resume or (re)prioritise one model. A skipped model is taken into the mirror by setting it active. */
@@ -140,6 +218,11 @@ class OdooMirror
                 // inspected on the next run; taking a skipped model in is a person's decision and is remembered as one
                 $update += ['status' => 'new', 'reason' => $m->status === 'skipped' ? OdooSync::BY_PERSON : $m->reason, 'consecutive_errors' => 0, 'last_error' => null, 'next_attempt_at' => null];
             } elseif (in_array($dto['status'], ['active', 'paused'], true) && in_array($m->status, ['active', 'paused', 'new'], true)) {
+                if ($dto['status'] === 'active' && $m->reason === OdooSync::GUARD) {
+                    // a person looked: the records that disappeared from Odoo are to be marked deleted on the next check
+                    Cache::put("odoo:guard-ok:{$m->model}", 1, now()->addHours(6));
+                    $update += ['last_error' => null, 'deletion_cursor_id' => 0];
+                }
                 $update += ['status' => $dto['status'] === 'paused' ? 'paused' : ($m->fields ? 'active' : 'new'), 'reason' => $dto['status'] === 'paused' ? 'paused by a person' : null];
             }
         }
@@ -159,6 +242,7 @@ class OdooMirror
         if (empty($f['model'])) {
             throw AppError::validation('MODEL_REQUIRED', 'اختر نموذج أودو أولًا', 'Pick an Odoo model first');
         }
+        $this->guard((string) $f['model']);
         $q = OdooRecord::query()->where('model', $f['model'])
             ->when(($f['deleted'] ?? null) === '1', fn ($x) => $x->whereNotNull('deleted_at'), fn ($x) => $x->whereNull('deleted_at'));
         if ($page->q) {
@@ -176,17 +260,24 @@ class OdooMirror
 
     public function record(string $model, int $odooId): array
     {
+        $this->guard($model);
         $r = OdooRecord::where('model', $model)->where('odoo_id', $odooId)->first()
             ?? throw AppError::notFound('ODOO_RECORD_NOT_FOUND', "السجل {$model} #{$odooId} غير موجود في النسخة", "{$model} #{$odooId} is not in the mirror");
+        $row = $r->toArray();
+        $row['data'] = $this->withoutPersonal($model, (array) $r->data);
 
-        return $r->toArray() + ['fieldTypes' => OdooModel::where('model', $model)->value('fields'),
+        return $row + ['fieldTypes' => OdooModel::where('model', $model)->value('fields'),
             'history' => OdooChange::where('model', $model)->where('odoo_id', $odooId)->orderByDesc('id')->limit(50)->get()->toArray()];
     }
 
     /** @param  array{model?:?string, kind?:?string}  $f */
     public function changes(Paging $page, array $f): array
     {
-        $q = OdooChange::query()->when($f['model'] ?? null, fn ($x, $v) => $x->where('model', $v))->when($f['kind'] ?? null, fn ($x, $v) => $x->where('kind', $v));
+        if (! empty($f['model'])) {
+            $this->guard((string) $f['model']);
+        }
+        $q = OdooChange::query()->when($f['model'] ?? null, fn ($x, $v) => $x->where('model', $v))->when($f['kind'] ?? null, fn ($x, $v) => $x->where('kind', $v))
+            ->when($this->closedModels(), fn ($x, $closed) => $x->whereNotIn('model', $closed)); // the feed of all models leaves people's files out for who may not read them
         if ($page->q) {
             $q->where(fn ($x) => $x->where('display_name', Sql::like(), '%'.$page->q.'%')->when(ctype_digit($page->q), fn ($y) => $y->orWhere('odoo_id', (int) $page->q)));
         }

@@ -80,7 +80,7 @@ async function submit() {
     </div>
     <div class="mt-3.5">
       <div class="field-l mb-1.5">{{ t('الأسطر', 'Lines') }} *</div>
-      <LinesEditor v-model:lines="lines" discount :errors="errors" />
+      <LinesEditor v-model:lines="lines" discount :errors="errors" :customer="v.customerCode" />
     </div>
     <div v-if="aboveMax" class="hint" :class="sendBlocked ? 'amber' : 'purple'">{{
       mayApprove

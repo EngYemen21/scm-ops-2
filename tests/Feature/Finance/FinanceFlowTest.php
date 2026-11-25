@@ -63,7 +63,11 @@ class FinanceFlowTest extends ApiTestCase
         $chart = $this->expectOk($this->getAs('finance', '/api/finance/accounts'));
         $this->assertContains('ar', array_column($chart['items'], 'role'));
         $this->assertContains('grni', array_column($chart['items'], 'role'));
-        $this->assertSame(['BANK', 'CASH'], array_column($this->expectOk($this->getAs('finance', '/api/finance/banks'))['items'], 'code'));
+        // (stories of other sections may have added bank accounts of their own: the two of the seed are what is looked for)
+        $this->assertSame(['BANK', 'CASH'], array_values(array_intersect(array_column($this->expectOk($this->getAs('finance', '/api/finance/banks'))['items'], 'code'), ['BANK', 'CASH'])));
+        // what the ledger holds in transit before this story ships anything (other stories ran before it)
+        self::$s['inTransitBefore'] = $this->gl('goods_in_transit');
+        self::$s['creditNotesBefore'] = Journal::where('source_type', 'CustomerInvoice')->where('kind', 'auto')->where('memo', 'like', 'إشعار دائن%')->count();
         $this->expectRejected($this->getAs('worker', '/api/finance/board'), 'FORBIDDEN', [403]);
         $this->expectRejected($this->getAs('proc', '/api/finance/reports/trial-balance'), 'FORBIDDEN', [403]);
     }
@@ -205,8 +209,8 @@ class FinanceFlowTest extends ApiTestCase
         // 20 undelivered units: inventory 760 / goods in transit −760 → goods in transit is now 0 for this order
         $this->assertEqualsWithDelta(760.00, $this->gl('inventory', $rtn), 0.001);
         $this->assertEqualsWithDelta(-760.00, $this->gl('goods_in_transit', $rtn), 0.001);
-        $this->assertEqualsWithDelta(0, $this->gl('goods_in_transit'), 0.001);
-        $this->assertCount(0, Journal::where('source_type', 'CustomerInvoice')->where('kind', 'auto')->where('memo', 'like', 'إشعار دائن%')->get(), 'undelivered goods were never invoiced → no credit note');
+        $this->assertEqualsWithDelta(self::$s['inTransitBefore'], $this->gl('goods_in_transit'), 0.001, 'this order left nothing in transit: the account is back where it stood before the story');
+        $this->assertSame(self::$s['creditNotesBefore'], Journal::where('source_type', 'CustomerInvoice')->where('kind', 'auto')->where('memo', 'like', 'إشعار دائن%')->count(), 'undelivered goods were never invoiced → no credit note (stories of other sections may have made their own before this one)');
         $this->expectOk($this->postAs('wm', "/api/returns/{$rtn}/inspect", ['findings' => 'سليم']));
         $this->expectOk($this->postAs('wm', "/api/returns/{$rtn}/decide", ['decision' => 'restock']));
         $this->assertCount(1, $this->journalsOf('ReturnOrder', $rtn), 'restock is a bin move inside the warehouse');

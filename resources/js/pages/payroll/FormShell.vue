@@ -1,0 +1,56 @@
+<script setup>
+// The shell of the section's hand-built forms: a drawer with the fields in the body and, in the footer, the error
+// banner, submit (and an optional second action) / cancel, and one line that says what is missing or that the act is
+// recorded in the audit trail.
+//   <FormShell :open :title="{ ar, en }" :pending="act.pending.value" :error="act.error.value" :disabled="!ok"
+//              :submit-label="{ ar, en }" @submit="save" @close="…" @clear-error="act.clearError()"> fields… </FormShell>
+import { computed } from 'vue';
+import { Btn, Drawer, ErrorBanner } from '@/components';
+import { bi, t } from '@/i18n';
+import { useAuth } from '@/stores/auth';
+import { pname } from './payroll';
+
+defineProps({
+  open: { type: Boolean, default: false },
+  title: { type: [String, Object], default: null },
+  sub: { type: [String, Object], default: null },
+  submitLabel: { type: [String, Object], default: () => ({ ar: 'حفظ', en: 'Save' }) },
+  submitTone: { type: String, default: 'dark' },
+  secondLabel: { type: [String, Object], default: null },
+  pending: { type: Boolean, default: false },
+  error: { type: null, default: null },
+  width: { type: Number, default: 560 },
+  zIndex: { type: Number, default: 70 },
+  disabled: { type: Boolean, default: false },
+  /** What is still missing, shown under a disabled button. */
+  missing: { type: [String, Object], default: null },
+  /** Footer note; omit for the audit note, `false` hides it. */
+  note: { type: [String, Object, Boolean], default: null },
+});
+const emit = defineEmits(['close', 'submit', 'second', 'clearError']);
+
+const auth = useAuth();
+const userName = computed(() => (auth.user ? pname(auth.user) : ''));
+</script>
+
+<template>
+  <Drawer :open="open" :title="title" :sub="sub" :width="width" :z-index="zIndex" @close="emit('close')">
+    <slot />
+    <template #footer>
+      <div>
+        <ErrorBanner :error="error" hide-details @close="emit('clearError')" />
+        <div class="flex flex-wrap gap-2">
+          <Btn :tone="submitTone" class="!h-11 min-w-[130px] flex-1 !text-[11.5px]" :loading="pending" :disabled="disabled" :label="submitLabel" @click="emit('submit')" />
+          <Btn v-if="secondLabel" tone="primary" class="!h-11 min-w-[130px] flex-1 !text-[11.5px]" :loading="pending" :disabled="disabled" :label="secondLabel" @click="emit('second')" />
+          <Btn tone="soft" class="!h-11 !w-[96px]" :label="{ ar: 'إلغاء', en: 'Cancel' }" @click="emit('close')" />
+        </div>
+        <div v-if="disabled && !pending" class="mt-2 text-[10px] font-bold leading-[1.7] text-warn" role="status">
+          {{ missing ? bi(missing) : t('أكمل الحقول الإلزامية (*) لتفعيل الزر', 'Fill in the required fields (*) to enable the button') }}
+        </div>
+        <div v-if="note !== false" class="mt-2 text-[9px] leading-[1.7] text-faint">
+          {{ note ? bi(note) : t(`* حقول إلزامية · يُسجَّل الإجراء في سجل التدقيق باسم ${userName}`, `* required fields · the action is recorded in the audit trail as ${userName}`) }}
+        </div>
+      </div>
+    </template>
+  </Drawer>
+</template>

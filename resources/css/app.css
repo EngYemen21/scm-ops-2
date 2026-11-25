@@ -93,6 +93,7 @@
   .nav-item:hover { color: #c9cde0; }
   .nav-item.active { background: #2A2E42; color: #fff; }
   .nav-item:active { opacity: .8; }
+  .nav-group { padding: 13px 12px 4px; font-size: 9px; font-weight: 800; color: #6f748c; white-space: nowrap; }
   .nav-dot { width: 7px; height: 7px; border-radius: 99px; flex: none; background: #654e92; }
   .nav-item.active .nav-dot { background: #1BC4DB; }
   .nav-ico { width: 14px; height: 14px; flex: none; opacity: .85; }

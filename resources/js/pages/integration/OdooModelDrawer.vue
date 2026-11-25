@@ -34,7 +34,18 @@ const sync = useOdooSync();
 const found = sync.result;
 const post = (body, success) => act.run(() => api.postIdempotent(`/integration/odoo/models/${encodeURIComponent(props.model)}`, body), { success });
 const pause = () => post({ status: 'paused' }, { ar: 'أُوقف النموذج مؤقتًا', en: 'Model paused' });
-const resume = () => post({ status: 'active' }, { ar: 'استؤنف النموذج', en: 'Model resumed' });
+async function resume() {
+  // a model the copy put on hold by itself (many records gone from Odoo at once): resuming it CONFIRMS the deletions
+  if (String(d.value?.reason || '').startsWith('held:')) {
+    const yes = await confirm({
+      title: { ar: `تأكيد الحذف في ${props.model}؟`, en: `Confirm the deletions in ${props.model}?` },
+      sub: { ar: 'أوقفت النسخة هذا النموذج لأن عددًا كبيرًا من سجلاته لم يعد أودو يرجعه. هذا يحدث عند حذف حقيقي، وأيضًا إذا فقد مستخدم أودو صلاحية رؤيتها أو تغيّرت قاعدة البيانات خلف العنوان. الاستئناف يؤشّر تلك السجلات «محذوفة من أودو» في الفحص القادم. قيمها الأخيرة تبقى محفوظة في النسخة.', en: 'The copy put this model on hold because Odoo no longer returns many of its records. That happens on a real deletion, and also when the Odoo user lost the right to see them or the database behind the address changed. Resuming marks those records “deleted from Odoo” at the next check. Their last values stay in the copy.' },
+      tone: 'danger', okLabel: { ar: 'الحذف حقيقي — استأنف', en: 'The deletion is real — resume' },
+    });
+    if (!yes) return;
+  }
+  post({ status: 'active' }, { ar: 'استؤنف النموذج', en: 'Model resumed' });
+}
 const retry = () => post({ status: 'active' }, { ar: 'يُعاد فحص النموذج في المزامنة القادمة', en: 'The model is inspected again on the next run' });
 const setCore = (core) => post({ core }, core ? { ar: 'صار النموذج أساسيًا', en: 'Marked as core' } : { ar: 'لم يعد النموذج أساسيًا', en: 'No longer core' });
 async function takeIn() {

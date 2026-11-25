@@ -27,12 +27,14 @@ export function tabsFor(user) {
 }
 
 const GROUPS = [
-  { key: 'sales', label: { ar: 'المبيعات', en: 'Sales' }, tint: ['#e8effe', '#3c79f5'], pages: ['sales', 'consol'] },
+  { key: 'sales', label: { ar: 'المبيعات والعملاء', en: 'Sales & customers' }, tint: ['#e8effe', '#3c79f5'], pages: ['sales', 'consol', 'crm', 'pricing', 'commissions', 'portal', 'pos'] },
   { key: 'wh', label: { ar: 'عمليات المستودع', en: 'Warehouse operations' }, tint: ['#d9f4f9', '#0d7f93'], pages: ['receiving', 'wreceive', 'picking', 'counts', 'returns'] },
-  { key: 'stock', label: { ar: 'المخزون والبيانات الأساسية', en: 'Stock & master data' }, tint: ['#efeaf8', '#654e92'], pages: ['inv', 'ledger', 'batches', 'products', 'whs'] },
-  { key: 'buy', label: { ar: 'المشتريات', en: 'Purchasing' }, tint: ['#fbf0dd', '#b26a16'], pages: ['procurement'] },
+  { key: 'stock', label: { ar: 'المخزون والبيانات الأساسية', en: 'Stock & master data' }, tint: ['#efeaf8', '#654e92'], pages: ['inv', 'ledger', 'batches', 'products', 'whs', 'preq'] },
+  { key: 'buy', label: { ar: 'المشتريات', en: 'Purchasing' }, tint: ['#fbf0dd', '#b26a16'], pages: ['procurement', 'planning'] },
   { key: 'tms', label: { ar: 'التوصيل والنقل', en: 'Delivery & transport' }, tint: ['#e8effe', '#3c79f5'], pages: ['dispatch', 'trips', 'fleet', 'ttower', 'driver'] },
-  { key: 'mgmt', label: { ar: 'المتابعة والإدارة', en: 'Monitoring & admin' }, tint: ['#f1eff6', '#55506a'], pages: ['dash', 'tower', 'itower', 'reports', 'activity', 'settings'] },
+  { key: 'fin', label: { ar: 'المالية والاعتمادات', en: 'Finance & approvals' }, tint: ['#e6f9ec', '#1d7a3e'], pages: ['finance', 'approvals', 'credit', 'banking', 'tax'] },
+  { key: 'people', label: { ar: 'الموظفون', en: 'People' }, tint: ['#fbf0dd', '#b26a16'], pages: ['hr', 'payroll', 'workspace'] },
+  { key: 'mgmt', label: { ar: 'المتابعة والإدارة', en: 'Monitoring & admin' }, tint: ['#f1eff6', '#55506a'], pages: ['dash', 'tower', 'reports', 'activity', 'odoo', 'itower', 'settings', 'insights'] },
 ];
 
 export function moreGroups(user) {
@@ -56,4 +58,18 @@ const ACTIONS = [
 export function quickActions(user) {
   const nav = new Set(user?.nav || []);
   return ACTIONS.map((a) => ({ ...a, to: (a.targets.find(([page]) => nav.has(page)) || [])[1] })).filter((a) => a.to);
+}
+
+/**
+ * The desktop sidebar: the home page first, then the same groups as the phone's "More" page with the pages the user
+ * may open. A page that belongs to no group is never lost: it is listed at the end.
+ */
+export function sidebarGroups(user) {
+  const nav = user?.nav || [];
+  const home = nav.includes('dash') ? 'dash' : null;
+  const placed = new Set(home ? [home] : []);
+  const groups = GROUPS.map((g) => ({ key: g.key, label: g.label, pages: g.pages.filter((k) => k !== home && nav.includes(k)) })).filter((g) => g.pages.length);
+  groups.forEach((g) => g.pages.forEach((k) => placed.add(k)));
+  const rest = nav.filter((k) => !placed.has(k));
+  return [...(home ? [{ key: 'home', label: null, pages: [home] }] : []), ...groups, ...(rest.length ? [{ key: 'other', label: { ar: 'أخرى', en: 'Other' }, pages: rest }] : [])];
 }

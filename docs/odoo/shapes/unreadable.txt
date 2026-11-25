@@ -1,0 +1,872 @@
+
+## attendance.sheet — Hr Attendance Sheet  [copy: skipped, no read access for the Odoo user]
+  email_cc                          char                                         Email cc
+  name                              char                                         name
+  employee_id                       many2one → hr.employee                     Employee required
+  batch_id                          many2one → attendance.sheet.batch          Attendance Sheet Batch
+  department_id                     many2one → hr.department                   Department related=employee_id.department_id
+  company_id                        many2one → res.company                     Company required
+  date_from                         date                                         Date From required
+  date_to                           date                                         Date To required
+  line_ids                          one2many → attendance.sheet.line           Attendances
+  state                             selection                                    Status required  {draft=Draft | confirm=Confirmed | done=Approved}
+  no_overtime                       integer                                      No of overtimes
+  tot_overtime                      float                                        Total Over Time
+  tot_difftime                      float                                        Total Diff time Hours
+  no_difftime                       integer                                      No of Diff Times
+  tot_late                          float                                        Total Late In
+  no_late                           integer                                      No of Lates
+  no_absence                        integer                                      No of Absence Days
+  tot_absence                       float                                        Total absence Hours
+  tot_worked_hour                   float                                        Total Late In
+  att_policy_id                     many2one → hr.attendance.policy            Attendance Policy  required
+  payslip_id                        many2one → hr.payslip                      PaySlip
+  contract_id                       many2one → hr.contract                     Contract
+  total_worked_hours                float                                        Total Worked Hours computed
+  house_allowances                  float                                        منحة غلاء معيشه
+  overtime_allowance                float                                        علاوة اضافيه
+  treatment_allowance               float                                        علاوة سنوات سابقه
+  transport_allowances              float                                        بدل انتقال
+  living_allowances                 float                                        علاوة يوليو
+  nature_of_work_allowances         float                                        غلاء معيشة
+  telephone_allowance               float                                        بدل تليفون
+  bonus_request                     float                                        Bonus Request
+  Regular_bonus_for_managers        float                                        مكافئة انتظام للمديرين
+  Regular_regularity_equivalent     float                                        مكافئة انتظام عادية
+  Incentive_bonus                   float                                        مكافئات تشجيعيه
+  motivation                        float                                        الحافز
+  profit_account                    float                                        حساب ارباح
+  general_deductions                float                                        General Deductions
+  social_insurance_deductions       float                                        سلفة تأمينات
+  medical_insurance_deductions      float                                        سلفة ايصال نقدية
+  fingerprint_deductions            float                                        صندوق طوارئ
+  administrative_deductions         float                                        صندوق زماله
+  absence_without_permission_deductionsfloat                                        تأمين اجتماعي
+  profit_tax_percent                float                                        اشتراك جمعية
+  penalty                           float                                        Total Penalty
+  loans                             float                                        Loans
+
+## attendance.sheet.batch — attendance.sheet.batch  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         name
+  department_id                     many2one → hr.department                   Department Name required
+  date_from                         date                                         Date From required
+  date_to                           date                                         Date To required
+  att_sheet_ids                     one2many → attendance.sheet                Attendance Sheets
+  payslip_batch_id                  many2one → hr.payslip.run                  Payslip Batch
+  state                             selection                                    Status required  {draft=Draft | att_gen=Attendance Sheets Generated | att_sub=Attendance Sheets Submitted | done=Close}
+
+## attendance.sheet.line — attendance.sheet.line  [copy: skipped, no read access for the Odoo user]
+  state                             selection                                    Status related=att_sheet_id.state
+  date                              date                                         Date
+  day                               selection                                    Day of Week required  {0=Monday | 1=Tuesday | 2=Wednesday | 3=Thursday | 4=Friday | 5=Saturday | 6=Sunday}
+  att_sheet_id                      many2one → attendance.sheet                Attendance Sheet
+  employee_id                       many2one → hr.employee                     Employee computed related=att_sheet_id.employee_id
+  pl_sign_in                        float                                        Planned sign in
+  pl_sign_out                       float                                        Planned sign out
+  worked_hours                      float                                        Worked Hours
+  ac_sign_in                        float                                        Actual sign in
+  ac_sign_out                       float                                        Actual sign out
+  overtime                          float                                        Overtime
+  act_overtime                      float                                        Actual Overtime
+  late_in                           float                                        Late In
+  diff_time                         float                                        Diff Time
+  act_late_in                       float                                        Actual Late In
+  act_diff_time                     float                                        Actual Diff Time
+  status                            selection                                    Status  {ab=Absence | weekend=Week End | ph=Public Holiday | leave=Leave}
+  note                              text                                         Note
+
+## attendance.sheet.line.change — attendance.sheet.line.change (transient wizard)  [not registered]
+  overtime                          float                                        Overtime
+  late_in                           float                                        Late In
+  diff_time                         float                                        Diff Time
+  note                              text                                         Note required
+  att_line_id                       many2one → attendance.sheet.line           Att Line
+
+## b2b.credit.approval — B2B Credit Approval Audit  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request required
+  stage_id                          many2one → b2b.credit.stage                Stage required
+  group_id                          many2one → res.groups                      Group
+  user_id                           many2one → res.users                       User
+  state                             selection                                    State required  {pending=Pending | approved=Approved | rejected=Rejected | changes_requested=Changes Requested | skipped=Skipped | escalated=Escalated}
+  deadline                          datetime                                     Deadline
+  approved_by                       many2one → res.users                       Approved By
+  approved_at                       datetime                                     Approved At
+  note                              text                                         Note
+  activity_id                       many2one → mail.activity                   Activity
+  reminder_count                    integer                                      Reminder Count
+  last_reminder_at                  datetime                                     Last Reminder At
+  escalated_at                      datetime                                     Escalated At
+  company_id                        many2one → res.company                     Company related=request_id.company_id
+
+## b2b.credit.authorization.line — B2B Credit Authorized Signatory  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request required
+  name                              char                                         Name required
+  job_title                         char                                         Job Title
+  mobile                            char                                         Mobile
+  signature_note                    char                                         Signature Note
+
+## b2b.credit.bank.line — B2B Credit Bank Detail  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request required
+  bank_name                         char                                         Bank Name required
+  account_number                    char                                         Account Number
+  branch                            char                                         Branch
+  iban                              char                                         Iban
+  swift                             char                                         Swift
+
+## b2b.credit.notification.log — B2B Credit Notification Log  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request
+  channel                           selection                                    Channel required  {odoo=Odoo | email=Email | whatsapp=WhatsApp}
+  recipient_partner_id              many2one → res.partner                     Recipient Partner
+  recipient_user_id                 many2one → res.users                       Recipient User
+  recipient_value                   char                                         Recipient Value
+  template_code                     char                                         Template Code
+  status                            selection                                    Status required  {pending=Pending | sent=Sent | failed=Failed | skipped=Skipped}
+  sent_at                           datetime                                     Sent At
+  error_message                     text                                         Error Message
+  payload                           text                                         Payload
+
+## b2b.credit.payment.method — B2B Credit Contractual Payment Method  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Name required
+  code                              char                                         Code required
+  sequence                          integer                                      Sequence
+  active                            boolean                                      Active
+
+## b2b.credit.request — B2B Deferred Credit Account Request  [copy: skipped, no read access for the Odoo user]
+  access_url                        char                                         Portal Access URL computed
+  access_token                      char                                         Security Token
+  access_warning                    text                                         Access warning computed
+  name                              char                                         Name
+  request_date                      date                                         Request Date required
+  source                            selection                                    Source required  {portal=Portal | internal=Internal}
+  partner_id                        many2one → res.partner                     Customer required
+  commercial_partner_id             many2one → res.partner                     Commercial Partner
+  company_id                        many2one → res.company                     Company required
+  currency_id                       many2one → res.currency                    Currency related=company_id.currency_id
+  stage_id                          many2one → b2b.credit.stage                Stage
+  state                             selection                                    State required  {draft=Draft | submitted=Submitted | in_review=In Review | pending_signature=Pending Signature | ceo_approval=CEO Approval | approved=Approved | rejected=Rejected | changes_requested=Changes Requested | cancelled=Cancelled}
+  assigned_user_id                  many2one → res.users                       Requester
+  current_group_id                  many2one → res.groups                      Current Group
+  submitted_at                      datetime                                     Submitted At
+  stage_entered_at                  datetime                                     Stage Entered At
+  sla_deadline                      datetime                                     Sla Deadline
+  sla_status                        selection                                    Sla Status  {none=No SLA | on_track=On Track | due_soon=Due Soon | late=Late | escalated=Escalated}
+  last_reminder_at                  datetime                                     Last Reminder At
+  sla_last_checked_at               datetime                                     Sla Last Checked At
+  escalation_count                  integer                                      Escalation Count
+  company_name                      char                                         Company Name
+  commercial_registration           char                                         Commercial Registration
+  business_activity                 char                                         Business Activity
+  legal_entity_type                 char                                         Legal Entity Type
+  owner_name                        char                                         Owner Name
+  owner_national_id                 char                                         Owner National
+  phone                             char                                         Phone
+  mobile                            char                                         Mobile
+  email                             char                                         Email
+  website                           char                                         Website
+  po_box                            char                                         Po Box
+  postal_code                       char                                         Postal Code
+  street                            char                                         Street
+  district                          char                                         District
+  building_no                       char                                         Building No.
+  city                              char                                         City
+  requested_credit_limit            monetary                                     Requested Credit Limit
+  requested_payment_days            integer                                      Requested Payment Days
+  monthly_purchase_volume           monetary                                     Monthly Purchase Volume
+  approved_credit_limit             monetary                                     Approved Credit Limit
+  approved_payment_days             integer                                      Approved Payment Days
+  approved_payment_term_id          many2one → account.payment.term            Approved Payment Term
+  approved_payment_term_snapshot    text                                         Approved Payment Term Snapshot
+  payment_method_ids                many2many → b2b.credit.payment.method      Payment Method
+  finance_recommendation            text                                         Finance Recommendation
+  legal_notes                       text                                         Legal Notes
+  ceo_notes                         text                                         Ceo Notes
+  rejection_reason                  text                                         Rejection Reason
+  changes_requested_note            text                                         Changes Requested Note
+  responsible_line_ids              one2many → b2b.credit.responsible.line     Responsible Line
+  bank_line_ids                     one2many → b2b.credit.bank.line            Bank Line
+  authorization_line_ids            one2many → b2b.credit.authorization.line   Authorization Line
+  file_commercial_registration      binary                                       Commercial Registration Copy
+  filename_commercial_registration  char                                         Commercial Registration Filename
+  file_vat_certificate              binary                                       VAT Certificate
+  filename_vat_certificate          char                                         VAT Certificate Filename
+  file_national_address             binary                                       National Address Document
+  filename_national_address         char                                         National Address Filename
+  file_chamber_certificate          binary                                       Chamber of Commerce Certificate Copy
+  filename_chamber_certificate      char                                         Chamber Certificate Filename
+  file_owner_id                     binary                                       Owner ID Copy
+  filename_owner_id                 char                                         Owner ID Filename
+  file_authorized_signatory_ids     binary                                       Authorized Signatory IDs Copy
+  filename_authorized_signatory_ids char                                         Authorized Signatory Filename
+  file_official_authorization       binary                                       Official Signing Authorization
+  filename_official_authorization   char                                         Official Authorization Filename
+  file_recent_bank_statement        binary                                       Recent Bank Statement
+  filename_recent_bank_statement    char                                         Bank Statement Filename
+  file_other                        binary                                       Other Attachment
+  filename_other                    char                                         Other Filename
+  approval_line_ids                 one2many → b2b.credit.approval             Approval Line
+  signit_envelope_ids               one2many → b2b.credit.signit.envelope      Signit Envelope
+  notification_log_ids              one2many → b2b.credit.notification.log     Notification Log
+  terms_version_id                  many2one → b2b.credit.terms.version        Terms Version
+  attachments_complete              boolean                                      Attachments Complete
+  can_submit                        boolean                                      Can Submit computed
+  can_approve                       boolean                                      Can Approve computed
+  can_edit_finance                  boolean                                      Can Edit Finance computed
+  is_portal_editable                boolean                                      Is Portal Editable computed
+  signit_status                     selection                                    Signit Status computed  {none=No Envelope | draft=Draft | sent=Sent | delivered=Delivered | signed=Signed | declined=Declined | expired=Expired | failed=Failed}
+  approved_agreement_attachment_id  many2one → ir.attachment                   Approved Agreement Attachment computed
+
+## b2b.credit.responsible.line — B2B Credit Responsible Person  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request required
+  name                              char                                         Name required
+  position                          char                                         Position
+  national_id                       char                                         National
+  mobile                            char                                         Mobile
+
+## b2b.credit.signit.envelope — B2B Credit Signit Envelope  [copy: skipped, no read access for the Odoo user]
+  request_id                        many2one → b2b.credit.request              Request required
+  external_envelope_id              char                                         External Envelope
+  status                            selection                                    Status required  {draft=Draft | sent=Sent | delivered=Delivered | signed=Signed | declined=Declined | expired=Expired | failed=Failed}
+  signer_partner_id                 many2one → res.partner                     Signer Partner
+  signer_name                       char                                         Signer Name
+  signer_email                      char                                         Signer Email
+  signer_mobile                     char                                         Signer Mobile
+  sent_at                           datetime                                     Sent At
+  signed_at                         datetime                                     Signed At
+  signed_pdf_attachment_id          many2one → ir.attachment                   Signed Pdf Attachment
+  last_payload                      text                                         Last Payload
+  error_message                     text                                         Error Message
+  company_id                        many2one → res.company                     Company related=request_id.company_id
+
+## b2b.credit.stage — B2B Credit Workflow Stage  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Name required
+  code                              char                                         Code required
+  sequence                          integer                                      Sequence
+  active                            boolean                                      Active
+  fold                              boolean                                      Fold
+  state_mapping                     selection                                    State Mapping required  {draft=Draft | submitted=Submitted | in_review=In Review | pending_signature=Pending Signature | ceo_approval=CEO Approval | approved=Approved | rejected=Rejected | changes_requested=Changes Requested | cancelled=Cancelled}
+  responsible_group_id              many2one → res.groups                      Responsible Group
+  responsible_user_id               many2one → res.users                       Responsible User
+  approval_mode                     selection                                    Approval Mode required  {any_user=Any User | all_users=All Users}
+  sla_hours                         float                                        Sla Hours
+  reminder_before_deadline_hours    float                                        Reminder Before Deadline Hours
+  escalate_after_deadline_hours     float                                        Escalate After Deadline Hours
+  escalation_group_id               many2one → res.groups                      Escalation Group
+  require_documents                 boolean                                      Require Documents
+  require_signature                 boolean                                      Require Signature
+  auto_send_signit                  boolean                                      Auto Send Signit
+  lock_request_fields               boolean                                      Lock Request Fields
+  portal_visible                    boolean                                      Portal Visible
+  company_id                        many2one → res.company                     Company
+
+## b2b.credit.terms.version — B2B Credit Terms Version  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Name required
+  version                           char                                         Version required
+  active                            boolean                                      Active
+  effective_date                    date                                         Effective Date required
+  terms_ar                          html                                         Arabic Terms
+  terms_en                          html                                         English Terms
+  jurisdiction_city                 char                                         Jurisdiction City
+  company_id                        many2one → res.company                     Company
+
+## b2b.demand.forecast — Demand Forecast Run  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Reference required
+  state                             selection                                    Status required  {draft=Draft | computed=Computed | frozen=Frozen}
+  active                            boolean                                      Active
+  company_id                        many2one → res.company                     Company required
+  user_id                           many2one → res.users                       Prepared By
+  date_ref                          date                                         Anchor Date required
+  computed_on                       datetime                                     Computed On
+  compute_duration                  float                                        Compute Time (s)
+  note                              text                                         Diagnostics
+  date_from                         date                                         History From required
+  date_to                           date                                         History To required
+  forecast_date_from                date                                         Forecast From required
+  forecast_date_to                  date                                         Forecast To required
+  method                            selection                                    Forecast Method required  {average=Simple Average | wma=Weighted Moving Average | seasonal=Seasonal (Same Dates Last Year) | cadence=Customer Reorder Cadence}
+  wma_window                        integer                                      Weighting Window
+  seasonal_scale_to_level           boolean                                      Scale Seasonal to Current Level
+  growth_factor_pct                 float                                        Growth Factor (%)
+  demand_netting                    selection                                    Demand Netting required  {net=Net of booked deliveries | gross=Gross (ignore booked deliveries) | ignore=Compare only (do not subtract demand)}
+  history_source                    selection                                    History Source required  {delivery=Actual Deliveries | sale_order=Confirmed Sale Orders}
+  include_returns                   boolean                                      Net Customer Returns
+  exclude_partner_ids               many2many → res.partner                    Exclude Customers
+  safety_stock_method               selection                                    Safety Stock Method required  {days=Days of Demand | service_level=Service Level}
+  safety_stock_days                 float                                        Safety Stock (Days)
+  service_level                     selection                                    Service Level  {90=90% | 95=95% | 98=98% | 99=99%}
+  target_cover_days                 float                                        Maximum Cover (Days)
+  use_vendor_lead_time              boolean                                      Use Vendor Lead Time
+  default_lead_days                 float                                        Default Lead Time (Days)
+  qty_multiple_source               selection                                    Round Quantities To required  {one=None | orderpoint=From the existing reorder rule | uom_po=From the purchase unit of measure}
+  orderpoint_trigger                selection                                    New Rule Trigger required  {manual=Manual | auto=Automatic}
+  product_selection                 selection                                    Product Selection required  {moving=Products that moved in the history window | manual=Selected products and categories | all=All storable products}
+  product_ids                       many2many → product.product                Products
+  categ_ids                         many2many → product.category               Product Categories
+  warehouse_ids                     many2many → stock.warehouse                Warehouses required
+  customer_mode                     selection                                    Customer Mode required  {none=Ignore customers | filter=Only these customers' demand | split=One forecast per customer}
+  partner_ids                       many2many → res.partner                    Customers
+  include_rollup                    boolean                                      Include Warehouse Totals
+  rollup_method                     selection                                    Warehouse Total Method required  {pooled=From the pooled history of all customers | sum=Sum of the per-customer forecasts}
+  include_history_sheet             boolean                                      Include History in Excel
+  item_ids                          one2many → b2b.demand.forecast.item        Items
+  line_ids                          one2many → b2b.demand.forecast.line        Forecast Periods
+  history_ids                       one2many → b2b.demand.forecast.history     History
+  item_count                        integer                                      Number of Items
+  shortage_item_count               integer                                      Items in Shortage
+  surplus_item_count                integer                                      Items in Surplus
+  line_count                        integer                                      Number of Periods
+  total_forecast_qty                float                                        Total Forecast Demand
+  total_shortage_qty                float                                        Total Shortage
+  total_surplus_qty                 float                                        Total Surplus
+  total_suggested_purchase_qty      float                                        Total Suggested Purchase
+  total_suggested_purchase_value    monetary                                     Suggested Purchase Value
+  orderpoint_push_count             integer                                      Rules Written
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+  report_filename                   char                                         Report Filename computed
+  cadence_min_orders                integer                                      Minimum Orders
+  cadence_interval_window           integer                                      Intervals Considered
+  cadence_lapse_factor              float                                        Lapsed After (x Interval)
+  cadence_use_trend                 boolean                                      Apply Quantity Trend
+  cadence_trend_cap_pct             float                                        Trend Cap (%)
+  cadence_use_seasonality           boolean                                      Apply Seasonality
+  cadence_fallback                  selection                                    Customers Below the Minimum required  {estimate=Estimate with the weighted moving average | ignore=Leave them out}
+  planning_buffer_days              float                                        Planning Buffer (Days)
+  pattern_ids                       one2many → b2b.demand.forecast.pattern     Customer Patterns
+  event_ids                         one2many → b2b.demand.forecast.event       Expected Orders
+  requirement_ids                   one2many → b2b.demand.forecast.requirement Purchase Requirements
+  pattern_count                     integer                                      Number of Patterns computed
+  event_count                       integer                                      Number of Expected Orders computed
+  requirement_count                 integer                                      Number of Requirements computed
+  total_requirement_value           monetary                                     Requirement Value computed
+  budget_ids                        one2many → b2b.demand.forecast.budget      Budget Scenarios
+  budget_count                      integer                                      Number of Scenarios computed
+  plan_ids                          one2many → b2b.purchase.plan               Purchase Plans
+  plan_count                        integer                                      Number of Plans computed
+  budget_monthly_amount             monetary                                     Monthly Budget
+  primary_budget_id                 many2one → b2b.demand.forecast.budget      Run Budget
+  primary_state                     selection                                    Budget Status computed related=primary_budget_id.state
+  primary_funded_value              monetary                                     Funded computed related=primary_budget_id.funded_value
+  primary_required_value            monetary                                     Required computed related=primary_budget_id.required_value
+  primary_deferred_value            monetary                                     Not Funded computed related=primary_budget_id.deferred_value
+  primary_funded_pct                float                                        Funded % computed related=primary_budget_id.funded_pct
+  primary_budget_total              monetary                                     Total Budget computed related=primary_budget_id.budget_total
+  primary_line_ids                  one2many → b2b.demand.forecast.budget.line Budget by Month computed related=primary_budget_id.line_ids
+  primary_allocation_ids            one2many → b2b.demand.forecast.allocation  Allocation computed related=primary_budget_id.allocation_ids
+  history_day_count                 integer                                      History Days computed
+  forecast_day_count                integer                                      Forecast Days computed
+
+## b2b.demand.forecast.allocation — Budget Allocation  [copy: skipped, no read access for the Odoo user]
+  budget_id                         many2one → b2b.demand.forecast.budget      Scenario required
+  budget_line_id                    many2one → b2b.demand.forecast.budget.line Budget Month
+  requirement_id                    many2one → b2b.demand.forecast.requirement Requirement required
+  run_id                            many2one → b2b.demand.forecast             Forecast Run related=budget_id.run_id
+  company_id                        many2one → res.company                     Company related=budget_id.company_id
+  currency_id                       many2one → res.currency                    Currency computed related=budget_id.currency_id
+  product_id                        many2one → product.product                 Product related=requirement_id.product_id
+  categ_id                          many2one → product.category                Product Category related=requirement_id.categ_id
+  warehouse_id                      many2one → stock.warehouse                 Warehouse related=requirement_id.warehouse_id
+  vendor_id                         many2one → res.partner                     Vendor related=requirement_id.vendor_id
+  uom_id                            many2one → uom.uom                         Unit computed related=requirement_id.uom_id
+  product_criticality               selection                                    Product Criticality related=requirement_id.product_criticality
+  need_date                         date                                         Need Date related=requirement_id.need_date
+  price_unit                        float                                        Unit Price computed related=requirement_id.price_unit
+  month                             date                                         Month
+  order_date                        date                                         Order Date
+  rank                              integer                                      Rank
+  must_fund                         boolean                                      Critical First
+  score                             float                                        Priority
+  score_urgency                     float                                        Urgency Score
+  score_stockout                    float                                        Stockout Score
+  score_criticality                 float                                        Criticality Score
+  score_velocity                    float                                        Velocity Score
+  score_confidence                  float                                        Confidence Score
+  score_customer                    float                                        Customer Score
+  score_lead_time                   float                                        Lead Time Score
+  required_qty                      float                                        Required Qty
+  funded_qty                        float                                        Funded Qty
+  required_value                    monetary                                     Required
+  funded_value                      monetary                                     Funded
+  status                            selection                                    Outcome  {funded=Funded | partial=Partly Funded | deferred=Not Funded}
+  carried_from                      date                                         Originally Due
+  at_risk                           boolean                                      Ordered Too Late
+  reason                            char                                         Note
+  plan_line_ids                     one2many → b2b.purchase.plan.line          Plan Lines
+
+## b2b.demand.forecast.budget — Budget Scenario  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Scenario required
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+  is_primary                        boolean                                      Run Budget
+  state                             selection                                    Status required  {draft=Not Allocated | allocated=Allocated}
+  allocated_on                      datetime                                     Allocated On
+  note                              text                                         Allocation Notes
+  line_ids                          one2many → b2b.demand.forecast.budget.line Monthly Budget
+  allocation_ids                    one2many → b2b.demand.forecast.allocation  Allocation
+  plan_ids                          one2many → b2b.purchase.plan               Purchase Plans
+  plan_count                        integer                                      Number of Plans computed
+  weight_urgency                    integer                                      Urgency
+  weight_stockout                   integer                                      Stockout Risk
+  weight_criticality                integer                                      Product Criticality
+  weight_velocity                   integer                                      Demand Velocity
+  weight_confidence                 integer                                      Forecast Confidence
+  weight_customer                   integer                                      Customer Criticality
+  weight_lead_time                  integer                                      Vendor Lead Time
+  critical_first                    boolean                                      Fund Critical Products First
+  allow_partial                     boolean                                      Allow Partial Funding
+  carry_deferred                    boolean                                      Carry Unfunded Requirements Forward
+  carry_unused                      boolean                                      Carry Unused Budget Forward
+  urgency_horizon_days              integer                                      Urgency Horizon (Days)
+  budget_total                      monetary                                     Total Budget
+  required_value                    monetary                                     Required
+  funded_value                      monetary                                     Funded
+  deferred_value                    monetary                                     Not Funded
+  funded_pct                        float                                        Funded %
+  unused_value                      monetary                                     Unused Budget
+  stockout_unfunded_value           monetary                                     Unfunded Stockout Risk
+  requirement_count                 integer                                      Number of Requirements
+  funded_count                      integer                                      Requirements Fully Funded
+  partial_count                     integer                                      Requirements Partly Funded
+  deferred_count                    integer                                      Requirements Not Funded
+  critical_deferred_count           integer                                      Critical Not Funded
+  at_risk_count                     integer                                      Ordered Too Late
+
+## b2b.demand.forecast.budget.line — Budget Month  [copy: skipped, no read access for the Odoo user]
+  budget_id                         many2one → b2b.demand.forecast.budget      Scenario required
+  currency_id                       many2one → res.currency                    Currency computed related=budget_id.currency_id
+  month                             date                                         Month required
+  month_label                       char                                         Month Name computed
+  amount                            monetary                                     Budget
+  carried_in                        monetary                                     Carried In
+  required_value                    monetary                                     Due This Month computed
+  funded_value                      monetary                                     Funded computed
+  remaining_value                   monetary                                     Left Over computed
+
+## b2b.demand.forecast.cleanup — Clean Up Forecast Runs (transient wizard)  [not registered]
+  older_than_days                   integer                                      Older Than (Days) required
+  include_draft                     boolean                                      Include Drafts
+  include_computed                  boolean                                      Include Computed Runs
+  action                            selection                                    Action required  {archive=Archive them | delete=Delete them permanently}
+  run_ids                           many2many → b2b.demand.forecast            Runs
+  run_count                         integer                                      Matching Runs computed
+  item_count                        integer                                      Rows Affected computed
+
+## b2b.demand.forecast.dashboard — Demand Forecast Dashboard  [copy: skipped, no write_date: a report view, not stored]
+
+## b2b.demand.forecast.event — Expected Customer Order  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  pattern_id                        many2one → b2b.demand.forecast.pattern     Reorder Pattern required
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  product_id                        many2one → product.product                 Product required
+  categ_id                          many2one → product.category                Product Category
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  partner_id                        many2one → res.partner                     Customer required
+  uom_id                            many2one → uom.uom                         Unit
+  expected_date                     date                                         Expected Date required
+  occurrence                        integer                                      Occurrence
+  catch_up                          boolean                                      Overdue Order
+  period_index                      integer                                      Period
+  period_label                      char                                         Period Label
+  in_horizon                        boolean                                      In Forecast Horizon
+  qty                               float                                        Expected Quantity
+  confidence_score                  float                                        Confidence
+  confidence_band                   selection                                    Confidence Band  {high=High | medium=Medium | low=Low | none=Not Enough History}
+  actual_state                      selection                                    Actual  {pending=Pending | ordered=Ordered | missed=Not Ordered}
+  actual_date                       date                                         Actual Order Date
+  actual_qty                        float                                        Actual Quantity
+  qty_deviation                     float                                        Quantity Difference
+
+## b2b.demand.forecast.history — Demand Forecast History  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  item_id                           many2one → b2b.demand.forecast.item        Item required
+  company_id                        many2one → res.company                     Company required
+  product_id                        many2one → product.product                 Product required
+  categ_id                          many2one → product.category                Product Category
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  partner_id                        many2one → res.partner                     Customer
+  uom_id                            many2one → uom.uom                         Unit
+  period_index                      integer                                      Period required
+  period_label                      char                                         Period Label required
+  date_from                         date                                         From required
+  date_to                           date                                         To required
+  day_count                         integer                                      Days
+  qty                               float                                        Quantity
+  source                            selection                                    Source required  {delivery=Actual Deliveries | sale_order=Confirmed Sale Orders}
+
+## b2b.demand.forecast.item — Demand Forecast Item  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  run_state                         selection                                    Run Status computed related=run_id.state
+  product_id                        many2one → product.product                 Product required
+  product_tmpl_id                   many2one → product.template                Product Template related=product_id.product_tmpl_id
+  categ_id                          many2one → product.category                Product Category related=product_id.categ_id
+  default_code                      char                                         Internal Reference computed related=product_id.default_code
+  uom_id                            many2one → uom.uom                         Unit related=product_id.uom_id
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  partner_id                        many2one → res.partner                     Customer
+  is_rollup                         boolean                                      Warehouse Total
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+  qty_on_hand                       float                                        On Hand
+  incoming_qty                      float                                        Booked In
+  outgoing_qty                      float                                        Booked Out
+  history_total_qty                 float                                        History Total
+  history_avg_qty                   float                                        History Average
+  history_stdev_qty                 float                                        History Deviation
+  history_periods_used              integer                                      History Periods
+  forecast_total_qty                float                                        Forecast Demand
+  customer_sum_qty                  float                                        Sum of Customer Forecasts
+  avg_daily_qty                     float                                        Forecast per Day
+  min_projected_balance             float                                        Lowest Balance
+  first_shortage_date               date                                         First Shortage
+  shortage_qty                      float                                        Shortage
+  surplus_qty                       float                                        Surplus
+  coverage_days                     float                                        Days of Cover
+  status                            selection                                    Status  {shortage=Shortage | surplus=Surplus | ok=Balanced | no_demand=No Demand}
+  lead_days                         float                                        Lead Time (Days)
+  qty_multiple                      float                                        Rounding
+  suggested_purchase_qty            float                                        Suggested Purchase
+  suggested_purchase_date           date                                         Order By
+  last_purchase_price               float                                        Last Purchase Price
+  suggested_purchase_value          monetary                                     Suggested Value
+  suggested_min_qty                 float                                        Suggested Minimum
+  suggested_max_qty                 float                                        Suggested Maximum
+  current_min_qty                   float                                        Current Minimum
+  current_max_qty                   float                                        Current Maximum
+  orderpoint_id                     many2one → stock.warehouse.orderpoint      Reorder Rule
+  orderpoint_state                  selection                                    Rule Status  {missing=No Rule | matches=Matches | differs=Differs}
+  push_selected                     boolean                                      Push
+  orderpoint_pushed                 boolean                                      Pushed
+  orderpoint_push_date              datetime                                     Pushed On
+  pushed_min_qty                    float                                        Pushed Minimum
+  pushed_max_qty                    float                                        Pushed Maximum
+  method_fallback                   boolean                                      Method Fell Back
+  fallback_reason                   char                                         Fallback Reason
+  line_ids                          one2many → b2b.demand.forecast.line        Periods
+  history_ids                       one2many → b2b.demand.forecast.history     History
+  current_period_demand_qty         float                                        Expected Before Horizon
+  confidence_score                  float                                        Confidence
+  moq                               float                                        Vendor Minimum
+  vendor_id                         many2one → res.partner                     Vendor
+  requirement_ids                   one2many → b2b.demand.forecast.requirement Purchase Requirements
+
+## b2b.demand.forecast.launcher — New Demand Forecast (transient wizard)  [not registered]
+  company_id                        many2one → res.company                     Company required
+  date_ref                          date                                         Anchor Date required
+  method                            selection                                    Forecast Method required  {average=Simple Average | wma=Weighted Moving Average | seasonal=Seasonal (Same Dates Last Year) | cadence=Customer Reorder Cadence}
+  growth_factor_pct                 float                                        Growth Factor (%)
+  history_source                    selection                                    History Source required  {delivery=Actual Deliveries | sale_order=Confirmed Sale Orders}
+  warehouse_ids                     many2many → stock.warehouse                Warehouses required
+  product_selection                 selection                                    Product Selection required  {moving=Products that moved in the history window | manual=Selected products and categories | all=All storable products}
+  product_ids                       many2many → product.product                Products
+  categ_ids                         many2many → product.category               Product Categories
+  customer_mode                     selection                                    Customer Mode required  {none=Ignore customers | filter=Only these customers' demand | split=One forecast per customer}
+  partner_ids                       many2many → res.partner                    Customers
+  compute_now                       boolean                                      Compute Immediately
+  date_from                         date                                         History From required
+  date_to                           date                                         History To required
+  forecast_date_from                date                                         Forecast From required
+  forecast_date_to                  date                                         Forecast To required
+  estimated_rows                    integer                                      Estimated Rows computed
+  warning                           char                                         Warning computed
+  history_day_count                 integer                                      History Days computed
+  forecast_day_count                integer                                      Forecast Days computed
+
+## b2b.demand.forecast.line — Demand Forecast Period  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  item_id                           many2one → b2b.demand.forecast.item        Item required
+  company_id                        many2one → res.company                     Company required
+  product_id                        many2one → product.product                 Product required
+  categ_id                          many2one → product.category                Product Category
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  partner_id                        many2one → res.partner                     Customer
+  uom_id                            many2one → uom.uom                         Unit
+  period_index                      integer                                      Period required
+  period_label                      char                                         Period Label required
+  date_from                         date                                         From required
+  date_to                           date                                         To required
+  day_count                         integer                                      Days
+  history_qty                       float                                        Same Dates Last Year
+  forecast_demand_qty               float                                        Forecast Demand
+  scheduled_out_qty                 float                                        Booked Out
+  scheduled_in_qty                  float                                        Booked In
+  unmet_demand_qty                  float                                        Unmet Demand
+  opening_balance_qty               float                                        Opening Balance
+  odoo_forecast_qty                 float                                        Odoo Forecast
+  projected_balance_qty             float                                        Projected Balance
+  shortage_qty                      float                                        Shortage
+  surplus_qty                       float                                        Surplus
+  coverage_days                     float                                        Days of Cover
+
+## b2b.demand.forecast.pattern — Customer Reorder Pattern  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  product_id                        many2one → product.product                 Product required
+  categ_id                          many2one → product.category                Product Category
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  partner_id                        many2one → res.partner                     Customer required
+  uom_id                            many2one → uom.uom                         Unit
+  customer_criticality              selection                                    Customer Criticality computed related=partner_id.b2b_customer_criticality
+  order_count                       integer                                      Orders
+  first_order_date                  date                                         First Order
+  last_order_date                   date                                         Last Order
+  interval_history                  char                                         Recent Intervals (Days)
+  quantity_history                  char                                         Recent Quantities
+  avg_interval_days                 float                                        Average Interval (Days)
+  interval_stdev_days               float                                        Interval Deviation (Days)
+  interval_cv                       float                                        Interval Variability
+  avg_order_qty                     float                                        Average Quantity
+  qty_cv                            float                                        Quantity Variability
+  trend_factor                      float                                        Trend
+  expected_order_qty                float                                        Expected Quantity
+  seasonal                          boolean                                      Seasonality Applied
+  next_expected_date                date                                         Next Expected Order
+  days_since_last                   integer                                      Days Since Last Order
+  overdue_days                      integer                                      Days Overdue
+  state                             selection                                    Status  {active=On Schedule | overdue=Overdue | lapsed=Lapsed | insufficient=Not Enough Orders}
+  confidence_score                  float                                        Confidence
+  confidence_band                   selection                                    Confidence Band  {high=High | medium=Medium | low=Low | none=Not Enough History}
+  forecast_qty                      float                                        Forecast in Horizon
+  expected_order_count              integer                                      Expected Orders in Horizon
+  event_ids                         one2many → b2b.demand.forecast.event       Expected Orders
+
+## b2b.demand.forecast.requirement — Purchase Requirement  [copy: skipped, no read access for the Odoo user]
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  item_id                           many2one → b2b.demand.forecast.item        Forecast Item
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+  product_id                        many2one → product.product                 Product required
+  product_tmpl_id                   many2one → product.template                Product Template related=product_id.product_tmpl_id
+  categ_id                          many2one → product.category                Product Category
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  uom_id                            many2one → uom.uom                         Unit
+  product_criticality               selection                                    Product Criticality  {critical=Critical | high=High | normal=Normal | low=Low}
+  period_index                      integer                                      Period
+  period_label                      char                                         Period Label
+  period_date_from                  date                                         Period From
+  period_date_to                    date                                         Period To
+  need_date                         date                                         Need Date
+  trigger_date                      date                                         Order By
+  late                              boolean                                      Already Late
+  lead_days                         float                                        Lead Time (Days)
+  buffer_days                       float                                        Planning Buffer (Days)
+  demand_qty                        float                                        Period Demand
+  opening_balance_qty               float                                        Balance at Period Start
+  projected_balance_qty             float                                        Balance Without Purchase
+  safety_qty                        float                                        Safety Stock
+  shortage_qty                      float                                        Stockout Without Purchase
+  net_qty                           float                                        Net Requirement
+  moq                               float                                        Vendor Minimum
+  qty_multiple                      float                                        Order Multiple
+  qty                               float                                        Purchase Quantity
+  vendor_id                         many2one → res.partner                     Vendor
+  price_unit                        float                                        Unit Price
+  price_source                      selection                                    Price From  {vendor=Vendor Price List | last_purchase=Last Purchase | cost=Product Cost | none=No Price}
+  value                             monetary                                     Value
+  confidence_score                  float                                        Confidence
+  velocity_qty                      float                                        Demand per Day
+  customer_score                    float                                        Customer Criticality Score
+  allocation_ids                    one2many → b2b.demand.forecast.allocation  Budget Allocations
+
+## b2b.purchase.plan — Purchase Plan  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Reference required
+  state                             selection                                    Status required  {draft=Draft | to_approve=To Approve | approved=In Progress | done=Closed | cancel=Cancelled}
+  company_id                        many2one → res.company                     Company related=run_id.company_id
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+  run_id                            many2one → b2b.demand.forecast             Forecast Run required
+  budget_id                         many2one → b2b.demand.forecast.budget      Budget Scenario required
+  date_from                         date                                         From required
+  date_to                           date                                         To required
+  user_id                           many2one → res.users                       Planner
+  purchase_user_id                  many2one → res.users                       Purchaser
+  approved_by_id                    many2one → res.users                       Approved By
+  approved_on                       datetime                                     Approved On
+  rfq_grouping                      selection                                    Requests for Quotation required  {date=One per vendor and order date | week=One per vendor and week | plan=One per vendor for the whole plan}
+  note                              html                                         Notes
+  line_ids                          one2many → b2b.purchase.plan.line          Lines
+  line_count                        integer                                      Number of Lines computed
+  purchase_order_ids                many2many → purchase.order                 Purchase Orders computed
+  purchase_order_count              integer                                      Number of Purchase Orders computed
+  budget_amount                     monetary                                     Budget computed
+  planned_value                     monetary                                     Planned computed
+  committed_value                   monetary                                     Committed computed
+  received_value                    monetary                                     Received computed
+  remaining_budget                  monetary                                     Budget Left computed
+  ordered_count                     integer                                      Lines Confirmed computed
+  received_count                    integer                                      Lines Received computed
+  late_order_count                  integer                                      Late to Order computed
+  late_receipt_count                integer                                      Late to Arrive computed
+  progress_pct                      float                                        Progress computed
+
+## b2b.purchase.plan.dashboard — Purchase Plan Dashboard  [copy: skipped, no write_date: a report view, not stored]
+
+## b2b.purchase.plan.line — Purchase Plan Line  [copy: skipped, no read access for the Odoo user]
+  plan_id                           many2one → b2b.purchase.plan               Plan required
+  plan_state                        selection                                    Plan Status computed related=plan_id.state
+  company_id                        many2one → res.company                     Company related=plan_id.company_id
+  currency_id                       many2one → res.currency                    Currency computed related=plan_id.currency_id
+  allocation_id                     many2one → b2b.demand.forecast.allocation  Budget Allocation
+  requirement_id                    many2one → b2b.demand.forecast.requirement Requirement
+  product_id                        many2one → product.product                 Product required
+  categ_id                          many2one → product.category                Product Category related=product_id.categ_id
+  uom_id                            many2one → uom.uom                         Unit computed related=product_id.uom_id
+  warehouse_id                      many2one → stock.warehouse                 Warehouse required
+  vendor_id                         many2one → res.partner                     Vendor
+  qty                               float                                        Quantity required
+  price_unit                        float                                        Unit Price
+  subtotal                          monetary                                     Planned Value
+  order_date                        date                                         Order Date required
+  need_date                         date                                         Need Date
+  lead_days                         float                                        Lead Time (Days)
+  cancelled                         boolean                                      Cancelled
+  purchase_line_id                  many2one → purchase.order.line             Purchase Order Line
+  purchase_order_id                 many2one → purchase.order                  Purchase Order related=purchase_line_id.order_id
+  ordered_qty                       float                                        Ordered computed related=purchase_line_id.product_qty
+  received_qty                      float                                        Received Qty computed related=purchase_line_id.qty_received
+  status                            selection                                    Status  {planned=Planned | rfq=RFQ | confirmed=Confirmed | partial=Partly Received | received=Received | cancelled=Cancelled}
+  committed_value                   monetary                                     Committed
+  received_value                    monetary                                     Received
+  late_order                        boolean                                      Late to Order computed
+  late_receipt                      boolean                                      Late to Arrive computed
+
+## brand.franchisee.mapping — Brand Franchisee Mapping  [copy: skipped, no read access for the Odoo user]
+  brand_owner_id                    many2one → brand.owner                     Brand Owner required
+  partner_id                        many2one → res.partner                     Franchisee / Customer required
+  region                            char                                         Region
+  city                              char                                         City
+  date_start                        date                                         Start Date
+  monthly_purchase_target           monetary                                     Monthly Purchase Target
+  currency_id                       many2one → res.currency                    Currency
+  active                            boolean                                      Active
+  status                            selection                                    Status required  {active=Active | weak=Weak | inactive=Inactive | stopped=Stopped}
+  notes                             text                                         Notes
+  company_id                        many2one → res.company                     Company related=brand_owner_id.company_id
+
+## brand.owner — Brand Owner  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Name required
+  user_id                           many2one → res.users                       Linked User required
+  partner_id                        many2one → res.partner                     Contact
+  brand_name                        char                                         Brand Name
+  company_id                        many2one → res.company                     Company
+  active                            boolean                                      Active
+  state                             selection                                    Status required  {draft=Draft | active=Active | suspended=Suspended | archived=Archived}
+  date_start                        date                                         Start Date
+  franchisee_ids                    many2many → res.partner                    Franchisees / Customers
+  mapping_ids                       one2many → brand.franchisee.mapping        Franchisee Mappings
+  alert_ids                         one2many → brand.owner.dashboard.alert     Alerts
+  product_ids                       many2many → product.product                Products
+  product_category_ids              many2many → product.category               Product Categories
+  allow_invoice_access              boolean                                      Allow Invoice Access
+  allow_payment_access              boolean                                      Allow Payment Access
+  allow_return_access               boolean                                      Allow Return Access
+  allow_margin_access               boolean                                      Allow Margin Access
+  notes                             text                                         Notes
+  franchisee_count                  integer                                      Franchisees computed
+  alert_count                       integer                                      Open Alerts computed
+  currency_id                       many2one → res.currency                    Currency computed related=company_id.currency_id
+
+## brand.owner.dashboard — Brand Owner Dashboard Service  [copy: skipped, no write_date: a report view, not stored]
+
+## brand.owner.dashboard.alert — Brand Owner Dashboard Alert  [copy: skipped, no read access for the Odoo user]
+  brand_owner_id                    many2one → brand.owner                     Brand Owner required
+  partner_id                        many2one → res.partner                     Franchisee / Customer
+  alert_type                        selection                                    Alert Type required  {no_purchase=No Purchase | purchase_drop=Purchase Drop | target_exceeded=Target Exceeded | target_not_met=Target Not Met | cancelled_orders=Cancelled Orders | product_drop=Product Drop | overdue_invoice=Overdue Invoice | high_returns=High Returns}
+  name                              char                                         Title required
+  description                       text                                         Description
+  severity                          selection                                    Severity required  {info=Info | warning=Warning | danger=Danger | success=Success}
+  date                              date                                         Date
+  is_read                           boolean                                      Read
+  action_model                      char                                         Action Model
+  action_res_id                     integer                                      Action Record ID
+  company_id                        many2one → res.company                     Company related=brand_owner_id.company_id
+
+## expiry.notification.level — Expiry Notification Level  [copy: skipped, no read access for the Odoo user]
+  name                              char                                         Level Name required
+  days_before_expiry                integer                                      Days Before Expiry required
+  notification_type                 selection                                    Notification Type required  {email=Email Only | chatter=Chatter Only | both=Email and Chatter}
+  user_ids                          many2many → res.users                      Recipients required
+  sequence                          integer                                      Sequence
+  active                            boolean                                      Active
+  color                             integer                                      Color
+  company_id                        many2one → res.company                     Company
+  notification_log_ids              one2many → expiry.notification.log         Notification Logs
+  notification_count                integer                                      Notifications Sent computed
+
+## expiry.notification.log — Expiry Notification Log  [copy: skipped, no read access for the Odoo user]
+  lot_id                            many2one → stock.lot                       Lot/Serial required
+  level_id                          many2one → expiry.notification.level       Notification Level required
+  notification_date                 datetime                                     Notification Date
+  notification_type                 selection                                    Notification Type  {email=Email | chatter=Chatter | both=Both}
+  user_ids                          many2many → res.users                      Recipients
+  product_id                        many2one → product.product                 Product related=lot_id.product_id
+  expiry_date                       datetime                                     Expiry Date related=lot_id.expiration_date
+  company_id                        many2one → res.company                     Company related=lot_id.company_id
+  lot_name                          char                                         Lot/Serial Number related=lot_id.name
+  product_qty                       float                                        Quantity On Hand computed related=lot_id.product_qty
+
+## sign.request — Signature Request  [copy: active, 0 records]
+  template_id                       many2one → sign.template                   Template required
+  subject                           char                                         Email Subject
+  reference                         char                                         Document Name required
+  access_token                      char                                         Security Token required
+  share_link                        char                                         Share Link computed
+  request_item_ids                  one2many → sign.request.item               Signers
+  state                             selection                                    State  {shared=Shared | sent=Sent | signed=Fully Signed | refused=Refused | canceled=Canceled | expired=Expired}
+  completed_document                binary                                       Completed Document
+  nb_wait                           integer                                      Sent Requests
+  nb_closed                         integer                                      Completed Signatures
+  nb_total                          integer                                      Requested Signatures
+  progress                          char                                         Progress computed
+  start_sign                        boolean                                      Signature Started computed
+  integrity                         boolean                                      Integrity of the Sign request computed
+  active                            boolean                                      Active
+  favorited_ids                     many2many → res.users                      Favorite of
+  color                             integer                                      Color
+  request_item_infos                binary                                       Request Item Infos computed
+  last_action_date                  datetime                                     Last Action Date computed related=message_ids.create_date
+  completion_date                   date                                         Completion Date computed
+  communication_company_id          many2one → res.company                     Company used for communication
+  sign_log_ids                      one2many → sign.log                        Logs
+  template_tags                     many2many → sign.template.tag              Tags
+  cc_partner_ids                    many2many → res.partner                    Copy to computed
+  message                           html                                         sign.message
+  message_cc                        html                                         sign.message_cc
+  attachment_ids                    many2many → ir.attachment                  Attachments
+  completed_document_attachment_ids many2many → ir.attachment                  Completed Documents
+  need_my_signature                 boolean                                      Need My Signature computed
+  validity                          date                                         Valid Until
+  reminder                          integer                                      Reminder
+  last_reminder                     date                                         Last reminder
+
+## sign.request.item — Signature Request Item  [copy: active, 0 records]
+  access_url                        char                                         Portal Access URL computed
+  access_token                      char                                         Security Token required
+  access_warning                    text                                         Access warning computed
+  partner_id                        many2one → res.partner                     Signer
+  sign_request_id                   many2one → sign.request                    Signature Request required
+  sign_item_value_ids               one2many → sign.request.item.value         Value
+  reference                         char                                         Document Name computed related=sign_request_id.reference
+  mail_sent_order                   integer                                      Mail Sent Order
+  communication_company_id          many2one → res.company                     Company used for communication computed related=sign_request_id.communication_company_id
+  access_via_link                   boolean                                      Accessed Through Token
+  role_id                           many2one → sign.item.role                  Role required
+  sms_number                        char                                         Mobile related=partner_id.mobile
+  sms_token                         char                                         SMS Token
+  signed_without_extra_auth         boolean                                      Signed Without Extra Authentication
+  signature                         binary                                       Signature
+  frame_hash                        char                                         Frame Hash computed
+  signing_date                      date                                         Signed on
+  state                             selection                                    State  {sent=To Sign | refused=Refused | completed=Completed | canceled=Canceled}
+  color                             integer                                      Color computed
+  ignored                           boolean                                      Ignored required
+  signer_email                      char                                         Email
+  is_mail_sent                      boolean                                      Is Mail Sent
+  change_authorized                 boolean                                      Change Authorized computed related=role_id.change_authorized
+  latitude                          float                                        Latitude
+  longitude                         float                                        Longitude
+
+## sign.request.item.value — Signature Item Value  [copy: skipped, no read access for the Odoo user]
+  sign_request_item_id              many2one → sign.request.item               Signature Request item required
+  sign_item_id                      many2one → sign.item                       Signature Item required
+  sign_request_id                   many2one → sign.request                    Signature Request required computed related=sign_request_item_id.sign_request_id
+  value                             text                                         Value
+  frame_value                       text                                         Frame Value
+  frame_has_hash                    boolean                                      Frame Has Hash
