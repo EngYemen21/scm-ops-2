@@ -403,6 +403,32 @@ class OdooMirrorTest extends ApiTestCase
         $this->assertSame([], $this->odoo->writes);
     }
 
+    public function test_the_e_invoicing_certificate_and_service_keys_are_never_copied(): void
+    {
+        $this->company();
+        // the e-invoicing unit's certificate with its secret sits on a sales journal; keys of outside services on the website
+        $this->odoo->model('account.journal', ['name' => 'char', 'l10n_sa_production_csid_json' => 'char', 'l10n_sa_compliance_csid_json' => 'char',
+            'l10n_sa_production_csid_validity' => 'datetime', 'l10n_sa_compliance_checks_passed' => 'boolean'], 'Journal');
+        $this->odoo->create('account.journal', ['name' => 'فواتير العملاء', 'l10n_sa_production_csid_json' => '{"secret":"CSID-SECRET-1"}',
+            'l10n_sa_compliance_csid_json' => '{"secret":"CSID-SECRET-2"}', 'l10n_sa_production_csid_validity' => '2027-01-31 00:00:00', 'l10n_sa_compliance_checks_passed' => true]);
+        $this->odoo->model('website', ['name' => 'char', 'google_analytics_key' => 'char', 'attendance_kiosk_key' => 'char', 'firebase_project_id' => 'char'], 'Website');
+        $this->odoo->create('website', ['name' => 'الموقع', 'google_analytics_key' => 'GA-KEY-9', 'attendance_kiosk_key' => 'KIOSK-KEY-9', 'firebase_project_id' => 'project-1']);
+
+        $this->assertSame(0, $this->sync()['errors']);
+        $models = OdooModel::all()->keyBy('model');
+        $skipped = (array) $models['account.journal']->skipped_fields;
+        $this->assertSame(['credential', 'credential'], [$skipped['l10n_sa_production_csid_json'] ?? null, $skipped['l10n_sa_compliance_csid_json'] ?? null]);
+        $this->assertSame(['attendance_kiosk_key' => 'credential', 'google_analytics_key' => 'credential'], collect($models['website']->skipped_fields)->sortKeys()->all());
+        // what only looks like a key is data: the certificate's validity date, a project name
+        $this->assertSame('2027-01-31 00:00:00', OdooRecord::where('model', 'account.journal')->firstOrFail()->data['l10n_sa_production_csid_validity']);
+        $this->assertSame('project-1', OdooRecord::where('model', 'website')->firstOrFail()->data['firebase_project_id']);
+        $copy = json_encode(OdooRecord::pluck('data'), JSON_UNESCAPED_UNICODE);
+        foreach (['CSID-SECRET-1', 'CSID-SECRET-2', 'GA-KEY-9', 'KIOSK-KEY-9'] as $secret) {
+            $this->assertStringNotContainsString($secret, $copy);
+        }
+        $this->assertSame([], $this->odoo->writes);
+    }
+
     public function test_a_fault_stays_with_its_model(): void
     {
         $this->company();
