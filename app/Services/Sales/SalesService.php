@@ -21,6 +21,7 @@ use App\Models\SalesOrderLine;
 use App\Models\StatusHistory;
 use App\Models\Trip;
 use App\Models\Warehouse;
+use App\Pricing\Services\PriceService;
 use App\Services\Core\AuditService;
 use App\Services\Core\NotifyService;
 use App\Services\Core\NumberingService;
@@ -32,6 +33,7 @@ use App\Support\Paging;
 use App\Support\Sm;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Sales: Quotation → Sales Order → stock check → Reservation → Allocation (FEFO) → Fulfillment order.
@@ -159,7 +161,7 @@ class SalesService
 
         $id = DB::transaction(function () use ($user, $dto, $action) {
             $c = $this->customer($dto['customerCode']);
-            $lines = $this->resolveLines($dto['lines']);
+            $lines = $this->resolveLines($dto['lines'], $c);
             $disc = $this->discountState($lines, null);
             $approvedBy = $disc['aboveMax'] && $user->can('discount.approve') ? $user->username : null;
             if ($disc['aboveMax'] && ! $approvedBy && $action === 'sent') {
@@ -415,7 +417,7 @@ class SalesService
             // the customer row is locked: two orders of one customer pass the credit gate one after the other
             $c = Customer::whereKey($this->customer($dto['customerCode'])->id)->lockForUpdate()->firstOrFail();
             $w = Warehouse::where('code', $dto['warehouseCode'])->first() ?? throw AppError::notFound('WH_NOT_FOUND', "المستودع {$dto['warehouseCode']} غير موجود", "Warehouse {$dto['warehouseCode']} not found");
-            $lines = $this->resolveLines($dto['lines']);
+            $lines = $this->resolveLines($dto['lines'], $c);
             $t = $this->totals($lines);
 
             $disc = $this->discountState($lines, $discountBy);
@@ -1098,10 +1100,14 @@ class SalesService
     }
 
     /**
-     * @param  array<int, array{sku:string, qty:int|string, price:float|int|string, discPct?:float|int|string|null}>  $lines
+     * A line sent WITH a price keeps it — the price a person typed always wins. A line sent without one takes the price
+     * of the customer's price list (the «قوائم الأسعار» section decides which list and which rule); when the list has no
+     * price for the product the line is refused, by its index, and the person types it.
+     *
+     * @param  array<int, array{sku:string, qty:int|string, price?:float|int|string|null, discPct?:float|int|string|null}>  $lines
      * @return array<int, array{lineNo:int, product:Product, qty:int, price:float, discPct:float}>
      */
-    private function resolveLines(array $lines): array
+    private function resolveLines(array $lines, ?Customer $customer = null): array
     {
         $products = Product::whereIn('sku', array_column($lines, 'sku'))->get()->keyBy('sku');
         $out = [];
@@ -1110,10 +1116,24 @@ class SalesService
             if (! $p->active) {
                 throw AppError::validation('SKU_INACTIVE', "المنتج {$p->name_ar} موقوف", "Product {$p->sku} is inactive");
             }
-            $out[] = ['lineNo' => $i + 1, 'product' => $p, 'qty' => (int) $l['qty'], 'price' => (float) $l['price'], 'discPct' => (float) ($l['discPct'] ?? 0)];
+            $price = ($l['price'] ?? null) === null || $l['price'] === '' ? $this->listPrice($customer, $p, (int) $l['qty'], $i) : (float) $l['price'];
+            $out[] = ['lineNo' => $i + 1, 'product' => $p, 'qty' => (int) $l['qty'], 'price' => $price, 'discPct' => (float) ($l['discPct'] ?? 0)];
         }
 
         return $out;
+    }
+
+    /** The customer's list price of a product, for a line that carries none (see resolveLines). */
+    private function listPrice(?Customer $customer, Product $p, int $qty, int $index): float
+    {
+        // the price lists arrive with their own migration: a database that does not have them yet has no list price
+        $answer = $customer && Schema::hasTable('price_lists') ? app(PriceService::class)->customerPrice((string) $customer->id, (string) $p->id, max(1, $qty)) : null;
+        if (! ($answer['found'] ?? false) || (float) $answer['price'] <= 0) {
+            throw AppError::validation('PRICE_REQUIRED', "لا سعر للمنتج {$p->sku} في قائمة أسعار العميل — اكتب سعر السطر",
+                "No price for {$p->sku} in the customer's price list — type the line price", ['field' => "lines.{$index}.price", 'sku' => $p->sku]);
+        }
+
+        return round((float) $answer['price'], 2);
     }
 
     /** Lines of a quotation as an order/quotation payload. */

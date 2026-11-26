@@ -236,12 +236,95 @@ endpoints answer `ODOO_NOT_INSTALLED`. `scm:odoo-sync` exits quietly where the m
 If storage is short, pause the models you can live without from the «النماذج» view (a paused model keeps its copy and is
 not updated) or list them under `ODOO_EXCLUDE` before the first copy.
 
-People's files stay out by default: HR, payroll and partner bank-account models are registered as skipped ("private")
-and an employee's record is copied without its personal part (`config/odoo.php`: `private`, `private_allow`,
-`personal_fields`). A manager takes a held-back model in from its panel on the «النماذج» view; `ODOO_INCLUDE` does the
-same for a deployment. After changing those rules: `php artisan scm:odoo-recopy <model> …` drops the copy of the named
-models and makes it again under the rules as they stand.
+People's files (HR, payroll, contracts, attendance, partner bank accounts, the personal part of an employee's record)
+are part of the copy — the owner asked for a complete backup — and are READ only by a user who holds `odoo.private`
+(the system administrator by default). A deployment that must not hold them sets `ODOO_COPY_PRIVATE=false`: they are
+then registered and not copied until a manager takes a model in from its panel on the «النماذج» view (`ODOO_INCLUDE`
+does the same for a deployment). After changing the rules: `php artisan scm:odoo-discover` takes in what the rules no
+longer keep out, `php artisan scm:odoo-reinspect` re-reads the records in place where the copied fields changed, and
+`php artisan scm:odoo-recopy <model> …` drops the copy of the named models and makes it again.
 
 A run that was killed leaves its lock for up to `seconds + 120` s; `Cache::lock('odoo:sync')->forceRelease()` frees it.
 While many models still wait for their first copy, one large model takes at most 60% of a run, so the small ones are
 not held back for hours.
+
+### 8.1 The copy as a backup
+
+| Command | What it does |
+|---|---|
+| `php artisan scm:odoo-verify [--heal] [--model=…]` | Compares every record id of every copied model with Odoo and reads a sample of each model again. Exit code 1 when the copy is not complete. `--heal` re-reads in place a model with missing or differing records. Scheduled nightly at 03:30 |
+| `php artisan scm:odoo-files [--loop] [--retry]` | Keeps the content of Odoo's attachments on the disk named by `ODOO_FILES_DISK`, checked against Odoo's checksums; resumable. Scheduled every five minutes. The company's Odoo holds 44,569 attachments = 19.6 GB: a server without a writable disk needs an object-storage disk |
+| `php artisan scm:odoo-export [dir]` | Writes the copy as portable files: one gzip JSON-lines file per model + `manifest.json` with counts and SHA-256 |
+| `php artisan scm:odoo-import-archive <dir> [--check] [--force]` | Checks an archive against its manifest, or loads it into the mirror tables (models are registered as paused: a restore never depends on Odoo) |
+
+What the copy does by itself: a record deleted in Odoo is marked, never erased; a model that loses 50 records or more
+and 30% of what was looked at in one check is put ON HOLD instead (`ODOO_GUARD_MIN`) — the overview shows it, and
+resuming the model from its panel confirms the deletions; Odoo being down stops the updates only.
+
+### 8.2 The OPS sections that follow Odoo
+
+Every application the company uses in Odoo has an OPS section of its own, loaded from the copy and kept in step with
+it (`docs/odoo/COVERAGE.ar.md`; contracts in `docs/odoo/WAVE2.md`, `WAVE3.md`, `WAVE4.md`). Areas:
+`approvals`, `crm`, `hr`, `pricing`, `commissions`, `portal`, `preq`, `workspace`, `payroll`, `pos`, `planning`,
+`credit`, `banking`, `tax`, `insights`.
+
+| Step | Command |
+|---|---|
+| Tables and the new permissions of the release | `php artisan migrate --force` (each section's migration also runs `PermissionSync::ensure()`) |
+| Where every section stands | `php artisan scm:odoo-project` — copied? loaded? how many changes wait |
+| What a first load would do | `php artisan scm:odoo-project <area>` (counts only, writes nothing) |
+| First load | `php artisan scm:odoo-project <area> --apply` (idempotent; from the command line, never a web request) |
+| Afterwards | every run applies what the change feed reports, while `ODOO_PROJECT_<AREA>` is true |
+| Handing a section over to OPS | set its switch to false: the records that came from Odoo become editable in OPS |
+
+A section is fed by the runs ONLY after its first whole load (table `odoo_projections`): until a person applied the
+plan once, the runs leave it alone, so no section is ever half-filled by the changes that happen to arrive first. A
+section whose migration has not run is not an error of a run. The overview of the «أودو» tab shows the same state in
+the card «أقسام النظام التي تتبع أودو».
+
+Linking people: an Odoo user is the OPS user with the same e-mail or login — give the OPS users their work e-mail and
+the next load links their history (approvals they decided, opportunities they own, their expense claims).
+
+Odoo refuses the connection user the records of some custom modules (demand forecast, purchase plan, deferred credit,
+brand owners, expiry notifications, attendance sheets). Their shapes are known from Odoo's dictionary
+(`docs/odoo/shapes/unreadable.txt`) and the OPS sections are built for them. Every discovery (daily) asks Odoo again:
+the day an Odoo administrator grants the access, those models enter the copy by themselves and
+`php artisan scm:odoo-project <area> --apply` loads them.
+
+The archive («أرشيف أودو») is built with `php artisan scm:odoo-archive-index` once after the first copy (resumable,
+`--seconds=N` for short slices); the runs keep it current afterwards and an hourly catch-up is scheduled.
+
+### 8.3 Credentials are never copied
+
+Whatever the model, a field that works as a key is left out of the copy (`config/odoo.php` → `never_fields`,
+`never_model_fields`): passwords, portal and signup tokens, API keys, the attendance PIN and kiosk key, a discussion
+channel's invitation key, and the e-invoicing unit's certificate with its secret (`…_csid_json`, the private key,
+the certificate request). After changing the rule: `php artisan scm:odoo-reinspect`, then let the runs re-read the
+models it names — the values leave the copy with that re-read. Identity and bank-account numbers are data, not keys:
+they are copied and shown only to holders of `odoo.private` (`identity_fields`, `personal_fields`).
+
+### 8.4 Releasing the sections that follow Odoo
+
+Order on a server, after the code is deployed:
+
+1. `php artisan migrate --force` — every section creates its tables and syncs its permissions.
+2. Where routes are cached, nothing more: the providers are in `bootstrap/providers.php`.
+3. A scheduler (or the signed heartbeat) runs: `scm:odoo-sync` every minute, `scm:odoo-files` every five minutes,
+   `scm:odoo-verify --heal` nightly, `scm:odoo-archive-index` hourly, `scm:tax-einvoices` every five minutes,
+   `scm:planning-compute` every minute, `scm:credit-deadlines` every fifteen minutes, `scm:insights-alerts` /
+   `scm:insights-expiry` daily, `scm:insights-history` every fifteen minutes, `scm:hr-alerts` daily.
+4. First load of every section, from the command line: `php artisan scm:odoo-project` lists them, then for each
+   `php artisan scm:odoo-project <area>` (the plan) and `--apply`. The archive: `php artisan scm:odoo-archive-index`.
+   The invoice history of the brand dashboards: `php artisan scm:insights-history --seconds=50` until it reports done.
+
+What a person decides after the first load (each section says it on its own screen):
+
+| Section | Decision |
+|---|---|
+| All | Give OPS users their work e-mail or the same login as in Odoo: their history (approvals, opportunities, claims, commissions, cashier sessions) becomes theirs at the next load |
+| Banking | Link each Odoo bank or cash journal to an OPS bank account (or adopt it) on the «الدفاتر» tab: none matches by IBAN, number or name today |
+| Tax & e-invoicing | The tax profile (legal name, VAT number) and the onboarding of an e-invoicing unit with the authority. Until then e-invoices are made locally and nothing is sent |
+| Point of sale | The warehouse of the register and the finance account of each payment method |
+| Demand planning | The mapping of Odoo warehouses to OPS warehouses on its settings tab |
+| Brands | A role for outside brand owners (`page.insights` only) if they are to sign in |
+| Credit, planning, brands, expiry, attendance sheets | Odoo refuses the connection user these records. Granting read access in Odoo is enough: the daily discovery takes them in, then `scm:odoo-project <area> --apply` |

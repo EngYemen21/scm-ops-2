@@ -62,7 +62,7 @@ class AccountsService
         if ($role && Account::where('role', $role)->exists()) {
             throw AppError::conflict('ROLE_TAKEN', "الدور {$role} مرتبط بحساب آخر — انقله من ذلك الحساب أولًا", 'Role already mapped');
         }
-        $a = Account::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => $dto['nameEn'] ?: $dto['nameAr'], 'type' => $dto['type'], 'subtype' => $dto['subtype'] ?? null, 'parent_id' => $parent?->id,
+        $a = Account::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => ($dto['nameEn'] ?? null) ?: $dto['nameAr'], 'type' => $dto['type'], 'subtype' => $dto['subtype'] ?? null, 'parent_id' => $parent?->id,
             'is_postable' => $dto['isPostable'] ?? true, 'role' => $role, 'active' => true, 'sort' => 999]);
         $this->audit->log($user, ['action' => 'ACCOUNT.CREATE', 'entityType' => 'Account', 'entityId' => $a->id, 'entityNumber' => $a->code, 'newValue' => $dto]);
         $this->map->flush();
@@ -139,7 +139,7 @@ class AccountsService
             throw AppError::conflict('COST_CENTER_EXISTS', "مركز التكلفة {$dto['code']} موجود", 'Cost center exists');
         }
         $vehicle = ! empty($dto['vehicle']) ? (Vehicle::where('code', $dto['vehicle'])->orWhere('id', $dto['vehicle'])->first() ?? throw AppError::notFound('VEHICLE_NOT_FOUND', 'المركبة غير موجودة', 'Vehicle not found')) : null;
-        $cc = CostCenter::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => $dto['nameEn'] ?: $dto['nameAr'], 'kind' => $vehicle ? 'vehicle' : ($dto['kind'] ?? 'admin'), 'vehicle_id' => $vehicle?->id, 'active' => true]);
+        $cc = CostCenter::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => ($dto['nameEn'] ?? null) ?: $dto['nameAr'], 'kind' => $vehicle ? 'vehicle' : ($dto['kind'] ?? 'admin'), 'vehicle_id' => $vehicle?->id, 'active' => true]);
         $this->audit->log($user, ['action' => 'COST_CENTER.CREATE', 'entityType' => 'CostCenter', 'entityId' => $cc->id, 'entityNumber' => $cc->code, 'newValue' => $dto]);
 
         return $cc->refresh()->toArray();
@@ -171,9 +171,9 @@ class AccountsService
             }
             $parent = Account::where('code', '1100')->first();
 
-            return Account::create(['code' => $code, 'name_ar' => $dto['nameAr'], 'name_en' => $dto['nameEn'] ?: $dto['nameAr'], 'type' => 'asset', 'subtype' => $kind, 'parent_id' => $parent?->id, 'is_postable' => true, 'active' => true, 'sort' => 999]);
+            return Account::create(['code' => $code, 'name_ar' => $dto['nameAr'], 'name_en' => ($dto['nameEn'] ?? null) ?: $dto['nameAr'], 'type' => 'asset', 'subtype' => $kind, 'parent_id' => $parent?->id, 'is_postable' => true, 'active' => true, 'sort' => 999]);
         });
-        $b = BankAccount::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => $dto['nameEn'] ?: $dto['nameAr'], 'kind' => $kind, 'bank_name' => $dto['bankName'] ?? null, 'iban' => $dto['iban'] ?? null, 'account_id' => $gl->id, 'currency' => 'SAR', 'active' => true]);
+        $b = BankAccount::create(['code' => $dto['code'], 'name_ar' => $dto['nameAr'], 'name_en' => ($dto['nameEn'] ?? null) ?: $dto['nameAr'], 'kind' => $kind, 'bank_name' => $dto['bankName'] ?? null, 'iban' => $dto['iban'] ?? null, 'account_id' => $gl->id, 'currency' => 'SAR', 'active' => true]);
         $this->audit->log($user, ['action' => 'BANK_ACCOUNT.CREATE', 'entityType' => 'BankAccount', 'entityId' => $b->id, 'entityNumber' => $b->code, 'newValue' => ['glAccount' => $gl->code, 'iban' => $dto['iban'] ?? null]]);
 
         return $b->refresh()->load('account:id,code,name_ar,name_en')->toArray();

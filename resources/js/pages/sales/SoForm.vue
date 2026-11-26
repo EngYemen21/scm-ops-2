@@ -101,7 +101,7 @@ async function submit(allowBackorder = false) {
     </div>
     <div class="mt-3.5">
       <div class="field-l mb-1.5">{{ t('الأسطر', 'Lines') }} *</div>
-      <LinesEditor v-model:lines="lines" discount :errors="errors" />
+      <LinesEditor v-model:lines="lines" discount :errors="errors" :customer="v.customerCode" />
     </div>
     <div v-if="overCredit" class="hint amber">{{ t(`إجمالي الطلب (${fmtMoney(total)}) أكبر من الائتمان المتاح للعميل (${fmtMoney(credit.available)}) — سيرفضه الخادم ما لم يُسدَّد مستحق أو يُرفع الحد.`, `The order total (${fmtMoney(total)}) exceeds the customer's available credit (${fmtMoney(credit.available)}) — the server will refuse it unless a receivable is paid or the limit raised.`) }}</div>
     <div v-if="aboveMax && mayApprove" class="hint purple">{{ t(`في الطلب خصم فوق الحد ${maxPct}% — سيُسجَّل الأمر باعتمادك للخصم (${auth.user?.username || ''}).`, `The order carries a discount above the ${maxPct}% limit — it will be recorded as approved by you (${auth.user?.username || ''}).`) }}</div>

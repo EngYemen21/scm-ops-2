@@ -21,6 +21,7 @@ use App\Support\AuthUser;
 use App\Support\Paging;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Accounts receivable documents.
@@ -125,8 +126,24 @@ class CustomerInvoiceService
         $this->notify->activity($user, 'CustomerInvoice', $inv->id, $inv->number, "صدرت فاتورة {$inv->number} للعميل {$customer->name_ar} بقيمة ".number_format($total, 2).' ر.س عن تسليم '.$fo->number,
             "Invoice {$inv->number} issued to {$customer->name_en} for {$fo->number}", ['finance']);
         app(CreditService::class)->sync($customer->id); // the delivered order is now a receivable
+        $this->einvoiceAfterCommit($inv, $user);
 
         return $inv->refresh();
+    }
+
+    /**
+     * The e-invoice of a posted invoice or credit note («الضريبة والفوترة الإلكترونية», app/Tax): made once the posting is
+     * committed, so the tax authority's chain never numbers a document that was rolled back. It never fails the
+     * posting: a document the section cannot make yet (no tax profile, not onboarded) waits in its "needs attention"
+     * list, and `scm:tax-einvoices` makes what is pending.
+     */
+    private function einvoiceAfterCommit(CustomerInvoice $doc, ?AuthUser $user): void
+    {
+        $service = 'App\\Tax\\Services\\EinvoiceService';
+        if (! class_exists($service) || ! Schema::hasTable('tax_einvoices')) {
+            return;
+        }
+        DB::afterCommit(fn () => app($service)->issueFor($doc->fresh(), $user));
     }
 
     /**
@@ -228,6 +245,7 @@ class CustomerInvoiceService
         $this->audit->log($user, ['action' => 'CN.ISSUE', 'entityType' => 'CustomerInvoice', 'entityId' => $cn->id, 'entityNumber' => $cn->number, 'newValue' => ['invoice' => $invoice->number, 'return' => $r->number, 'total' => $total]]);
         $this->notify->activity($user, 'CustomerInvoice', $cn->id, $cn->number, "صدر إشعار دائن {$cn->number} بقيمة ".number_format($total, 2)." ر.س للعميل {$customer->name_ar} عن المرتجع {$r->number}", "Credit note {$cn->number} issued for return {$r->number}", ['finance']);
         app(CreditService::class)->sync($customer->id); // the credit note lowered what the customer owes
+        $this->einvoiceAfterCommit($cn, $user);
 
         return $cn->refresh();
     }

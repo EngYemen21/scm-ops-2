@@ -3,8 +3,11 @@
 use App\Integration\IntegrationBootstrap;
 use App\Integration\Models\IntMirror;
 use App\Integration\Odoo\Models\OdooModel;
+use App\Integration\Odoo\OdooExport;
+use App\Integration\Odoo\OdooFiles;
 use App\Integration\Odoo\OdooMasterData;
 use App\Integration\Odoo\OdooMirror;
+use App\Integration\Odoo\OdooVerify;
 use App\Integration\Odoo\OdooSync;
 use App\Integration\Services\IntegrationRunner;
 use App\Integration\Services\MappingService;
@@ -14,6 +17,7 @@ use App\Models\Warehouse;
 use App\Services\Inventory\InventoryOpsService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Transport\GpsTrackingService;
+use App\Support\AppError;
 use App\Support\SnapshotImporter;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -222,6 +226,27 @@ Artisan::command('scm:fleet-documents', function (\App\Services\Transport\FleetS
 })->purpose('Refresh driver / vehicle document alerts and the blocks that follow from them');
 Schedule::command('scm:fleet-documents')->dailyAt('05:00');
 
+// People & expenses (app/Hr): an identity paper or a contract about to end is told once per stage (60 / 30 / 7 days,
+// expired). The list also refreshes itself when it is opened; this keeps the alerts coming when nobody opens it.
+Artisan::command('scm:hr-alerts', function () {
+    if (! \Illuminate\Support\Facades\Schema::hasTable('hr_alerts')) {
+        $this->line('not installed');
+
+        return 0;
+    }
+    $this->line(json_encode(app(\App\Hr\Services\AlertsService::class)->refresh(), JSON_UNESCAPED_UNICODE));
+
+    return 0;
+})->purpose('Refresh the alerts of employees\' papers and contracts about to expire');
+Schedule::command('scm:hr-alerts')->dailyAt('05:10');
+
+// Tax & e-invoicing (app/Tax): the e-invoice of every invoice that does not have one yet, then what waits to be sent
+// to the tax authority (nothing is sent while the e-invoicing unit is not onboarded).
+Schedule::command('scm:tax-einvoices --seconds=40')->everyFiveMinutes()->withoutOverlapping();
+// Demand & purchase planning (app/Planning): a large forecast run is computed in slices; this finishes the ones a
+// person started, also when nobody keeps the page open.
+Schedule::command('scm:planning-compute --seconds=50')->everyMinute()->withoutOverlapping();
+
 // ── Odoo → OPS live mirror (docs/odoo/ARCHITECTURE.ar.md). Read-only: nothing in Odoo is ever changed from here. ──
 Artisan::command('scm:odoo-status', function (OdooMirror $mirror) {
     $s = $mirror->status(true);
@@ -271,6 +296,132 @@ Artisan::command('scm:odoo-discover', function (OdooSync $sync) {
 
     return 0;
 })->purpose('Odoo mirror: list the models of the Odoo instance and register the new ones');
+
+// ── the copy as a backup ──
+// Is the copy what Odoo holds? Counts per model and a sample of records read again (OdooVerify). --heal reads a model
+// again in place when values differ without Odoo having stamped the record, or ids are missing.
+Artisan::command('scm:odoo-verify {--model=*} {--sample=} {--heal}', function (OdooVerify $verify) {
+    $v = $verify->run('command', $this->option('model') ?: null, $this->option('sample') !== null ? (int) $this->option('sample') : null, (bool) $this->option('heal'));
+    $this->line(sprintf('%s — models %d · in Odoo %s · in the copy %s · missing %d · no longer in Odoo %d · sampled %d · differing %d',
+        $v['complete'] ? 'COMPLETE' : 'NOT COMPLETE', $v['models'], number_format($v['recordsOdoo']), number_format($v['recordsCopy']), $v['missing'], $v['extra'], $v['sampled'], $v['differing']));
+    foreach (($v['detail']['models'] ?? []) as $model => $row) {
+        $this->line('  '.$model.': '.json_encode($row, JSON_UNESCAPED_UNICODE));
+    }
+    foreach (['stillCopying' => 'models still being copied', 'onHold' => 'models on hold', 'unreadable' => 'models Odoo did not answer for'] as $k => $label) {
+        if (! empty($v['detail'][$k])) {
+            $this->line("  {$label}: {$v['detail'][$k]}");
+        }
+    }
+
+    return $v['complete'] ? 0 : 1;
+})->purpose('Odoo mirror: compare the copy with Odoo (counts per model and a sample of records)');
+Schedule::command('scm:odoo-verify --heal')->dailyAt('03:30')->withoutOverlapping();
+// The index of the Odoo archive (App\Integration\Odoo\Archive) follows the mirror by itself after every page it writes;
+// this is the safety net for anything that slipped through, and what finishes a first build in slices. Two seconds
+// when nothing changed.
+Schedule::command('scm:odoo-archive-index --seconds=45')->hourly()->withoutOverlapping();
+
+// The content of Odoo's attachments onto a disk of OPS (OdooFiles): resumable, checked against Odoo's checksums.
+Artisan::command('scm:odoo-files {--seconds=50} {--loop} {--max-minutes=600} {--retry}', function (OdooFiles $files) {
+    @ini_set('memory_limit', '1024M');
+    if ($this->option('retry')) {
+        $this->line('failed files to look at again: '.$files->retryFailed());
+    }
+    $until = microtime(true) + 60 * max(1, (int) $this->option('max-minutes'));
+    do {
+        $r = $files->run(max(3, (int) $this->option('seconds')));
+        if (! $r['ran']) {
+            $this->line('not run: '.$r['reason']);
+
+            return 0;
+        }
+        $this->line(sprintf('%s  stored %-5d %8.1f MB  skipped %-4d failed %-3d left %d%s', now()->format('H:i:s'), $r['stored'], $r['bytes'] / 1048576, $r['skipped'], $r['failed'], $r['left'], isset($r['error']) ? ' | '.$r['error'] : ''));
+    } while ($this->option('loop') && empty($r['error']) && $r['left'] > 0 && microtime(true) < $until);
+
+    return 0;
+})->purpose('Odoo mirror: keep the content of Odoo\'s attachments on a disk of OPS (--loop: until none is left)');
+Schedule::command('scm:odoo-files --seconds=50')->everyFiveMinutes()->withoutOverlapping();
+
+// The copy as files for a safe (OdooExport): one gzip JSON-lines file per model and a manifest with checksums.
+Artisan::command('scm:odoo-export {dir? : default storage/app/private/odoo-export/<date>} {--model=*}', function (OdooExport $export) {
+    $dir = $this->argument('dir') ?: storage_path('app/private/odoo-export/'.now()->format('Y-m-d_His'));
+    $m = $export->export($dir, $this->option('model') ?: null, fn (string $model, int $n) => $this->line(sprintf('  %-40s %s', $model, number_format($n))));
+    $this->line('exported '.number_format($m['records']).' records of '.count($m['models'])." models to {$dir}");
+
+    return 0;
+})->purpose('Odoo mirror: write the whole copy as portable files (gzip JSON lines per model + manifest)');
+
+Artisan::command('scm:odoo-import-archive {dir} {--check : only check the files against the manifest} {--force : load over a mirror that is not empty}', function (OdooExport $export) {
+    if ($this->option('check')) {
+        $c = $export->check($this->argument('dir'));
+        $this->line(($c['ok'] ? 'OK' : 'DAMAGED').' — '.number_format($c['records']).' records in '.$c['models'].' files'.($c['bad'] ? ' · do not match: '.implode(', ', $c['bad']) : ''));
+
+        return $c['ok'] ? 0 : 1;
+    }
+    $r = $export->import($this->argument('dir'), (bool) $this->option('force'));
+    $this->line('loaded '.number_format($r['records']).' records of '.$r['models'].' models (registered as paused: "restored from an archive")');
+
+    return 0;
+})->purpose('Odoo mirror: check an exported archive, or load it into the mirror tables of this installation');
+
+// The OPS sections that follow Odoo (config odoo.projections: approvals, CRM, people…). Without an area it lists them;
+// with one it prints the plan, and with --apply it loads the whole area from the copy (idempotent — the first load of
+// an area, and the way to bring it back in step). After that the runs keep it current from the change feed.
+Artisan::command('scm:odoo-project {area?} {--apply}', function () {
+    $all = array_filter((array) config('odoo.projections'), fn ($class) => class_exists($class));
+    $area = $this->argument('area');
+    if (! $area) {
+        $states = \App\Integration\Odoo\Projection\OdooProjection::states();
+        foreach ($all as $key => $class) {
+            $p = app($class);
+            $loaded = $states[$key]['firstAppliedAt'] ?? null;
+            $this->line(sprintf('%-12s %-11s %-10s %-28s waiting %d', $key, $p->enabled() ? 'follows' : 'handed-over', $p->ready() ? 'ready' : 'not-copied',
+                $loaded ? 'loaded '.substr((string) $loaded, 0, 16) : 'NOT LOADED (--apply once)', $p->ready() ? $p->waiting() : 0));
+        }
+
+        return 0;
+    }
+    if (! isset($all[$area])) {
+        $this->warn("no such area: {$area}");
+
+        return 1;
+    }
+    try {
+        $out = $this->option('apply') ? app($all[$area])->apply() : app($all[$area])->plan();
+    } catch (AppError $e) {
+        // the copy of the area is not complete yet, its tables are not migrated, it was handed over: said, not thrown
+        $this->warn("{$e->errorCode}: ".($e->messageEn ?? $e->messageAr));
+
+        return 1;
+    }
+    $this->line(($out['dryRun'] ? 'PLAN (nothing changed)' : 'APPLIED').': '.json_encode($out['counts'], JSON_UNESCAPED_UNICODE));
+    foreach ($out['notes'] as $what => $examples) {
+        $this->line("  {$what}: ".implode(' | ', $examples));
+    }
+
+    return 0;
+})->purpose('Odoo mirror: the OPS sections that follow Odoo — no area: where each stands; an area: its plan, or --apply for the first load');
+
+// Odoo gained fields, or the field rules changed: the fields of the copied models are read again, and the models whose
+// set of copied fields is no longer what the copy was made with have their records read again IN PLACE (nothing is
+// dropped; the copy stays readable). No model named = every copied model.
+Artisan::command('scm:odoo-reinspect {model?*}', function (OdooSync $sync) {
+    $names = (array) $this->argument('model');
+    $again = 0;
+    foreach (OdooModel::where('status', 'active')->where('full_state', 'done')->when($names, fn ($q) => $q->whereIn('model', $names))->orderBy('priority')->orderBy('model')->get() as $m) {
+        try {
+            if ($sync->reinspect($m)) {
+                $again++;
+                $this->line("{$m->model}: its records are read again on the next runs");
+            }
+        } catch (Throwable $e) {
+            $this->warn("{$m->model}: ".mb_substr($e->getMessage(), 0, 160));
+        }
+    }
+    $this->line("models to read again: {$again}");
+
+    return 0;
+})->purpose('Odoo mirror: re-read the fields of the copied models and refresh the records where the copied fields changed');
 
 // After the field policy changed (config odoo.never_fields / personal_fields / private): the copy of a model is dropped
 // and made again under the rules as they stand now. Only the OPS copy is touched; the next runs read the model again.

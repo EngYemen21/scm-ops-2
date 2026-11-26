@@ -32,7 +32,15 @@ const routes = [
 ];
 
 // Inside the native shells the pages are files, not server routes: hash history keeps deep links working without a server fallback.
-export const router = createRouter({ history: isNative ? createWebHashHistory() : createWebHistory(), routes, scrollBehavior: () => ({ top: 0 }) });
+// A new page starts at its top, and so does another page of a list. A change of the address that stays on the same page
+// (a filter, a tab, a drawer opening or closing — they live in the query string) keeps the reader where he is; going
+// back returns to where he was.
+function scrollBehavior(to, from, saved) {
+  if (saved) return saved;
+  if (to.path === from.path && String(to.query.page ?? '') === String(from.query.page ?? '')) return false;
+  return { top: 0 };
+}
+export const router = createRouter({ history: isNative ? createWebHashHistory() : createWebHistory(), routes, scrollBehavior });
 
 router.beforeEach(async (to) => {
   const auth = useAuth();

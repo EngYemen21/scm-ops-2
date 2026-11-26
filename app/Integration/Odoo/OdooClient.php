@@ -98,7 +98,7 @@ class OdooClient
     /** @return array<string, array{type:string, string?:string, store?:bool, relation?:string}> */
     public function fieldsGet(string $model): array
     {
-        return (array) $this->call($model, 'fields_get', ['attributes' => ['type', 'string', 'store', 'relation']]);
+        return (array) $this->call($model, 'fields_get', ['attributes' => ['type', 'string', 'store', 'relation', 'company_dependent']]);
     }
 
     /** @return array{version:?string, transport:string} — needs no key */

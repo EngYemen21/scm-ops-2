@@ -2,11 +2,15 @@
 // Multi-line editor of the quotation / sales-order forms: product picker, qty, unit price, optional discount %, live net
 // per line and totals incl. VAT. Field errors arrive keyed as `lines.<i>.<field>` (client validation + server details).
 // The VAT rate and the discount limit are policies (GET /sales/policy): a discount above the limit is marked on its line.
-//   <LinesEditor v-model:lines="lines" discount :errors="errors" />
+// With `customer` (its code) a line that has no price yet takes the customer's list price when its product is picked
+// (GET /pricing/price — the «قوائم الأسعار» section decides); the price stays a field the person may change.
+//   <LinesEditor v-model:lines="lines" discount :errors="errors" :customer="customerCode" />
 import { computed } from 'vue';
+import { api } from '@/api/client';
 import { Btn, NumberInput } from '@/components';
 import { isMobile } from '@/composables/viewport';
 import { fmtMoney, num, t } from '@/i18n';
+import { useAuth } from '@/stores/auth';
 import ProductPicker from './ProductPicker.vue';
 import TotalsBox from './TotalsBox.vue';
 import { lineNet, linesTotals, newLine, usePolicy } from './shared';
@@ -16,8 +20,11 @@ const props = defineProps({
   lines: { type: Array, required: true },
   discount: { type: Boolean, default: false },
   errors: { type: Object, default: () => ({}) },
+  /** Code of the customer the document is for: its price list fills the price of a picked product. */
+  customer: { type: String, default: '' },
 });
 const emit = defineEmits(['update:lines']);
+const auth = useAuth();
 
 const policy = usePolicy();
 const cols = computed(() => (props.discount ? 'minmax(170px,1.5fr) 80px 95px 70px 95px 28px' : 'minmax(170px,1.5fr) 80px 95px 95px 28px'));
@@ -34,7 +41,22 @@ const add = () => emit('update:lines', [...props.lines, newLine()]);
 /** Picking a product fills name / UoM and, when the line has no price yet, the product's selling price. */
 function onPick(i, l, p, sku) {
   const listPrice = p ? p.sellPrice ?? p.price : null;
-  upd(i, { sku, name: p?.nameAr, uom: p?.baseUom?.code, price: p && l.price == null && listPrice != null ? num(listPrice) : l.price });
+  upd(i, { sku, name: p?.nameAr, uom: p?.baseUom?.code, price: p && l.price == null && listPrice != null ? num(listPrice) : l.price, priceFrom: null });
+  if (p && l.price == null && listPrice == null) fillListPrice(l.key, sku, l.qty);
+}
+/**
+ * The customer's list price for a line that has none. The answer may arrive after the person moved on: it is applied
+ * only if that line still shows the same product and still has no price. A refusal (no access to the price lists, the
+ * section not installed) simply leaves the field empty for the person to type.
+ */
+async function fillListPrice(key, sku, qty) {
+  if (!props.customer || !auth.can('page.pricing')) return;
+  let r;
+  try { r = await api.get('/pricing/price', { customer: props.customer, product: sku, qty: num(qty) > 0 ? num(qty) : 1 }); } catch { return; }
+  if (!r?.found || !(num(r.price) > 0)) return;
+  const i = props.lines.findIndex((x) => x.key === key);
+  if (i < 0 || props.lines[i].sku !== sku || props.lines[i].price != null) return;
+  upd(i, { price: Math.round(num(r.price) * 100) / 100, priceFrom: r.priceList?.name || r.priceList?.nameAr || t('قائمة الأسعار', 'the price list') });
 }
 </script>
 
@@ -51,7 +73,10 @@ function onPick(i, l, p, sku) {
         <div v-if="aboveMax(l) && !errors[`lines.${i}.discPct`]" class="mt-0.5 text-[8.5px] font-extrabold text-warn">{{ t(`خصم فوق الحد ${policy.maxDiscountPct}% — يحتاج اعتماد الخصم`, `Discount above the ${policy.maxDiscountPct}% limit — needs discount approval`) }}</div>
       </div>
       <NumberInput small :label="cap('الكمية', 'Qty')" :model-value="l.qty" :min="1" :error="errors[`lines.${i}.qty`]" @update:model-value="upd(i, { qty: $event })" />
-      <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price" :min="0" :error="errors[`lines.${i}.price`]" @update:model-value="upd(i, { price: $event })" />
+      <div>
+        <NumberInput small :label="cap('سعر الوحدة', 'Unit price')" :model-value="l.price" :min="0" :error="errors[`lines.${i}.price`]" @update:model-value="upd(i, { price: $event, priceFrom: null })" />
+        <div v-if="l.priceFrom" class="faint mt-0.5 truncate text-[8.5px]" :title="l.priceFrom">{{ t('من', 'from') }} {{ l.priceFrom }}</div>
+      </div>
       <NumberInput v-if="discount" small :label="cap('خصم %', 'Disc %')" :model-value="l.discPct" :min="0" :max="100" :error="errors[`lines.${i}.discPct`]" @update:model-value="upd(i, { discPct: $event })" />
       <div class="num pt-2 text-[11.5px]" :data-label="t('الصافي', 'Net')">{{ fmtMoney(lineNet(l)) }}</div>
       <button type="button" class="x-btn !h-7 !w-7 !text-[11px]" aria-label="remove" @click="remove(i)">✕</button>

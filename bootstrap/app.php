@@ -24,6 +24,8 @@ $app = Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // commands written as classes by the sections built for what Odoo has (their schedule is in routes/console.php)
+    ->withCommands([\App\Tax\Console\EinvoicesCommand::class])
     ->withMiddleware(function (Middleware $middleware) use ($serverless): void {
         if ($serverless) {
             $middleware->trustProxies(at: '*'); // only the platform proxy can reach the function: https + client IP come from it

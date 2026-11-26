@@ -928,6 +928,70 @@
   "finance": {
    "ar": "المالية",
    "en": "Finance"
+  },
+  "approvals": {
+   "ar": "الاعتمادات",
+   "en": "Approvals"
+  },
+  "crm": {
+   "ar": "الفرص والعملاء المحتملون",
+   "en": "CRM"
+  },
+  "hr": {
+   "ar": "الموظفون والمصروفات",
+   "en": "People & expenses"
+  },
+  "odoo": {
+   "ar": "أرشيف أودو",
+   "en": "Odoo archive"
+  },
+  "pricing": {
+   "ar": "قوائم الأسعار",
+   "en": "Price lists"
+  },
+  "commissions": {
+   "ar": "العمولات",
+   "en": "Commissions"
+  },
+  "portal": {
+   "ar": "بوابة العملاء",
+   "en": "Customer portal"
+  },
+  "preq": {
+   "ar": "طلبات الأصناف الجديدة",
+   "en": "New-product requests"
+  },
+  "workspace": {
+   "ar": "الدعم والمشاريع والمستندات",
+   "en": "Helpdesk, projects & documents"
+  },
+  "payroll": {
+   "ar": "الرواتب والإجازات والحضور",
+   "en": "Payroll, time off & attendance"
+  },
+  "pos": {
+   "ar": "نقطة البيع",
+   "en": "Point of sale"
+  },
+  "planning": {
+   "ar": "تخطيط الطلب والشراء",
+   "en": "Demand & purchase planning"
+  },
+  "credit": {
+   "ar": "حسابات الائتمان الآجل",
+   "en": "Credit accounts"
+  },
+  "banking": {
+   "ar": "البنوك والمطابقة",
+   "en": "Banking & reconciliation"
+  },
+  "tax": {
+   "ar": "الضريبة والفوترة الإلكترونية",
+   "en": "Tax & e-invoicing"
+  },
+  "insights": {
+   "ar": "العلامات والصلاحية والتحليلات",
+   "en": "Brands, expiry & insights"
   }
  },
  "MOVEMENT_LABELS": {
@@ -2102,7 +2166,62 @@
   "grn.void",
   "invoice.register",
   "invoice.approve",
-  "invoice.pay"
+  "invoice.pay",
+  "page.odoo",
+  "page.approvals",
+  "page.crm",
+  "page.hr",
+  "odoo.private",
+  "approval.request",
+  "approval.manage",
+  "crm.manage",
+  "hr.manage",
+  "hr.private",
+  "expense.claim",
+  "expense.review",
+  "page.pricing",
+  "pricelist.manage",
+  "supplierprice.manage",
+  "page.commissions",
+  "commission.manage",
+  "commission.approve",
+  "page.portal",
+  "portal.manage",
+  "page.preq",
+  "preq.create",
+  "preq.review",
+  "page.workspace",
+  "ticket.manage",
+  "project.manage",
+  "doc.manage",
+  "page.payroll",
+  "payroll.manage",
+  "payroll.approve",
+  "leave.request",
+  "leave.approve",
+  "attendance.manage",
+  "page.pos",
+  "pos.sell",
+  "pos.manage",
+  "page.planning",
+  "forecast.manage",
+  "purchaseplan.manage",
+  "purchaseplan.approve",
+  "page.credit",
+  "credit.request",
+  "credit.review",
+  "credit.approve",
+  "credit.manage",
+  "page.banking",
+  "bankstatement.manage",
+  "bank.reconcile",
+  "page.tax",
+  "vatreturn.manage",
+  "vatreturn.file",
+  "einvoice.manage",
+  "page.insights",
+  "brandowner.manage",
+  "expiryalert.manage"
  ],
  "ROLE_PERMISSIONS": {
   "super": [
@@ -2201,7 +2320,62 @@
    "grn.void",
    "invoice.register",
    "invoice.approve",
-   "invoice.pay"
+   "invoice.pay",
+   "page.odoo",
+   "page.approvals",
+   "page.crm",
+   "page.hr",
+   "odoo.private",
+   "approval.request",
+   "approval.manage",
+   "crm.manage",
+   "hr.manage",
+   "hr.private",
+   "expense.claim",
+   "expense.review",
+   "page.pricing",
+   "pricelist.manage",
+   "supplierprice.manage",
+   "page.commissions",
+   "commission.manage",
+   "commission.approve",
+   "page.portal",
+   "portal.manage",
+   "page.preq",
+   "preq.create",
+   "preq.review",
+   "page.workspace",
+   "ticket.manage",
+   "project.manage",
+   "doc.manage",
+   "page.payroll",
+   "payroll.manage",
+   "payroll.approve",
+   "leave.request",
+   "leave.approve",
+   "attendance.manage",
+   "page.pos",
+   "pos.sell",
+   "pos.manage",
+   "page.planning",
+   "forecast.manage",
+   "purchaseplan.manage",
+   "purchaseplan.approve",
+   "page.credit",
+   "credit.request",
+   "credit.review",
+   "credit.approve",
+   "credit.manage",
+   "page.banking",
+   "bankstatement.manage",
+   "bank.reconcile",
+   "page.tax",
+   "vatreturn.manage",
+   "vatreturn.file",
+   "einvoice.manage",
+   "page.insights",
+   "brandowner.manage",
+   "expiryalert.manage"
   ],
   "sales": [
    "page.dash",
@@ -2217,7 +2391,28 @@
    "customer.manage",
    "return.create",
    "report.export",
-   "so.allocate"
+   "so.allocate",
+   "page.crm",
+   "crm.manage",
+   "page.approvals",
+   "approval.request",
+   "expense.claim",
+   "page.pricing",
+   "pricelist.manage",
+   "page.commissions",
+   "page.portal",
+   "portal.manage",
+   "page.preq",
+   "preq.create",
+   "page.workspace",
+   "ticket.manage",
+   "leave.request",
+   "page.pos",
+   "pos.sell",
+   "page.credit",
+   "credit.request",
+   "page.insights",
+   "page.hr"
   ],
   "wm": [
    "page.dash",
@@ -2263,7 +2458,17 @@
    "pick.override",
    "load.override",
    "grn.void",
-   "so.allocate"
+   "so.allocate",
+   "page.approvals",
+   "approval.request",
+   "expense.claim",
+   "page.workspace",
+   "leave.request",
+   "leave.approve",
+   "attendance.manage",
+   "page.insights",
+   "expiryalert.manage",
+   "page.hr"
   ],
   "inv": [
    "page.dash",
@@ -2282,7 +2487,20 @@
    "product.manage",
    "category.manage",
    "return.create",
-   "report.export"
+   "report.export",
+   "page.approvals",
+   "approval.request",
+   "expense.claim",
+   "page.preq",
+   "preq.create",
+   "preq.review",
+   "page.workspace",
+   "leave.request",
+   "page.planning",
+   "forecast.manage",
+   "page.insights",
+   "expiryalert.manage",
+   "page.hr"
   ],
   "proc": [
    "page.dash",
@@ -2307,7 +2525,21 @@
    "expense.create",
    "return.create",
    "page.returns",
-   "invoice.register"
+   "invoice.register",
+   "page.approvals",
+   "approval.request",
+   "expense.claim",
+   "page.pricing",
+   "supplierprice.manage",
+   "page.preq",
+   "preq.create",
+   "page.workspace",
+   "leave.request",
+   "page.planning",
+   "forecast.manage",
+   "purchaseplan.manage",
+   "page.insights",
+   "page.hr"
   ],
   "disp": [
    "page.dash",
@@ -2337,7 +2569,13 @@
    "return.create",
    "report.export",
    "expense.create",
-   "load.override"
+   "load.override",
+   "page.approvals",
+   "approval.request",
+   "expense.claim",
+   "page.workspace",
+   "leave.request",
+   "page.hr"
   ],
   "worker": [
    "page.wreceive",
@@ -2376,7 +2614,39 @@
    "fin.report",
    "discount.approve",
    "invoice.approve",
-   "page.sales"
+   "page.sales",
+   "page.odoo",
+   "page.approvals",
+   "page.crm",
+   "page.hr",
+   "approval.request",
+   "expense.claim",
+   "expense.review",
+   "page.pricing",
+   "pricelist.manage",
+   "supplierprice.manage",
+   "page.commissions",
+   "commission.approve",
+   "page.portal",
+   "page.preq",
+   "preq.review",
+   "page.workspace",
+   "project.manage",
+   "page.payroll",
+   "payroll.approve",
+   "leave.request",
+   "leave.approve",
+   "page.pos",
+   "pos.manage",
+   "page.planning",
+   "purchaseplan.approve",
+   "page.credit",
+   "credit.approve",
+   "page.banking",
+   "page.tax",
+   "vatreturn.file",
+   "page.insights",
+   "brandowner.manage"
   ],
   "finance": [
    "page.dash",
@@ -2401,7 +2671,31 @@
    "fin.report",
    "invoice.register",
    "invoice.approve",
-   "invoice.pay"
+   "invoice.pay",
+   "page.odoo",
+   "page.approvals",
+   "page.hr",
+   "approval.request",
+   "expense.claim",
+   "expense.review",
+   "page.pricing",
+   "page.commissions",
+   "commission.manage",
+   "page.workspace",
+   "page.payroll",
+   "payroll.manage",
+   "leave.request",
+   "page.pos",
+   "page.planning",
+   "page.credit",
+   "credit.review",
+   "page.banking",
+   "bankstatement.manage",
+   "bank.reconcile",
+   "page.tax",
+   "vatreturn.manage",
+   "einvoice.manage",
+   "page.insights"
   ],
   "auditor": [
    "page.dash",
@@ -2419,7 +2713,14 @@
    "inventory.view_cost",
    "page.finance",
    "gl.view",
-   "fin.report"
+   "fin.report",
+   "page.odoo",
+   "page.commissions",
+   "page.pricing",
+   "page.banking",
+   "page.tax",
+   "page.credit",
+   "page.planning"
   ]
  },
  "ROLE_NAV": {
@@ -2445,13 +2746,40 @@
    "reports",
    "activity",
    "settings",
-   "finance"
+   "finance",
+   "approvals",
+   "crm",
+   "hr",
+   "odoo",
+   "pricing",
+   "commissions",
+   "portal",
+   "preq",
+   "workspace",
+   "payroll",
+   "pos",
+   "planning",
+   "credit",
+   "banking",
+   "tax",
+   "insights"
   ],
   "sales": [
    "dash",
    "sales",
    "consol",
-   "inv"
+   "inv",
+   "crm",
+   "approvals",
+   "pricing",
+   "portal",
+   "preq",
+   "commissions",
+   "workspace",
+   "pos",
+   "credit",
+   "insights",
+   "hr"
   ],
   "wm": [
    "dash",
@@ -2464,7 +2792,11 @@
    "consol",
    "counts",
    "returns",
-   "activity"
+   "activity",
+   "approvals",
+   "workspace",
+   "insights",
+   "hr"
   ],
   "inv": [
    "dash",
@@ -2472,14 +2804,27 @@
    "inv",
    "ledger",
    "batches",
-   "counts"
+   "counts",
+   "approvals",
+   "preq",
+   "workspace",
+   "planning",
+   "insights",
+   "hr"
   ],
   "proc": [
    "dash",
    "procurement",
    "products",
    "inv",
-   "receiving"
+   "receiving",
+   "approvals",
+   "pricing",
+   "preq",
+   "workspace",
+   "planning",
+   "insights",
+   "hr"
   ],
   "disp": [
    "dash",
@@ -2488,7 +2833,10 @@
    "dispatch",
    "trips",
    "fleet",
-   "returns"
+   "returns",
+   "approvals",
+   "workspace",
+   "hr"
   ],
   "worker": [
    "wreceive",
@@ -2506,14 +2854,41 @@
    "inv",
    "reports",
    "activity",
-   "finance"
+   "finance",
+   "approvals",
+   "crm",
+   "hr",
+   "odoo",
+   "pricing",
+   "commissions",
+   "portal",
+   "preq",
+   "workspace",
+   "payroll",
+   "pos",
+   "planning",
+   "credit",
+   "banking",
+   "tax",
+   "insights"
   ],
   "finance": [
    "dash",
    "procurement",
    "inv",
    "reports",
-   "finance"
+   "finance",
+   "approvals",
+   "hr",
+   "odoo",
+   "commissions",
+   "payroll",
+   "pricing",
+   "workspace",
+   "banking",
+   "tax",
+   "credit",
+   "planning"
   ],
   "auditor": [
    "dash",
@@ -2527,7 +2902,12 @@
    "returns",
    "activity",
    "reports",
-   "finance"
+   "finance",
+   "odoo",
+   "commissions",
+   "pricing",
+   "banking",
+   "tax"
   ]
  }
 }

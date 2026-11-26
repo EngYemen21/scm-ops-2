@@ -75,6 +75,8 @@ const MODEL_REASON = {
   'technical model (config odoo.exclude)': { ar: 'نموذج تقني داخلي في أودو — مستبعد من النسخ افتراضيًا', en: 'A technical Odoo model — left out of the copy by default' },
   'private: people\'s files — pay, contracts, leave, bank accounts (config odoo.private)': { ar: 'ملفات أشخاص: رواتب، عقود، إجازات أو حسابات بنكية — لا تُنسخ إلا بقرار صريح', en: 'People’s files: pay, contracts, leave or bank accounts — copied only by an explicit decision' },
   'included by a person': { ar: 'ضمّه مستخدم إلى النسخة من هذه الشاشة', en: 'Taken into the copy by a person from this screen' },
+  'held: many records disappeared from Odoo at once — resume to confirm they are deleted': { ar: 'موقوف للحماية: اختفى عدد كبير من سجلاته من أودو دفعة واحدة. لم يُحذف شيء من النسخة. استأنفه لتأكيد أن الحذف حقيقي', en: 'Held for safety: many of its records disappeared from Odoo at once. Nothing was removed from the copy. Resume it to confirm the deletion is real' },
+  'restored from an archive': { ar: 'استُعيد من أرشيف — لا يُزامَن مع أودو حتى يُستأنف', en: 'Restored from an archive — not synchronised with Odoo until resumed' },
   'no read access for the Odoo user': { ar: 'مستخدم أودو لا يملك صلاحية قراءته', en: 'The Odoo user has no read access to it' },
   'not available in this Odoo': { ar: 'غير متاح في هذا الأودو', en: 'Not available in this Odoo' },
   'no write_date: a report view, not stored records': { ar: 'تقرير محسوب في أودو وليس سجلات محفوظة — لا يُنسخ', en: 'A computed report, not stored records — not copied' },
@@ -124,6 +126,8 @@ export const fieldType = (type) => (type ? bi(own(FIELD_TYPE, type) || type) : '
 const FIELD_REASON = {
   credential: { ar: 'بيانات سرّية (كلمة مرور، مفتاح، رمز دخول) — لا تُنسخ أبدًا', en: 'A credential (password, key, access token) — never copied' },
   personal: { ar: 'من الملف الشخصي للموظف (هوية، عائلة، عنوان، حساب بنكي، راتب) — لا يُنسخ', en: 'Part of an employee’s private file (identity, family, address, bank account, pay) — not copied' },
+  computed: { ar: 'قيمة يحسبها أودو من بيانات أخرى عند كل طلب وليست محفوظة فيه — لا شيء يُفقد بتركها', en: 'A value Odoo works out from other data each time it is asked, not stored there — nothing is lost by leaving it out' },
+  derived: { ar: 'نص يستخرجه أودو من محتوى الملف — يُعاد استخراجه من الملف نفسه', en: 'Text Odoo extracts from the file’s content — it can be extracted again from the file' },
   binary: { ar: 'ملف أو صورة — المحتوى لا يُنسخ', en: 'A file or an image — its content is not copied' },
   one2many: { ar: 'قائمة فرعية — تُنسخ من نموذجها نفسه فلا يضيع شيء', en: 'A child list — copied from its own model, so nothing is lost' },
   'Odoo cannot return it': { ar: 'أودو لا يستطيع إرجاعه', en: 'Odoo cannot return it' },
@@ -182,8 +186,23 @@ export function runTiles(r) {
  * `detail.models` of a run is keyed by model, plus steps that are not a model: today `→ OPS master data` (what the run
  * applied to the OPS products, customers and suppliers: { changes, counts: { entity: { action: n } } } or { error }).
  */
+/** The OPS sections that follow Odoo (config odoo.projections): the key of the projection → the section's name. */
+export const PROJECTION_SECTION = {
+  approvals: { ar: 'الاعتمادات', en: 'Approvals' }, crm: { ar: 'الفرص والعملاء المحتملون', en: 'CRM' }, hr: { ar: 'الموظفون والمصروفات', en: 'People & expenses' },
+  pricing: { ar: 'قوائم الأسعار', en: 'Price lists' }, commissions: { ar: 'العمولات', en: 'Commissions' }, portal: { ar: 'بوابة العملاء', en: 'Customer portal' },
+  preq: { ar: 'طلبات الأصناف الجديدة', en: 'New-product requests' }, workspace: { ar: 'الدعم والمشاريع والمستندات', en: 'Helpdesk, projects, documents' },
+  payroll: { ar: 'الرواتب والإجازات والحضور', en: 'Payroll, time off, attendance' },
+  pos: { ar: 'نقطة البيع', en: 'Point of sale' }, planning: { ar: 'تخطيط الطلب والشراء', en: 'Demand & purchase planning' }, credit: { ar: 'حسابات الائتمان الآجل', en: 'Credit accounts' },
+  banking: { ar: 'البنوك والمطابقة', en: 'Banking & reconciliation' }, tax: { ar: 'الضريبة والفوترة الإلكترونية', en: 'Tax & e-invoicing' },
+  insights: { ar: 'العلامات والصلاحية والتحليلات', en: 'Brands, expiry & insights' },
+};
 const RUN_STEP = { '→ OPS master data': { ar: 'تحديث بيانات النظام من أودو (أصناف، عملاء، موردون)', en: 'Update of the OPS master data from Odoo (products, customers, suppliers)' } };
-export const runStepTitle = (name) => bi(own(RUN_STEP, name) || name);
+export function runStepTitle(name) {
+  const known = own(RUN_STEP, name);
+  if (known) return bi(known);
+  const section = own(PROJECTION_SECTION, String(name).replace(/^→ OPS /, ''));
+  return section ? t(`تحديث قسم «${section.ar}» من أودو`, `Update of “${section.en}” from Odoo`) : name;
+}
 /** The OPS master data the Odoo copy feeds (OdooMasterData.php), in the order the screen shows it. */
 export const MASTER_ENTITY = { products: { ar: 'الأصناف', en: 'Products' }, customers: { ar: 'العملاء', en: 'Customers' }, suppliers: { ar: 'الموردون', en: 'Suppliers' }, categories: { ar: 'الفئات', en: 'Categories' } };
 /** What happened (or would happen) to a record of Odoo; `tone` colours the ones a person should look at. */
@@ -196,11 +215,61 @@ export const MASTER_ACTION = {
 };
 /** The actions that write to OPS: their sum is what an apply does. */
 export const MASTER_WRITES = ['created', 'linked', 'updated'];
+/** What the sections' projections count (the part before the dot of "leads.created"); an unknown one shows as it is. */
+export const PROJECTION_ENTITY = {
+  people: { ar: 'الأشخاص', en: 'People' }, teams: { ar: 'الفرق', en: 'Teams' }, stages: { ar: 'المراحل', en: 'Stages' }, reasons: { ar: 'أسباب الخسارة', en: 'Lost reasons' },
+  tags: { ar: 'الوسوم', en: 'Tags' }, leads: { ar: 'الفرص', en: 'Opportunities' },
+  // approvals
+  category: { ar: 'أنواع الطلبات', en: 'Request types' }, categoryApprover: { ar: 'معتمدو الأنواع', en: 'Type approvers' }, request: { ar: 'الطلبات', en: 'Requests' },
+  approver: { ar: 'سطور الاعتماد', en: 'Approver lines' }, item: { ar: 'بنود الطلبات', en: 'Request items' }, attachment: { ar: 'المرفقات', en: 'Attachments' },
+  // people and expenses
+  departments: { ar: 'الأقسام', en: 'Departments' }, jobs: { ar: 'المسميات الوظيفية', en: 'Job titles' }, employees: { ar: 'الموظفون', en: 'Employees' }, personalFiles: { ar: 'الملفات الشخصية', en: 'Personal files' },
+  contracts: { ar: 'العقود', en: 'Contracts' }, claims: { ar: 'مطالبات المصروف', en: 'Expense claims' }, categories: { ar: 'الفئات', en: 'Categories' }, lines: { ar: 'السطور', en: 'Lines' }, files: { ar: 'الملفات', en: 'Files' },
+  // price lists
+  lists: { ar: 'القوائم', en: 'Lists' }, rules: { ar: 'قواعد الأسعار', en: 'Price rules' }, supplierPrices: { ar: 'أسعار الموردين', en: 'Supplier prices' }, listPrices: { ar: 'أسعار البيع', en: 'Sales prices' },
+  assignments: { ar: 'قوائم العملاء', en: 'Customer assignments' },
+  // customer portal
+  branches: { ar: 'الفروع', en: 'Branches' }, favorites: { ar: 'الأصناف المفضلة', en: 'Favourite items' }, applications: { ar: 'طلبات التسجيل', en: 'Onboarding applications' }, documents: { ar: 'المستندات', en: 'Documents' },
+  requests: { ar: 'الطلبات', en: 'Requests' }, requestLines: { ar: 'بنود الطلبات', en: 'Request lines' }, lineChanges: { ar: 'تعديلات السطور', en: 'Line changes' }, statements: { ar: 'الكشوف', en: 'Statements' },
+  statementLines: { ar: 'سطور الكشوف', en: 'Statement lines' },
+  // new-product requests
+  link: { ar: 'ربط الصنف', en: 'Product link' }, picture: { ar: 'الصور', en: 'Pictures' }, customer: { ar: 'العملاء', en: 'Customers' },
+  // commissions
+  plans: { ar: 'خطط العمولة', en: 'Commission plans' }, tracking: { ar: 'تتبّع الفواتير', en: 'Invoice tracking' },
+  // helpdesk, projects, documents
+  types: { ar: 'الأنواع', en: 'Types' }, tickets: { ar: 'التذاكر', en: 'Tickets' }, messages: { ar: 'الرسائل', en: 'Messages' }, taskTags: { ar: 'وسوم المهام', en: 'Task tags' }, projects: { ar: 'المشاريع', en: 'Projects' },
+  taskStages: { ar: 'مراحل المهام', en: 'Task stages' }, tasks: { ar: 'المهام', en: 'Tasks' }, folders: { ar: 'المجلدات', en: 'Folders' }, docTags: { ar: 'وسوم المستندات', en: 'Document tags' },
+};
+/** …and what happened to them (the part after the dot), beside MASTER_ACTION. */
+export const PROJECTION_ACTION = {
+  archived: { ar: 'أُرشف', en: 'archived' }, restored: { ar: 'أُعيد', en: 'restored' }, skippedDeleted: { ar: 'تُرك لأنه محذوف في أودو', en: 'left out: deleted in Odoo' },
+  matched: { ar: 'طُوبق بمستخدم في النظام', en: 'matched to an OPS user' }, byName: { ar: 'بقي بالاسم بلا مستخدم', en: 'kept by name, no OPS user' },
+  withCustomer: { ar: 'له عميل في النظام', en: 'with an OPS customer' }, noStage: { ar: 'بلا مرحلة', en: 'in no stage' },
+  customerConflict: { ar: 'عميله في أودو غير عميله هنا', en: 'customer differs from Odoo’s', tone: 'warn' }, count: { ar: 'العدد', en: 'count' },
+  keptByName: { ar: 'بقي بالاسم', en: 'kept by name' }, attached: { ar: 'أُلحق', en: 'attached' }, removed: { ar: 'أُزيل', en: 'removed' }, default: { ar: 'على القائمة الافتراضية', en: 'on the default list' },
+  fromPartner: { ar: 'من حقل العميل في أودو', en: 'from the partner in Odoo' }, fromOrders: { ar: 'من آخر طلب', en: 'from the latest order' }, noEvidence: { ar: 'بلا دليل', en: 'no evidence' },
+  waitingProduct: { ar: 'ينتظر ربط الصنف', en: 'waiting for the product link' }, waitingSupplier: { ar: 'ينتظر ربط المورد', en: 'waiting for the supplier link' },
+  customerPending: { ar: 'عميله لم يُربط بعد', en: 'customer not linked yet' }, productPending: { ar: 'صنفه لم يُربط بعد', en: 'product not linked yet' },
+  skippedNoProduct: { ar: 'تُرك: الصنف غير موجود في النظام', en: 'left out: the product is not in OPS' }, skippedZero: { ar: 'تُرك: السعر صفر', en: 'left out: zero price' },
+  skippedNoEmployee: { ar: 'تُرك: بلا موظف', en: 'left out: no employee' }, skippedOwnerNotCopied: { ar: 'تُرك: صاحبه غير منسوخ', en: 'left out: its owner is not copied' },
+  skippedSystem: { ar: 'تُرك: رسالة آلية', en: 'left out: a system message' }, skippedPersonal: { ar: 'تُرك: مرحلة شخصية', en: 'left out: a personal stage' }, restricted: { ar: 'مقيّد الوصول', en: 'restricted' },
+  productNotFound: { ar: 'لم يُعرف صنفه', en: 'product not identified', tone: 'warn' }, productNotInOps: { ar: 'صنفه ليس في النظام بعد', en: 'product not in OPS yet' }, existing: { ar: 'صنف موجود', en: 'existing product' },
+  contentKept: { ar: 'محتواها محفوظ', en: 'content kept' }, 'fromLooseExpense.created': { ar: 'أُنشئ من مصروف بلا تقرير', en: 'created from an expense on no report' },
+  'fromLooseExpense.unchanged': { ar: 'من مصروف بلا تقرير، بلا تغيير', en: 'from an expense on no report, unchanged' },
+};
 /** The counts of such a step as lines: [{ entity, parts: 'أُنشئ 3 · حُدّث 2' }] — entities where nothing happened are left out. */
 export function runStepLines(counts) {
-  return Object.entries(counts || {}).map(([entity, acts]) => ({
-    entity: bi(own(MASTER_ENTITY, entity) || entity),
-    parts: Object.entries(acts || {}).filter(([, n]) => n).map(([what, n]) => `${bi(own(MASTER_ACTION, what) || what)} ${fmtNum(n)}`).join(' · '),
+  const nested = {};
+  for (const [key, value] of Object.entries(counts || {})) {
+    if (value && typeof value === 'object') { nested[key] = { ...(nested[key] || {}), ...value }; continue; }
+    // a section's projection counts flat: "leads.created" → leads: { created }
+    const dot = key.indexOf('.');
+    const [entity, what] = dot < 0 ? [key, 'count'] : [key.slice(0, dot), key.slice(dot + 1)];
+    (nested[entity] ||= {})[what] = value;
+  }
+  return Object.entries(nested).map(([entity, acts]) => ({
+    entity: bi(own(MASTER_ENTITY, entity) || own(PROJECTION_ENTITY, entity) || entity),
+    parts: Object.entries(acts || {}).filter(([, n]) => n).map(([what, n]) => `${bi(own(MASTER_ACTION, what) || own(PROJECTION_ACTION, what) || what)} ${fmtNum(n)}`).join(' · '),
   })).filter((x) => x.parts);
 }
 /** Where a run failed: the models it could not read and the steps that broke (`detail.models[name].error`). */
@@ -214,6 +283,13 @@ export function runLine(r) {
     `${fmtNum(r.pulled)} records read from Odoo — ${fmtNum(r.created)} new · ${fmtNum(r.updated)} changed · ${fmtNum(r.deleted)} deleted${r.errors ? ` · ${fmtNum(r.errors)} errors` : ''}`,
   );
 }
+/** Bytes as MB or GB with one decimal ("19.6 GB"). */
+export function fmtBytes(n) {
+  if (n == null) return '—';
+  const mb = n / 1048576;
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+}
+
 /** What is still to be done after a run (`pending` of POST sync); '' when nothing is. */
 export function pendingLine(p) {
   if (!p) return '';

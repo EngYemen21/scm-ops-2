@@ -11,12 +11,15 @@ final class SalesRules
     /** Body of the approve / reject / cancel action buttons — always optional. */
     public const NOTE = ['note' => 'nullable|string', 'reason' => 'nullable|string'];
 
-    /** LineSchema with a mandatory positive price; numeric strings are accepted (z.coerce). */
+    /**
+     * LineSchema; numeric strings are accepted (z.coerce). A price, when sent, is positive. A line may come without one:
+     * the service then takes the price of the customer's price list, or refuses the line (PRICE_REQUIRED).
+     */
     public static function lines(): array
     {
         return [
             'lines' => 'required|array|min:1', 'lines.*.sku' => 'required|string|min:1', 'lines.*.qty' => 'required|integer|min:1',
-            'lines.*.price' => 'required|numeric|gt:0', 'lines.*.discPct' => 'nullable|numeric|min:0|max:100', 'lines.*.notes' => 'nullable|string',
+            'lines.*.price' => 'nullable|numeric|gt:0', 'lines.*.discPct' => 'nullable|numeric|min:0|max:100', 'lines.*.notes' => 'nullable|string',
         ];
     }
 }

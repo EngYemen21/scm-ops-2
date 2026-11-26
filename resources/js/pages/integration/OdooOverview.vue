@@ -10,7 +10,7 @@ import { Btn, Chip, ErrorBanner, Icon, KV, KpiCard, KpiGrid } from '@/components
 import { bi, fmtNum, t } from '@/i18n';
 import { useAuth } from '@/stores/auth';
 import OdooSyncResult from './OdooSyncResult.vue';
-import { CHANGE_KIND, CHANGE_KINDS, CONNECTION_HEALTH, RUN_TRIGGER, TONE, agoAt, connectionError, fmtAt, lagParts, runFailedModels, runTiles, useOdooNav, useOdooSync } from './odoo';
+import { CHANGE_KIND, CHANGE_KINDS, CONNECTION_HEALTH, PROJECTION_SECTION, RUN_TRIGGER, TONE, agoAt, connectionError, fmtAt, fmtBytes, lagParts, runFailedModels, runTiles, useOdooNav, useOdooSync } from './odoo';
 
 const props = defineProps({
   /** Answer of GET /integration/odoo/status: { connection, models, firstCopy, changes, freshness, lastRun, policy }. */
@@ -35,6 +35,26 @@ const fc = computed(() => props.status.firstCopy);
 const ch = computed(() => props.status.changes);
 const policy = computed(() => props.status.policy || {});
 const run = computed(() => props.status.lastRun || null);
+/** `status.backup`: { verification (the last finished comparison with Odoo), files (attachment content kept), onHold }. */
+const backup = computed(() => props.status.backup || null);
+const verified = computed(() => backup.value?.verification || null);
+const files = computed(() => backup.value?.files || null);
+/**
+ * `status.sections`: the OPS sections built for what Odoo has — [{ key, follows, copied, loadedAt, lastLoadAt, fedAt, waiting }].
+ * A section is loaded once from the copy by a person; from then on the runs feed it.
+ */
+const SECTION_STATE = {
+  copying: { label: { ar: 'نسخ بياناته من أودو لم يكتمل', en: 'Its data is still being copied' }, tone: 'neutral' },
+  waiting: { label: { ar: 'لم يُحمَّل بعد', en: 'Not loaded yet' }, tone: 'warn' },
+  follows: { label: { ar: 'يتبع أودو', en: 'Follows Odoo' }, tone: 'ok' },
+  handed: { label: { ar: 'سُلّم لنظام العمليات', en: 'Handed over to OPS' }, tone: 'blue' },
+};
+const sections = computed(() => (props.status.sections || []).map((s) => ({
+  ...s,
+  label: PROJECTION_SECTION[s.key] || { ar: s.key, en: s.key },
+  state: SECTION_STATE[!s.follows ? 'handed' : s.loadedAt ? 'follows' : s.copied ? 'waiting' : 'copying'],
+})));
+const notLoaded = computed(() => sections.value.filter((s) => s.follows && s.copied && !s.loadedAt).length);
 /** A run started and has not written its end yet (`status.sync.running`). */
 const running = computed(() => !!props.status.sync?.running && !sync.pending.value);
 
@@ -124,6 +144,65 @@ const lag = computed(() => lagParts(props.status.freshness?.coreLagSeconds));
         <template #sub>{{ lag.n == null ? t('لم تكتمل النسخة الأولى لأي نموذج أساسي بعد', 'no core model has finished its first copy yet') : t('الوقت المنقضي منذ آخر فحص لها', 'time since they were last checked') }}</template>
       </KpiCard>
     </KpiGrid>
+
+    <!-- ───── the copy as a backup: is it complete, and how much of the attachments' content OPS keeps ───── -->
+    <div v-if="backup" class="card">
+      <div class="card-head flex-wrap">
+        <div class="card-title">{{ t('النسخة الاحتياطية', 'The copy as a backup') }}</div>
+        <Chip v-if="verified" small dot :label="verified.complete ? { ar: 'مكتملة ومطابقة لأودو', en: 'Complete and true to Odoo' } : { ar: 'تحتاج نظرة', en: 'Needs a look' }"
+              :fg="verified.complete ? TONE.ok.fg : TONE.warn.fg" :bg="verified.complete ? TONE.ok.bg : TONE.warn.bg" />
+        <Chip v-else small :label="{ ar: 'لم تُفحص بعد', en: 'Not checked yet' }" :fg="TONE.neutral.fg" :bg="TONE.neutral.bg" />
+      </div>
+      <div class="card-body">
+        <div v-if="backup.onHold?.length" class="mb-3 rounded-[10px] bg-warn-soft px-3 py-2 text-[10.5px] font-bold leading-[1.8] text-warn">
+          {{ t('نماذج أوقفتها النسخة للحماية لأن عددًا كبيرًا من سجلاتها اختفى من أودو دفعة واحدة. لم يُحذف شيء من النسخة، والقرار لك:', 'Models the copy put on hold because many of their records disappeared from Odoo at once. Nothing was removed from the copy; the decision is yours:') }}
+          <button v-for="name in backup.onHold" :key="name" type="button" class="num ltr ms-1.5 underline" @click="nav.openModel(name)">{{ name }}</button>
+        </div>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
+          <template v-if="verified">
+            <div class="tile"><div class="tile-v num-mixed text-[13px]" :title="fmtAt(verified.finishedAt)">{{ agoAt(verified.finishedAt) }}</div><div class="tile-l">{{ t('آخر مطابقة مع أودو', 'Last comparison with Odoo') }}</div></div>
+            <div class="tile"><div class="tile-v">{{ fmtNum(verified.recordsCopy) }}</div><div class="tile-l">{{ t('سجلات في النسخة', 'Records in the copy') }} · {{ t('في أودو', 'in Odoo') }} <span class="num">{{ fmtNum(verified.recordsOdoo) }}</span></div></div>
+            <div class="tile" :class="{ red: verified.missing > 0 }"><div class="tile-v" :class="{ 'text-bad': verified.missing > 0 }">{{ fmtNum(verified.missing) }}</div><div class="tile-l">{{ t('ناقصة عن أودو', 'Missing from the copy') }}</div></div>
+            <div class="tile" :class="{ red: verified.differing > 0 }"><div class="tile-v" :class="{ 'text-bad': verified.differing > 0 }">{{ fmtNum(verified.differing) }}</div><div class="tile-l">{{ t('مختلفة من عيّنة', 'Differing in a sample of') }} <span class="num">{{ fmtNum(verified.sampled) }}</span></div></div>
+            <div class="tile"><div class="tile-v">{{ fmtNum(verified.extra) }}</div><div class="tile-l">{{ t('حُذفت في أودو وتنتظر التأشير', 'Deleted in Odoo, waiting to be marked') }}</div></div>
+          </template>
+          <template v-if="files && files.ready">
+            <div class="tile"><div class="tile-v">{{ fmtNum(files.stored) }}</div><div class="tile-l">{{ t('ملفات مرفقات محفوظة', 'Attachment files kept') }} · <span class="num ltr">{{ fmtBytes(files.storedBytes) }}</span></div></div>
+            <div class="tile"><div class="tile-v" :class="{ 'text-azure': files.left > 0 }">{{ fmtNum(files.left) }}</div><div class="tile-l">{{ t('ملفات لم تُؤرشف بعد', 'Files not archived yet') }}</div></div>
+            <div v-if="files.failed" class="tile red"><div class="tile-v text-bad">{{ fmtNum(files.failed) }}</div><div class="tile-l">{{ t('ملفات تعذّر حفظها', 'Files that could not be kept') }}</div></div>
+          </template>
+        </div>
+        <p class="m-0 mt-3 text-[10.5px] leading-[1.9] text-muted">
+          {{ t('النسخة تحفظ كل سجل حتى بعد حذفه من أودو، ولا تتبع حذفًا جماعيًا دون تأكيدك. المطابقة تقارن أرقام السجلات كلها وتعيد قراءة عيّنة من كل نموذج، وتجري تلقائيًا كل ليلة على خادم له مجدول. محتوى المرفقات يُحفظ على وسيط تخزين النظام، وقائمتها داخل النسخة.', 'The copy keeps every record even after it is deleted in Odoo, and does not follow a mass deletion without your confirmation. The comparison checks every record id and reads a sample of each model again; it runs every night on a server with a scheduler. The content of attachments is kept on the storage disk of OPS, their list inside the copy.') }}
+        </p>
+      </div>
+    </div>
+
+    <!-- ───── the OPS sections built for what Odoo has: did each take its first load, is it kept current ───── -->
+    <div v-if="sections.length" class="card">
+      <div class="card-head flex-wrap">
+        <div class="card-title">{{ t('أقسام النظام التي تتبع أودو', 'OPS sections that follow Odoo') }} <span class="card-count num">{{ fmtNum(sections.length) }}</span></div>
+        <Chip v-if="notLoaded" small dot :label="{ ar: `${notLoaded} بانتظار التحميل الأول`, en: `${notLoaded} waiting for the first load` }" :fg="TONE.warn.fg" :bg="TONE.warn.bg" />
+      </div>
+      <div class="card-body !pt-1">
+        <div v-for="s in sections" :key="s.key" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 py-2 text-[11px] last:border-b-0">
+          <div class="min-w-[150px] flex-1 font-extrabold text-ink">{{ bi(s.label) }}</div>
+          <Chip small dot :label="s.state.label" :fg="TONE[s.state.tone].fg" :bg="TONE[s.state.tone].bg" />
+          <div class="min-w-[130px] text-muted">
+            <template v-if="s.loadedAt">{{ t('حُمّل', 'loaded') }} <span class="num-mixed" :title="fmtAt(s.loadedAt)">{{ agoAt(s.loadedAt) }}</span></template>
+            <template v-else>—</template>
+          </div>
+          <div class="min-w-[150px] text-muted">
+            <template v-if="s.fedAt">{{ t('آخر تحديث من أودو', 'last fed from Odoo') }} <span class="num-mixed" :title="fmtAt(s.fedAt)">{{ agoAt(s.fedAt) }}</span></template>
+            <template v-else-if="s.waiting">{{ t('تغييرات تنتظر', 'changes waiting') }} <b class="num">{{ fmtNum(s.waiting) }}</b></template>
+          </div>
+        </div>
+        <p class="m-0 mt-3 text-[10.5px] leading-[1.9] text-muted">
+          {{ t('كل قسم يأخذ بياناته من النسخة مرة واحدة بقرار مسؤول، ثم تحدّثه كل مزامنة بما يتغير في أودو. القسم الذي لم يُحمَّل بعد لا تمسّه المزامنة.', 'Each section takes its data from the copy once, by a person’s decision; after that every run feeds it what changes in Odoo. A section that has not been loaded yet is left alone by the runs.') }}
+          <span v-if="notLoaded" class="num ltr inline-block">php artisan scm:odoo-project &lt;area&gt; --apply</span>
+        </p>
+      </div>
+    </div>
 
     <!-- ───── last run ───── -->
     <div class="card">

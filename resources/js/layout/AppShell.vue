@@ -21,6 +21,7 @@ import Icon from './Icon.vue';
 import MobileQuickActions from './mobile/MobileQuickActions.vue';
 import MobileSearch from './mobile/MobileSearch.vue';
 import MobileTabBar from './mobile/MobileTabBar.vue';
+import { sidebarGroups } from './mobile/nav';
 import WarehouseChip from './mobile/WarehouseChip.vue';
 import NotificationBell from './NotificationBell.vue';
 import DriverTrackingConsent from './DriverTrackingConsent.vue';
@@ -38,6 +39,8 @@ const passwordOpen = passwordDialogOpen;
 watch(() => route.path, () => { sidebarOpen.value = false; menuOpen.value = false; });
 
 const user = computed(() => auth.user);
+/** The sidebar: the home page, then the pages the user may open under the same group headings as the phone menu. */
+const navGroups = computed(() => sidebarGroups(user.value));
 // Driver phone tracking (native app only): starts for a signed-in driver, stops on sign-out.
 const nativeDriver = computed(() => isNative && !!user.value?.driverId);
 watch(nativeDriver, (on) => { if (on) void startDriverTracking(); else stopDriverTracking(); }, { immediate: true });
@@ -128,11 +131,14 @@ async function signOut() {
     <div class="body-row">
       <div v-if="!isMobile" class="sidebar-backdrop" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" />
       <nav v-if="!isMobile" class="sidebar" :class="{ open: sidebarOpen }">
-        <RouterLink v-for="k in user.nav" :key="k" :to="`/${k}`" class="nav-item" active-class="active">
-          <span class="nav-dot" />
-          <Icon :nav="k" />
-          <span class="flex-1">{{ label(NAV_LABELS, k) }}</span>
-        </RouterLink>
+        <template v-for="g in navGroups" :key="g.key">
+          <div v-if="g.label" class="nav-group">{{ bi(g.label) }}</div>
+          <RouterLink v-for="k in g.pages" :key="k" :to="`/${k}`" class="nav-item" active-class="active">
+            <span class="nav-dot" />
+            <Icon :nav="k" />
+            <span class="flex-1">{{ label(NAV_LABELS, k) }}</span>
+          </RouterLink>
+        </template>
         <div class="flex-1" />
         <div class="px-2.5 text-[8.5px] leading-[1.9] text-[#5b6076]">{{ t('B2B ops · الصلاحيات مفروضة من الخادم (RBAC)', 'B2B ops · permissions enforced by the server (RBAC)') }}</div>
       </nav>

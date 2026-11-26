@@ -18,7 +18,7 @@ class OdooModel extends BaseModel
             'fields' => 'array', 'skipped_fields' => 'array', 'has_write_date' => 'boolean', 'has_active' => 'boolean',
             'priority' => 'integer', 'page_size' => 'integer', 'remote_count' => 'integer', 'mirrored_count' => 'integer',
             'full_cursor_id' => 'integer', 'deletion_cursor_id' => 'integer', 'consecutive_errors' => 'integer',
-            'window_cursor_id' => 'integer', 'window_deep' => 'boolean',
+            'window_cursor_id' => 'integer', 'window_deep' => 'boolean', 'ranged' => 'boolean',
             'full_started_at' => 'datetime', 'full_finished_at' => 'datetime', 'last_synced_at' => 'datetime', 'last_deep_at' => 'datetime',
             'last_changed_at' => 'datetime', 'last_deletion_check_at' => 'datetime', 'next_attempt_at' => 'datetime',
         ];

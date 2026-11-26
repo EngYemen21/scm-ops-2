@@ -28,6 +28,9 @@ class FakeOdoo
 
     public bool $json2 = false;
 
+    /** Odoo does not answer at all (the server is down, the network is cut). */
+    public bool $offline = false;
+
     private Carbon $clock;
 
     private int $seq = 0;
@@ -45,6 +48,8 @@ class FakeOdoo
             'deletion_check_minutes' => 30, 'deletion_check_minutes_other' => 360, 'deletion_page' => 4, 'run_seconds' => 20, 'rediscover_hours' => 24,
             'keep_changes_days' => 30, 'backoff_minutes' => [1, 2, 5, 15, 60],
             'priority' => ['sale.order', 'res.partner'],
+            // the mirror is tested on its own: the OPS sections that follow Odoo have their own tests
+            'projections' => [],
         ] + (array) config('odoo');
     }
 
@@ -66,7 +71,8 @@ class FakeOdoo
         foreach ($fields as $field => $def) {
             $defs[$field] = (is_string($def) ? ['type' => $def] : $def) + ['string' => $field, 'store' => true];
         }
-        $this->models[$name] = ['label' => $label ?: $name, 'transient' => $transient, 'fields' => $defs, 'rows' => [], 'denied' => false, 'broken' => [], 'down' => false];
+        // `hidden`: ids Odoo drops from an answer AFTER limiting it (what mail.message does with what the user may not read)
+        $this->models[$name] = ['label' => $label ?: $name, 'transient' => $transient, 'fields' => $defs, 'rows' => [], 'denied' => false, 'broken' => [], 'down' => false, 'hidden' => []];
 
         return $this;
     }
@@ -115,6 +121,9 @@ class FakeOdoo
 
     private function handle(Request $request)
     {
+        if ($this->offline) {
+            return Http::response('Service Unavailable', 503);
+        }
         $path = parse_url($request->url(), PHP_URL_PATH);
         $body = json_decode($request->body(), true) ?? [];
         if (str_starts_with($path, '/json/2/')) {
@@ -202,13 +211,14 @@ class FakeOdoo
             return ['result' => $m['fields']];
         }
         $rows = array_values(array_filter($m['rows'], fn ($r) => $this->matches($r, $params['domain'] ?? [])));
+        $visible = fn (array $list) => $m['hidden'] ? array_values(array_filter($list, fn ($r) => ! in_array($r['id'], $m['hidden'], true))) : $list;
         if ($method === 'search_count') {
-            return ['result' => count($rows)];
+            return ['result' => count($visible($rows))];
         }
         foreach (array_reverse($this->order((string) ($params['order'] ?? 'id asc'))) as [$field, $dir]) {
             usort($rows, fn ($a, $b) => ($dir === 'desc' ? -1 : 1) * (($a[$field] ?? null) <=> ($b[$field] ?? null)));
         }
-        $rows = array_slice($rows, (int) ($params['offset'] ?? 0), isset($params['limit']) && $params['limit'] ? (int) $params['limit'] : null);
+        $rows = $visible(array_slice($rows, (int) ($params['offset'] ?? 0), isset($params['limit']) && $params['limit'] ? (int) $params['limit'] : null));
         if ($method === 'search') {
             return ['result' => array_column($rows, 'id')];
         }
