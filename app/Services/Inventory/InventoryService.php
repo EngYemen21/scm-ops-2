@@ -236,7 +236,8 @@ class InventoryService
             ->whereNotIn('z.type', self::NON_STORAGE_ZONES)->whereRaw('b.on_hand - b.reserved > 0');
         if ($lock) {
             $this->requireTransaction();
-            $query->lock('for update of b');
+            // MariaDB does not support "FOR UPDATE OF <table>"; plain FOR UPDATE works on MariaDB and MySQL 8.
+            DB::getDriverName() === 'pgsql' ? $query->lock('for update of b') : $query->lockForUpdate();
         }
         $rows = $query->get();
         $batches = Batch::whereIn('id', $rows->pluck('batch_id')->filter()->unique()->all())->get()->keyBy('id');
